@@ -1,47 +1,61 @@
 import { Category, Item, DailySchedule, WeeklyHabit, OneTimeAction } from '../types';
 
+const now = new Date();
+
 export const categories: Category[] = [
   {
     id: 'self-regulation',
     name: 'Self-Regulation',
     icon: '⚖️',
     color: '#74B9FF',
-    priority: 0
+    priority: 0,
+    createdAt: now,
+    updatedAt: now
   },
   {
     id: 'gym-calisthenics',
     name: 'Gym/Calisthenics',
     icon: '🏋️',
     color: '#4ECDC4',
-    priority: 1
+    priority: 1,
+    createdAt: now,
+    updatedAt: now
   },
   {
     id: 'mobile-apps',
     name: 'Mobile Apps/AI/Entrepreneurship',
     icon: '📱',
     color: '#45B7D1',
-    priority: 2
+    priority: 2,
+    createdAt: now,
+    updatedAt: now
   },
   {
     id: 'catholicism',
     name: 'Catholicism',
     icon: '✝️',
     color: '#96CEB4',
-    priority: 3
+    priority: 3,
+    createdAt: now,
+    updatedAt: now
   },
   {
     id: 'social-charisma',
     name: 'Social/Charisma/Dating',
     icon: '🗣️',
     color: '#DDA0DD',
-    priority: 4
+    priority: 4,
+    createdAt: now,
+    updatedAt: now
   },
   {
     id: 'content',
     name: 'Content Creation',
     icon: '📝',
     color: '#FFEAA7',
-    priority: 5
+    priority: 5,
+    createdAt: now,
+    updatedAt: now
   }
 ];
 

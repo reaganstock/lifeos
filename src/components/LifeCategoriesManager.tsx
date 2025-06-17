@@ -26,7 +26,9 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
       name: newCategory.name,
       icon: newCategory.icon,
       color: newCategory.color,
-      priority: newCategory.priority
+      priority: newCategory.priority,
+      createdAt: new Date(),
+      updatedAt: new Date()
     };
 
     setCategories([...categories, category]);
@@ -93,7 +95,9 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
       name: cat.name,
       icon: cat.icon,
       color: cat.color,
-      priority: categories.length + index + 1
+      priority: categories.length + index + 1,
+      createdAt: new Date(),
+      updatedAt: new Date()
     }));
 
     setCategories([...categories, ...newCategories]);

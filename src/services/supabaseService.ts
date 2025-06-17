@@ -1,0 +1,338 @@
+import { supabase } from '../lib/supabase'
+import { Item, Category } from '../types'
+import type { 
+  Profile, 
+  Category as DbCategory, 
+  Item as DbItem,
+  CategoryInsert,
+  ItemInsert 
+} from '../lib/database.types'
+
+export class SupabaseService {
+  // ========== AUTHENTICATION ==========
+  
+  async signUp(email: string, password: string, fullName?: string) {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: fullName || '',
+        },
+      },
+    })
+    
+    if (error) throw error
+    return data
+  }
+
+  async signIn(email: string, password: string) {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+    
+    if (error) throw error
+    return data
+  }
+
+  async signOut() {
+    const { error } = await supabase.auth.signOut()
+    if (error) throw error
+  }
+
+  async getCurrentSession() {
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error) throw error
+    return session
+  }
+
+  async getCurrentUser() {
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (error) throw error
+    return user
+  }
+
+  // ========== PROFILE MANAGEMENT ==========
+  
+  async createOrUpdateProfile(userId: string, profileData: Partial<Profile>) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .upsert({
+        id: userId,
+        email: profileData.email || '',
+        full_name: profileData.full_name,
+        avatar_url: profileData.avatar_url,
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single()
+    
+    if (error) throw error
+    return data
+  }
+
+  async getProfile(userId?: string) {
+    const user = userId || (await this.getCurrentUser())?.id
+    if (!user) throw new Error('No user found')
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user)
+      .single()
+    
+    if (error) throw error
+    return data
+  }
+
+  // ========== EDGE FUNCTION CALLS ==========
+  
+  private async callEdgeFunction(action: string, data: any = {}) {
+    const session = await this.getCurrentSession()
+    if (!session) throw new Error('User not authenticated')
+
+    const { data: result, error } = await supabase.functions.invoke('lifeOS-ai-core', {
+      body: { action, data },
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    })
+
+    if (error) throw error
+    if (result?.error) throw new Error(result.error)
+    
+    return result
+  }
+
+  // ========== ITEMS MANAGEMENT ==========
+  
+  async createItem(itemData: Omit<Item, 'id' | 'createdAt' | 'updatedAt'>): Promise<Item> {
+    const result = await this.callEdgeFunction('createItem', {
+      type: itemData.type,
+      title: itemData.title,
+      text: itemData.text,
+      categoryId: itemData.categoryId,
+      dueDate: itemData.dueDate?.toISOString(),
+      dateTime: itemData.dateTime?.toISOString(),
+      metadata: itemData.metadata,
+      attachment: itemData.attachment
+    })
+    
+    return this.convertItemFromDb(result.item)
+  }
+
+  async getItems(options?: {
+    type?: string
+    categoryId?: string
+    completed?: boolean
+    limit?: number
+    offset?: number
+  }): Promise<Item[]> {
+    const result = await this.callEdgeFunction('getItems', options)
+    return result.items.map((item: DbItem) => this.convertItemFromDb(item))
+  }
+
+  async updateItem(itemId: string, updates: Partial<Item>): Promise<Item> {
+    const result = await this.callEdgeFunction('updateItem', {
+      itemId,
+      updates: {
+        ...updates,
+        dueDate: updates.dueDate?.toISOString(),
+        dateTime: updates.dateTime?.toISOString()
+      }
+    })
+    
+    return this.convertItemFromDb(result.item)
+  }
+
+  async deleteItem(itemId: string): Promise<boolean> {
+    await this.callEdgeFunction('deleteItem', { itemId })
+    return true
+  }
+
+  async searchItems(query: string, options?: {
+    type?: string
+    categoryId?: string
+    limit?: number
+  }): Promise<Item[]> {
+    const result = await this.callEdgeFunction('searchItems', {
+      query,
+      searchType: options?.type,
+      searchCategory: options?.categoryId
+    })
+    
+    return result.items.map((item: DbItem) => this.convertItemFromDb(item))
+  }
+
+  async bulkCreateItems(items: Omit<Item, 'id' | 'createdAt' | 'updatedAt'>[]): Promise<Item[]> {
+    const result = await this.callEdgeFunction('bulkCreateItems', {
+      items: items.map(item => ({
+        type: item.type,
+        title: item.title,
+        text: item.text,
+        categoryId: item.categoryId,
+        dueDate: item.dueDate?.toISOString(),
+        dateTime: item.dateTime?.toISOString(),
+        metadata: item.metadata,
+        attachment: item.attachment,
+        completed: item.completed
+      }))
+    })
+    
+    return result.items.map((item: DbItem) => this.convertItemFromDb(item))
+  }
+
+  // ========== CATEGORIES MANAGEMENT ==========
+  
+  async getCategories(): Promise<Category[]> {
+    const result = await this.callEdgeFunction('getCategories')
+    return result.categories.map((cat: DbCategory) => this.convertCategoryFromDb(cat))
+  }
+
+  async createCategory(categoryData: Omit<Category, 'createdAt' | 'updatedAt'>): Promise<Category> {
+    const result = await this.callEdgeFunction('createCategory', {
+      id: categoryData.id,
+      name: categoryData.name,
+      icon: categoryData.icon,
+      color: categoryData.color,
+      priority: categoryData.priority
+    })
+    
+    return this.convertCategoryFromDb(result.category)
+  }
+
+  // ========== REAL-TIME SUBSCRIPTIONS ==========
+  
+  subscribeToUserItems(callback: (payload: any) => void) {
+    return supabase
+      .channel('user-items')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'items',
+          filter: `user_id=eq.${supabase.auth.getUser().then(({ data }) => data.user?.id)}`,
+        },
+        callback
+      )
+      .subscribe()
+  }
+
+  subscribeToUserCategories(callback: (payload: any) => void) {
+    return supabase
+      .channel('user-categories')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'categories',
+          filter: `user_id=eq.${supabase.auth.getUser().then(({ data }) => data.user?.id)}`,
+        },
+        callback
+      )
+      .subscribe()
+  }
+
+  // ========== TYPE CONVERTERS ==========
+  
+  private convertItemFromDb(dbItem: DbItem): Item {
+    return {
+      id: dbItem.id,
+      type: dbItem.type as Item['type'],
+      title: dbItem.title,
+      text: dbItem.text || '',
+      categoryId: dbItem.category_id || '',
+      completed: dbItem.completed || false,
+      createdAt: new Date(dbItem.created_at || ''),
+      updatedAt: new Date(dbItem.updated_at || ''),
+      dueDate: dbItem.due_date ? new Date(dbItem.due_date) : undefined,
+      dateTime: dbItem.date_time ? new Date(dbItem.date_time) : undefined,
+      attachment: dbItem.attachment || undefined,
+      metadata: typeof dbItem.metadata === 'string' 
+        ? JSON.parse(dbItem.metadata) 
+        : (dbItem.metadata || {})
+    }
+  }
+
+  private convertCategoryFromDb(dbCategory: DbCategory): Category {
+    return {
+      id: dbCategory.id,
+      name: dbCategory.name,
+      icon: dbCategory.icon || '',
+      color: dbCategory.color || '',
+      priority: dbCategory.priority || 0,
+      createdAt: new Date(dbCategory.created_at || ''),
+      updatedAt: new Date(dbCategory.updated_at || '')
+    }
+  }
+
+  // ========== MIGRATION UTILITIES ==========
+  
+  async migrateFromLocalStorage() {
+    try {
+      // Get existing data from localStorage
+      const itemsData = localStorage.getItem('lifeStructureItems')
+      const categoriesData = localStorage.getItem('lifeStructureCategories')
+      
+      const items: Item[] = itemsData ? JSON.parse(itemsData) : []
+      const categories: Category[] = categoriesData ? JSON.parse(categoriesData) : []
+
+      console.log(`🔄 Starting migration: ${categories.length} categories, ${items.length} items`)
+
+      // Migrate categories first
+      for (const category of categories) {
+        try {
+          await this.createCategory(category)
+          console.log(`✅ Migrated category: ${category.name}`)
+        } catch (error) {
+          console.warn(`⚠️ Category already exists: ${category.name}`)
+        }
+      }
+
+      // Migrate items in batches
+      const batchSize = 10
+      for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, i + batchSize).map(item => {
+          const { createdAt, updatedAt, ...itemData } = item
+          return itemData
+        })
+        try {
+          await this.bulkCreateItems(batch)
+          console.log(`✅ Migrated items batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(items.length / batchSize)}`)
+        } catch (error) {
+          console.error('❌ Error migrating batch:', error)
+          // Try individual items in this batch
+          for (const item of items.slice(i, i + batchSize)) {
+            try {
+              const { createdAt, updatedAt, ...itemData } = item
+              await this.createItem(itemData)
+            } catch (itemError) {
+              console.warn(`⚠️ Failed to migrate item: ${item.title}`)
+            }
+          }
+        }
+      }
+
+      // Create backup
+      const backupData = {
+        items,
+        categories,
+        timestamp: new Date().toISOString(),
+        version: '1.0'
+      }
+      localStorage.setItem('lifeStructure_backup', JSON.stringify(backupData))
+      
+      console.log('✅ Migration completed successfully')
+      return true
+    } catch (error) {
+      console.error('❌ Migration failed:', error)
+      throw error
+    }
+  }
+}
+
+// Export singleton instance
+export const supabaseService = new SupabaseService() 

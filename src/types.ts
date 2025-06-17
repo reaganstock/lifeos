@@ -4,6 +4,8 @@ export interface Category {
   icon: string;
   color: string;
   priority: number; // 0 = foundation, 1-6 = priorities
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface Item {
