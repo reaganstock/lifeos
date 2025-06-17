@@ -1,0 +1,127 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: auto; /* Allow scrolling */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Hide scrollbar for webkit browsers */
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for Firefox */
+html {
+  scrollbar-width: none;
+}
+
+#root {
+  height: 100%;
+  overflow: auto; /* Allow scrolling */
+}
+
+/* Hide scrollbar for root container */
+#root::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for main content area */
+.App > div::-webkit-scrollbar {
+  display: none;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Tesla-style animations */
+@keyframes slide-right {
+  0% {
+    transform: translateX(-100%) skewX(-12deg);
+  }
+  100% {
+    transform: translateX(100%) skewX(-12deg);
+  }
+}
+
+.animate-slide-right {
+  animation: slide-right 2s ease-in-out infinite;
+}
+
+/* Custom scrollbar styles */
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+.scrollbar-thumb-white\/20::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 9999px;
+}
+
+.scrollbar-track-transparent::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+}
+
+/* Apple-style smooth scrolling */
+* {
+  scroll-behavior: smooth;
+}
+
+/* Enhanced backdrop blur for Apple aesthetic */
+.backdrop-blur-2xl {
+  backdrop-filter: blur(40px);
+}
+
+/* Tesla-style glow effects */
+.shadow-2xl {
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+/* Premium sidebar scroll bar styling */
+.sidebar-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: rgba(148, 163, 184, 0.1);
+  border-radius: 3px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, rgba(148, 163, 184, 0.3), rgba(100, 116, 139, 0.4));
+  border-radius: 3px;
+  transition: all 0.3s ease;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(to bottom, rgba(148, 163, 184, 0.5), rgba(100, 116, 139, 0.6));
+  transform: scaleX(1.2);
+}
+
+/* Dark mode sidebar scroll bar */
+.dark .sidebar-scroll::-webkit-scrollbar-track {
+  background: rgba(71, 85, 105, 0.1);
+}
+
+.dark .sidebar-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, rgba(71, 85, 105, 0.4), rgba(51, 65, 85, 0.5));
+}
+
+.dark .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(to bottom, rgba(71, 85, 105, 0.6), rgba(51, 65, 85, 0.7));
+} 
