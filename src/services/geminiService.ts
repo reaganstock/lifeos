@@ -2563,7 +2563,7 @@ Please specify your preference or say "create anyway" to override.`,
         dateTime: item.dateTime ? new Date(item.dateTime) : undefined
       }));
       console.log('📊 GEMINI SERVICE: Using localStorage items:', items.length);
-      console.log('📋 Sample localStorage items:', items.slice(0, 3).map(item => `"${item.title}" (${item.type})`));
+      console.log('📋 Sample localStorage items:', items.slice(0, 3).map((item: Item) => `"${item.title}" (${item.type})`));
       return items;
     } catch (error) {
       console.error('❌ Error loading items from localStorage:', error);
@@ -3175,12 +3175,51 @@ Please specify your preference or say "create anyway" to override.`,
       }
     }
     
-    this.saveStoredItems(items);
-    
-    return {
-      success: true,
-      function: 'copyRoutineFromPerson',
-      result: {
+    // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
+    if (this.supabaseCallbacks.bulkCreateItems) {
+      console.log('🔄 GEMINI SERVICE: Creating routine events via Supabase for authenticated user');
+      try {
+        const supabaseEvents = await this.supabaseCallbacks.bulkCreateItems(createdEvents);
+        if (this.supabaseCallbacks.refreshData) {
+          await this.supabaseCallbacks.refreshData();
+        }
+        
+        return {
+          success: true,
+          function: 'copyRoutineFromPerson',
+          result: {
+            message: `✅ Created ${createdEvents.length} routine events from ${personName} for ${duration} days`,
+            eventsCreated: createdEvents.length,
+            personName,
+            events: supabaseEvents || createdEvents
+          }
+        };
+      } catch (error) {
+        console.error('❌ GEMINI SERVICE: Supabase bulk create failed, falling back to localStorage:', error);
+        items.push(...createdEvents);
+        this.saveStoredItems(items);
+        
+        return {
+          success: true,
+          function: 'copyRoutineFromPerson',
+          result: {
+            message: `✅ Created ${createdEvents.length} routine events from ${personName} for ${duration} days (saved locally due to sync error)`,
+            eventsCreated: createdEvents.length,
+            personName,
+            events: createdEvents,
+            fallbackUsed: true
+          }
+        };
+      }
+    } else {
+      console.log('🔄 GEMINI SERVICE: Creating routine events via localStorage for unauthenticated user');
+      items.push(...createdEvents);
+      this.saveStoredItems(items);
+      
+      return {
+        success: true,
+        function: 'copyRoutineFromPerson',
+        result: {
         message: `✅ Created ${createdEvents.length} events based on ${personName}'s routine for ${duration} days`,
         eventsCreated: createdEvents.length,
         person: personName,
@@ -3240,13 +3279,50 @@ Please specify your preference or say "create anyway" to override.`,
       currentDate.setDate(currentDate.getDate() + 1);
     }
     
-    this.saveStoredItems(items);
-    
-    return {
-      success: true,
-      function: 'generateFullDaySchedule',
-      result: {
-        message: `Generated full schedule with ${createdEvents.length} events`,
+    // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
+    if (this.supabaseCallbacks.bulkCreateItems) {
+      console.log('🔄 GEMINI SERVICE: Creating full day schedule via Supabase for authenticated user');
+      try {
+        const supabaseEvents = await this.supabaseCallbacks.bulkCreateItems(createdEvents);
+        if (this.supabaseCallbacks.refreshData) {
+          await this.supabaseCallbacks.refreshData();
+        }
+        
+        return {
+          success: true,
+          function: 'generateFullDaySchedule',
+          result: {
+            message: `Generated full schedule with ${createdEvents.length} events`,
+            eventsCreated: createdEvents.length,
+            events: supabaseEvents || createdEvents
+          }
+        };
+      } catch (error) {
+        console.error('❌ GEMINI SERVICE: Supabase bulk create failed, falling back to localStorage:', error);
+        items.push(...createdEvents);
+        this.saveStoredItems(items);
+        
+        return {
+          success: true,
+          function: 'generateFullDaySchedule',
+          result: {
+            message: `Generated full schedule with ${createdEvents.length} events (saved locally due to sync error)`,
+            eventsCreated: createdEvents.length,
+            events: createdEvents,
+            fallbackUsed: true
+          }
+        };
+      }
+    } else {
+      console.log('🔄 GEMINI SERVICE: Creating full day schedule via localStorage for unauthenticated user');
+      items.push(...createdEvents);
+      this.saveStoredItems(items);
+      
+      return {
+        success: true,
+        function: 'generateFullDaySchedule',
+        result: {
+          message: `Generated full schedule with ${createdEvents.length} events`,
         eventsCreated: createdEvents.length,
         dateRange: `${startDate} to ${endDate}`
       }
@@ -3379,13 +3455,50 @@ Please specify your preference or say "create anyway" to override.`,
       currentDate.setDate(currentDate.getDate() + 1);
     }
     
-    this.saveStoredItems(items);
-    
-    return {
-      success: true,
-      function: 'createCalendarFromNotes',
-      result: {
-        message: `Created ${createdEvents.length} learning sessions from ${notes.length} notes`,
+    // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
+    if (this.supabaseCallbacks.bulkCreateItems) {
+      console.log('🔄 GEMINI SERVICE: Creating calendar from notes via Supabase for authenticated user');
+      try {
+        const supabaseEvents = await this.supabaseCallbacks.bulkCreateItems(createdEvents);
+        if (this.supabaseCallbacks.refreshData) {
+          await this.supabaseCallbacks.refreshData();
+        }
+        
+        return {
+          success: true,
+          function: 'createCalendarFromNotes',
+          result: {
+            message: `Created ${createdEvents.length} learning sessions from ${notes.length} notes`,
+            eventsCreated: createdEvents.length,
+            events: supabaseEvents || createdEvents
+          }
+        };
+      } catch (error) {
+        console.error('❌ GEMINI SERVICE: Supabase bulk create failed, falling back to localStorage:', error);
+        items.push(...createdEvents);
+        this.saveStoredItems(items);
+        
+        return {
+          success: true,
+          function: 'createCalendarFromNotes',
+          result: {
+            message: `Created ${createdEvents.length} learning sessions from ${notes.length} notes (saved locally due to sync error)`,
+            eventsCreated: createdEvents.length,
+            events: createdEvents,
+            fallbackUsed: true
+          }
+        };
+      }
+    } else {
+      console.log('🔄 GEMINI SERVICE: Creating calendar from notes via localStorage for unauthenticated user');
+      items.push(...createdEvents);
+      this.saveStoredItems(items);
+      
+      return {
+        success: true,
+        function: 'createCalendarFromNotes',
+        result: {
+          message: `Created ${createdEvents.length} learning sessions from ${notes.length} notes`,
         eventsCreated: createdEvents.length,
         topicsFound: learningTopics.length
       }
@@ -3711,23 +3824,82 @@ Please specify your preference or say "create anyway" to override.`,
         }
       }
       
-      this.saveStoredItems(items);
-      
-      const message = rescheduledCount > 0 
-        ? `✅ Successfully rescheduled ${rescheduledCount} events by ${timeShift}${errors.length > 0 ? ` (${errors.length} errors)` : ''}`
-        : `❌ Failed to reschedule events${errors.length > 0 ? `: ${errors.join(', ')}` : ''}`;
-      
-      return {
-        success: rescheduledCount > 0,
-        function: 'bulkRescheduleEvents',
-        result: {
-          message,
-          rescheduledCount,
-          timeShift,
-          rescheduledEvents: rescheduledEvents.slice(0, 5), // Show first 5 for brevity
-          errors: errors.slice(0, 3) // Show first 3 errors
+      // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
+      if (this.supabaseCallbacks.updateItem && rescheduledCount > 0) {
+        console.log('🔄 GEMINI SERVICE: Bulk rescheduling events via Supabase for authenticated user');
+        try {
+          // For bulk reschedule, we need to update items, not create new ones
+          const updatePromises = eventsToReschedule.slice(0, rescheduledCount).map(async (event) => {
+            const eventIndex = items.findIndex(item => item.id === event.id);
+            if (eventIndex !== -1) {
+              const updatedEvent = items[eventIndex];
+              return await this.supabaseCallbacks.updateItem!(event.id, updatedEvent);
+            }
+            return null;
+          });
+          
+          await Promise.all(updatePromises);
+          
+          if (this.supabaseCallbacks.refreshData) {
+            await this.supabaseCallbacks.refreshData();
+          }
+          
+          const message = rescheduledCount > 0 
+            ? `✅ Successfully rescheduled ${rescheduledCount} events by ${timeShift}${errors.length > 0 ? ` (${errors.length} errors)` : ''}`
+            : `❌ Failed to reschedule events${errors.length > 0 ? `: ${errors.join(', ')}` : ''}`;
+          
+          return {
+            success: rescheduledCount > 0,
+            function: 'bulkRescheduleEvents',
+            result: {
+              message,
+              rescheduledCount,
+              timeShift,
+              rescheduledEvents: rescheduledEvents.slice(0, 5), // Show first 5 for brevity
+              errors: errors.slice(0, 3) // Show first 3 errors
+            }
+          };
+        } catch (error) {
+          console.error('❌ GEMINI SERVICE: Supabase bulk update failed, falling back to localStorage:', error);
+          this.saveStoredItems(items);
+          
+          const message = rescheduledCount > 0 
+            ? `✅ Successfully rescheduled ${rescheduledCount} events by ${timeShift} (saved locally due to sync error)${errors.length > 0 ? ` (${errors.length} errors)` : ''}`
+            : `❌ Failed to reschedule events${errors.length > 0 ? `: ${errors.join(', ')}` : ''}`;
+          
+          return {
+            success: rescheduledCount > 0,
+            function: 'bulkRescheduleEvents',
+            result: {
+              message,
+              rescheduledCount,
+              timeShift,
+              rescheduledEvents: rescheduledEvents.slice(0, 5), // Show first 5 for brevity
+              errors: errors.slice(0, 3), // Show first 3 errors
+              fallbackUsed: true
+            }
+          };
         }
-      };
+      } else {
+        console.log('🔄 GEMINI SERVICE: Bulk rescheduling events via localStorage for unauthenticated user');
+        this.saveStoredItems(items);
+        
+        const message = rescheduledCount > 0 
+          ? `✅ Successfully rescheduled ${rescheduledCount} events by ${timeShift}${errors.length > 0 ? ` (${errors.length} errors)` : ''}`
+          : `❌ Failed to reschedule events${errors.length > 0 ? `: ${errors.join(', ')}` : ''}`;
+        
+        return {
+          success: rescheduledCount > 0,
+          function: 'bulkRescheduleEvents',
+          result: {
+            message,
+            rescheduledCount,
+            timeShift,
+            rescheduledEvents: rescheduledEvents.slice(0, 5), // Show first 5 for brevity
+            errors: errors.slice(0, 3) // Show first 3 errors
+          }
+        };
+      }
     } catch (error) {
       console.error('Error in bulkRescheduleEvents:', error);
       return {
@@ -3807,27 +3979,88 @@ Please specify your preference or say "create anyway" to override.`,
         }
       }
       
+      // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
       if (createdEvents.length > 0) {
-        items.push(...createdEvents);
-        this.saveStoredItems(items);
+        if (this.supabaseCallbacks.bulkCreateItems) {
+          console.log('🔄 GEMINI SERVICE: Creating multiple date events via Supabase for authenticated user');
+          try {
+            const supabaseEvents = await this.supabaseCallbacks.bulkCreateItems(createdEvents);
+            if (this.supabaseCallbacks.refreshData) {
+              await this.supabaseCallbacks.refreshData();
+            }
+            
+            const message = `✅ Created ${createdEvents.length} events: "${args.title}"${errors.length > 0 ? ` (${errors.length} conflicts/errors)` : ''}`;
+            
+            return {
+              success: createdEvents.length > 0,
+              function: 'createMultipleDateEvents',
+              result: {
+                message,
+                eventsCreated: createdEvents.length,
+                errors: errors.slice(0, 3),
+                createdEvents: (supabaseEvents || createdEvents).map(e => ({
+                  id: e.id,
+                  title: e.title,
+                  dateTime: e.dateTime
+                }))
+              }
+            };
+          } catch (error) {
+            console.error('❌ GEMINI SERVICE: Supabase bulk create failed, falling back to localStorage:', error);
+            items.push(...createdEvents);
+            this.saveStoredItems(items);
+            
+            const message = `✅ Created ${createdEvents.length} events: "${args.title}" (saved locally due to sync error)${errors.length > 0 ? ` (${errors.length} conflicts/errors)` : ''}`;
+            
+            return {
+              success: createdEvents.length > 0,
+              function: 'createMultipleDateEvents',
+              result: {
+                message,
+                eventsCreated: createdEvents.length,
+                errors: errors.slice(0, 3),
+                createdEvents: createdEvents.map(e => ({
+                  id: e.id,
+                  title: e.title,
+                  dateTime: e.dateTime
+                })),
+                fallbackUsed: true
+              }
+            };
+          }
+        } else {
+          console.log('🔄 GEMINI SERVICE: Creating multiple date events via localStorage for unauthenticated user');
+          items.push(...createdEvents);
+          this.saveStoredItems(items);
+          
+          const message = `✅ Created ${createdEvents.length} events: "${args.title}"${errors.length > 0 ? ` (${errors.length} conflicts/errors)` : ''}`;
+          
+          return {
+            success: createdEvents.length > 0,
+            function: 'createMultipleDateEvents',
+            result: {
+              message,
+              eventsCreated: createdEvents.length,
+              errors: errors.slice(0, 3),
+              createdEvents: createdEvents.map(e => ({
+                id: e.id,
+                title: e.title,
+                dateTime: e.dateTime
+              }))
+            }
+          };
+        }
       }
       
-      const message = createdEvents.length > 0 
-        ? `✅ Created ${createdEvents.length} events: "${args.title}"${errors.length > 0 ? ` (${errors.length} conflicts/errors)` : ''}`
-        : `❌ Failed to create events${errors.length > 0 ? `: ${errors.join(', ')}` : ''}`;
+      const message = `❌ Failed to create events${errors.length > 0 ? `: ${errors.join(', ')}` : ''}`;
       
       return {
-        success: createdEvents.length > 0,
+        success: false,
         function: 'createMultipleDateEvents',
         result: {
           message,
-          eventsCreated: createdEvents.length,
-          errors: errors.slice(0, 3),
-          createdEvents: createdEvents.map(e => ({
-            id: e.id,
-            title: e.title,
-            dateTime: e.dateTime
-          }))
+          eventsCreated: 0,
+          errors: errors.slice(0, 3)
         }
       };
     } catch (error) {
@@ -3863,16 +4096,49 @@ Please specify your preference or say "create anyway" to override.`,
       
       if (!targetEvent.metadata?.isRecurring) {
         // Not a recurring event, just delete normally
-        const filteredItems = items.filter(item => item.id !== eventId);
-        this.saveStoredItems(filteredItems);
-        
-        return {
-          success: true,
-          function: 'deleteRecurringEvent',
-          result: {
-            message: `✅ Deleted event: "${targetEvent.title}"`
+        // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
+        if (this.supabaseCallbacks.deleteItem) {
+          console.log('🔄 GEMINI SERVICE: Deleting single event via Supabase for authenticated user');
+          try {
+            await this.supabaseCallbacks.deleteItem(eventId);
+            if (this.supabaseCallbacks.refreshData) {
+              await this.supabaseCallbacks.refreshData();
+            }
+            
+            return {
+              success: true,
+              function: 'deleteRecurringEvent',
+              result: {
+                message: `✅ Deleted event: "${targetEvent.title}"`
+              }
+            };
+          } catch (error) {
+            console.error('❌ GEMINI SERVICE: Supabase delete failed, falling back to localStorage:', error);
+            const filteredItems = items.filter(item => item.id !== eventId);
+            this.saveStoredItems(filteredItems);
+            
+            return {
+              success: true,
+              function: 'deleteRecurringEvent',
+              result: {
+                message: `✅ Deleted event: "${targetEvent.title}" (saved locally due to sync error)`,
+                fallbackUsed: true
+              }
+            };
           }
-        };
+        } else {
+          console.log('🔄 GEMINI SERVICE: Deleting single event via localStorage for unauthenticated user');
+          const filteredItems = items.filter(item => item.id !== eventId);
+          this.saveStoredItems(filteredItems);
+          
+          return {
+            success: true,
+            function: 'deleteRecurringEvent',
+            result: {
+              message: `✅ Deleted event: "${targetEvent.title}"`
+            }
+          };
+        }
       }
       
       if (!deleteAll) {
@@ -3904,19 +4170,58 @@ Please specify "delete this one" or "delete all" to proceed.`,
         item.metadata?.recurrenceId === recurrenceId
       );
       
-      const filteredItems = items.filter(item => 
-        !item.metadata?.recurrenceId || item.metadata.recurrenceId !== recurrenceId
-      );
-      
-      this.saveStoredItems(filteredItems);
-      
-      return {
-        success: true,
-        function: 'deleteRecurringEvent',
-        result: {
-          message: `✅ Deleted all ${eventsToDelete.length} occurrences of "${targetEvent.title}"`
+      // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
+      if (this.supabaseCallbacks.deleteItem) {
+        console.log('🔄 GEMINI SERVICE: Deleting recurring events via Supabase for authenticated user');
+        try {
+          // Delete each occurrence individually
+          const deletePromises = eventsToDelete.map(event => 
+            this.supabaseCallbacks.deleteItem!(event.id)
+          );
+          await Promise.all(deletePromises);
+          
+          if (this.supabaseCallbacks.refreshData) {
+            await this.supabaseCallbacks.refreshData();
+          }
+          
+          return {
+            success: true,
+            function: 'deleteRecurringEvent',
+            result: {
+              message: `✅ Deleted all ${eventsToDelete.length} occurrences of "${targetEvent.title}"`
+            }
+          };
+        } catch (error) {
+          console.error('❌ GEMINI SERVICE: Supabase bulk delete failed, falling back to localStorage:', error);
+          const filteredItems = items.filter(item => 
+            !item.metadata?.recurrenceId || item.metadata.recurrenceId !== recurrenceId
+          );
+          this.saveStoredItems(filteredItems);
+          
+          return {
+            success: true,
+            function: 'deleteRecurringEvent',
+            result: {
+              message: `✅ Deleted all ${eventsToDelete.length} occurrences of "${targetEvent.title}" (saved locally due to sync error)`,
+              fallbackUsed: true
+            }
+          };
         }
-      };
+      } else {
+        console.log('🔄 GEMINI SERVICE: Deleting recurring events via localStorage for unauthenticated user');
+        const filteredItems = items.filter(item => 
+          !item.metadata?.recurrenceId || item.metadata.recurrenceId !== recurrenceId
+        );
+        this.saveStoredItems(filteredItems);
+        
+        return {
+          success: true,
+          function: 'deleteRecurringEvent',
+          result: {
+            message: `✅ Deleted all ${eventsToDelete.length} occurrences of "${targetEvent.title}"`
+          }
+        };
+      }
     } catch (error) {
       console.error('Error deleting recurring event:', error);
       return {
@@ -4020,28 +4325,91 @@ Please specify "delete this one" or "delete all" to proceed.`,
         }
       }
       
+      // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
       if (createdEvents.length > 0) {
-        items.push(...createdEvents);
-        this.saveStoredItems(items);
+        if (this.supabaseCallbacks.bulkCreateItems) {
+          console.log('🔄 GEMINI SERVICE: Creating recurring multiple day events via Supabase for authenticated user');
+          try {
+            const supabaseEvents = await this.supabaseCallbacks.bulkCreateItems(createdEvents);
+            if (this.supabaseCallbacks.refreshData) {
+              await this.supabaseCallbacks.refreshData();
+            }
+            
+            const message = `✅ Created ${createdEvents.length} recurring events: "${args.title}" for ${daysOfWeek.join(' and ')}${errors.length > 0 ? ` (${errors.length} conflicts/errors)` : ''}`;
+            
+            return {
+              success: createdEvents.length > 0,
+              function: 'createRecurringMultipleDays',
+              result: {
+                message,
+                eventsCreated: createdEvents.length,
+                errors: errors.slice(0, 3),
+                createdEvents: (supabaseEvents || createdEvents).map(e => ({
+                  id: e.id,
+                  title: e.title,
+                  dateTime: e.dateTime,
+                  recurrenceId: e.metadata?.recurrenceId
+                }))
+              }
+            };
+          } catch (error) {
+            console.error('❌ GEMINI SERVICE: Supabase bulk create failed, falling back to localStorage:', error);
+            items.push(...createdEvents);
+            this.saveStoredItems(items);
+            
+            const message = `✅ Created ${createdEvents.length} recurring events: "${args.title}" for ${daysOfWeek.join(' and ')} (saved locally due to sync error)${errors.length > 0 ? ` (${errors.length} conflicts/errors)` : ''}`;
+            
+            return {
+              success: createdEvents.length > 0,
+              function: 'createRecurringMultipleDays',
+              result: {
+                message,
+                eventsCreated: createdEvents.length,
+                errors: errors.slice(0, 3),
+                createdEvents: createdEvents.map(e => ({
+                  id: e.id,
+                  title: e.title,
+                  dateTime: e.dateTime,
+                  recurrenceId: e.metadata?.recurrenceId
+                })),
+                fallbackUsed: true
+              }
+            };
+          }
+        } else {
+          console.log('🔄 GEMINI SERVICE: Creating recurring multiple day events via localStorage for unauthenticated user');
+          items.push(...createdEvents);
+          this.saveStoredItems(items);
+          
+          const message = `✅ Created ${createdEvents.length} recurring events: "${args.title}" for ${daysOfWeek.join(' and ')}${errors.length > 0 ? ` (${errors.length} conflicts/errors)` : ''}`;
+          
+          return {
+            success: createdEvents.length > 0,
+            function: 'createRecurringMultipleDays',
+            result: {
+              message,
+              eventsCreated: createdEvents.length,
+              errors: errors.slice(0, 3),
+              createdEvents: createdEvents.map(e => ({
+                id: e.id,
+                title: e.title,
+                dateTime: e.dateTime,
+                recurrenceId: e.metadata?.recurrenceId
+              }))
+            }
+          };
+        }
       }
       
-      const message = createdEvents.length > 0 
-        ? `✅ Created ${createdEvents.length} recurring events: "${args.title}" for ${daysOfWeek.join(' and ')}${errors.length > 0 ? ` (${errors.length} conflicts/errors)` : ''}`
-        : `❌ Failed to create events${errors.length > 0 ? `: ${errors.join(', ')}` : ''}`;
+      const message = `❌ Failed to create events${errors.length > 0 ? `: ${errors.join(', ')}` : ''}`;
       
       return {
-        success: createdEvents.length > 0,
+        success: false,
         function: 'createRecurringMultipleDays',
         result: {
           message,
-          eventsCreated: createdEvents.length,
-          errors: errors.slice(0, 3),
-          createdEvents: createdEvents.map(e => ({
-            id: e.id,
-            title: e.title,
-            dateTime: e.dateTime,
-            recurrenceId: e.metadata?.recurrenceId
-          }))
+          eventsCreated: 0,
+          errors: errors.slice(0, 3)
         }
       };
     } catch (error) {
@@ -4253,28 +4621,96 @@ Please specify "delete this one" or "delete all" to proceed.`,
         }
       }
       
-      this.saveStoredItems(filteredItems);
-      
-      const message = eventsToReschedule.length > 0 
-        ? `✅ Canceled "${canceledEvent!.title}" and intelligently rescheduled ${eventsToReschedule.length} related events`
-        : `✅ Canceled "${canceledEvent!.title}" (no related events to reschedule)`;
-      
-      return {
-        success: true,
-        function: 'intelligentReschedule',
-        result: {
-          message,
-          canceledEvent: {
-            title: canceledEvent!.title,
-            dateTime: canceledEvent!.dateTime
-          },
-          rescheduledEvents: eventsToReschedule.map(e => ({
-            title: e.title,
-            newDateTime: e.dateTime,
-            reason: e.metadata?.rescheduleReason
-          }))
+      // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
+      if (this.supabaseCallbacks.deleteItem) {
+        console.log('🔄 GEMINI SERVICE: Intelligent rescheduling via Supabase for authenticated user');
+        try {
+          // First, delete the canceled event
+          await this.supabaseCallbacks.deleteItem(canceledEvent!.id);
+          
+          // Then, update the rescheduled events
+          if (eventsToReschedule.length > 0 && this.supabaseCallbacks.updateItem) {
+            const updatePromises = eventsToReschedule.map(event => 
+              this.supabaseCallbacks.updateItem!(event.id, event)
+            );
+            await Promise.all(updatePromises);
+          }
+          
+          if (this.supabaseCallbacks.refreshData) {
+            await this.supabaseCallbacks.refreshData();
+          }
+          
+          const message = eventsToReschedule.length > 0 
+            ? `✅ Canceled "${canceledEvent!.title}" and intelligently rescheduled ${eventsToReschedule.length} related events`
+            : `✅ Canceled "${canceledEvent!.title}" (no related events to reschedule)`;
+          
+          return {
+            success: true,
+            function: 'intelligentReschedule',
+            result: {
+              message,
+              canceledEvent: {
+                title: canceledEvent!.title,
+                dateTime: canceledEvent!.dateTime
+              },
+              rescheduledEvents: eventsToReschedule.map(e => ({
+                title: e.title,
+                newDateTime: e.dateTime,
+                reason: e.metadata?.rescheduleReason
+              }))
+            }
+          };
+        } catch (error) {
+          console.error('❌ GEMINI SERVICE: Supabase intelligent reschedule failed, falling back to localStorage:', error);
+          this.saveStoredItems(filteredItems);
+          
+          const message = eventsToReschedule.length > 0 
+            ? `✅ Canceled "${canceledEvent!.title}" and intelligently rescheduled ${eventsToReschedule.length} related events (saved locally due to sync error)`
+            : `✅ Canceled "${canceledEvent!.title}" (no related events to reschedule, saved locally due to sync error)`;
+          
+          return {
+            success: true,
+            function: 'intelligentReschedule',
+            result: {
+              message,
+              canceledEvent: {
+                title: canceledEvent!.title,
+                dateTime: canceledEvent!.dateTime
+              },
+              rescheduledEvents: eventsToReschedule.map(e => ({
+                title: e.title,
+                newDateTime: e.dateTime,
+                reason: e.metadata?.rescheduleReason
+              })),
+              fallbackUsed: true
+            }
+          };
         }
-      };
+      } else {
+        console.log('🔄 GEMINI SERVICE: Intelligent rescheduling via localStorage for unauthenticated user');
+        this.saveStoredItems(filteredItems);
+        
+        const message = eventsToReschedule.length > 0 
+          ? `✅ Canceled "${canceledEvent!.title}" and intelligently rescheduled ${eventsToReschedule.length} related events`
+          : `✅ Canceled "${canceledEvent!.title}" (no related events to reschedule)`;
+        
+        return {
+          success: true,
+          function: 'intelligentReschedule',
+          result: {
+            message,
+            canceledEvent: {
+              title: canceledEvent!.title,
+              dateTime: canceledEvent!.dateTime
+            },
+            rescheduledEvents: eventsToReschedule.map(e => ({
+              title: e.title,
+              newDateTime: e.dateTime,
+              reason: e.metadata?.rescheduleReason
+            }))
+          }
+        };
+      }
     } catch (error) {
       console.error('Error in intelligent reschedule:', error);
       return {
