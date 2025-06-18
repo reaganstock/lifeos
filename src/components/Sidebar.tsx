@@ -1,19 +1,21 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Home, Calendar, FileText, BowArrow, Settings, CheckSquare, RotateCcw, Star, FolderOpen, Upload, Edit3, Check, ChevronRight, ChevronLeft } from 'lucide-react';
-import { categories } from '../data/initialData';
+import { Category } from '../types';
 
 interface SidebarProps {
   currentView: string;
   onNavigateToCategory: (categoryId: string) => void;
   onNavigateToDashboard: () => void;
   onNavigateToGlobal: (view: string) => void;
+  categories: Category[];
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
   currentView, 
   onNavigateToCategory, 
   onNavigateToDashboard,
-  onNavigateToGlobal 
+  onNavigateToGlobal,
+  categories
 }) => {
   const [logo, setLogo] = useState<string | null>(() => {
     return localStorage.getItem('lifeStructureLogo');
@@ -54,7 +56,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'notes', label: 'Notes', icon: <FileText className="w-5 h-5" />, color: 'text-yellow-600 dark:text-yellow-400' }
   ];
 
-  // Get the top 3 highest priority categories (lowest priority numbers)
+  // Get the top 3 highest priority categories (lowest priority numbers) from actual user categories
   const topPriorityCategories = categories
     .sort((a, b) => a.priority - b.priority)
     .slice(0, 3);

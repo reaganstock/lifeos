@@ -431,6 +431,7 @@ function AppContent() {
           onNavigateToCategory={handleNavigateToCategory}
           onNavigateToDashboard={handleBackToDashboard}
           onNavigateToGlobal={handleNavigateToGlobal}
+          categories={user ? supabaseCategories : categories}
         />
         
         {/* Main Content Area */}
