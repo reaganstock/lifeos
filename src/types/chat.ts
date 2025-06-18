@@ -36,6 +36,7 @@ export interface AIResponse {
   functionResults?: any[]; // Results from function calls
   itemsModified?: boolean; // Whether any items were modified
   pendingFunctionCall?: any; // Function call waiting for confirmation
+  thinkingContent?: string; // Thinking content from thinking models
 }
 
 // Chat State

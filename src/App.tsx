@@ -12,7 +12,6 @@ import Settings from './components/Settings';
 import Notification from './components/Notification';
 import AIAssistant from './components/AIAssistant';
 import { AuthModal } from './components/AuthModal';
-import { MigrationModal } from './components/MigrationModal';
 import { AuthProvider, useAuthContext } from './components/AuthProvider';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { categories as initialCategories, initialItems } from './data/initialData';
@@ -74,6 +73,7 @@ function AppContent() {
   
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showMigrationModal, setShowMigrationModal] = useState(false);
+  const [migrationProgress, setMigrationProgress] = useState<MigrationProgress | null>(null);
   
   const showLanding = currentView === 'landing';
   const [categories] = useState<Category[]>(initialCategories);
@@ -105,14 +105,70 @@ function AppContent() {
   // Create a setItems function that works with both localStorage and Supabase
   const setItems = user 
     ? (updater: React.SetStateAction<Item[]>) => {
-        // For authenticated users, the real-time subscriptions will handle updates
-        // We don't need to manually call setItems since Supabase operations
-        // trigger real-time updates automatically
-        console.log('🔄 setItems called for authenticated user - operations handled by individual CRUD functions');
+        // For authenticated users, we need to handle updates through Supabase
+        const newItems = typeof updater === 'function' ? updater(supabaseItems) : updater;
         
-        // If this is being called, it means some component is trying to update items directly
-        // Instead, components should use the individual CRUD operations from useSupabaseData
-        console.warn('⚠️ Direct setItems call detected for authenticated user. Consider using CRUD operations instead.');
+        console.log('🔄 setItems called for authenticated user');
+        console.log('Current supabaseItems:', supabaseItems.length);
+        console.log('New items:', newItems.length);
+        
+        // Find what changed and update Supabase accordingly
+        const currentItems = supabaseItems;
+        
+        // Handle new items (items that don't exist in current or have temporary IDs)
+        const newItemsToCreate = newItems.filter(newItem => {
+          // Consider items with numeric string IDs as temporary (from Date.now())
+          const hasTemporaryId = /^\d+$/.test(newItem.id);
+          const existsInCurrent = currentItems.find(current => current.id === newItem.id);
+          return hasTemporaryId || !existsInCurrent;
+        });
+        
+        // Handle updated items (skip items with temporary IDs)
+        const itemsToUpdate = newItems.filter(newItem => {
+          const hasTemporaryId = /^\d+$/.test(newItem.id);
+          if (hasTemporaryId) return false;
+          
+          const current = currentItems.find(c => c.id === newItem.id);
+          return current && JSON.stringify(current) !== JSON.stringify(newItem);
+        });
+        
+        // Handle deleted items (don't consider temporary ID items as deletions)
+        const itemsToDelete = currentItems.filter(current => {
+          const existsInNew = newItems.find(newItem => newItem.id === current.id);
+          return !existsInNew;
+        });
+        
+        console.log('Items to create:', newItemsToCreate.length);
+        console.log('Items to update:', itemsToUpdate.length);
+        console.log('Items to delete:', itemsToDelete.length);
+        
+        // Execute Supabase operations asynchronously
+        (async () => {
+          try {
+            if (newItemsToCreate.length > 0) {
+              console.log('🆕 Creating new items:', newItemsToCreate);
+              await bulkCreateItems(newItemsToCreate);
+            }
+            
+            for (const item of itemsToUpdate) {
+              console.log('📝 Updating item:', item.id);
+              await updateItem(item.id, item);
+            }
+            
+            if (itemsToDelete.length > 0) {
+              console.log('🗑️ Deleting items:', itemsToDelete.map(item => item.id));
+              await bulkDeleteItems(itemsToDelete.map(item => item.id));
+            }
+            
+            // Refresh data to get latest from Supabase
+            console.log('🔄 Refreshing data from Supabase');
+            await refreshData();
+            showNotification('Items updated successfully', 'success');
+          } catch (error) {
+            console.error('❌ Error updating items via Supabase:', error);
+            showNotification('Failed to update items', 'error');
+          }
+        })();
       }
     : setLocalItems; // Use localStorage for unauthenticated users
 
@@ -122,6 +178,43 @@ function AppContent() {
       setShowMigrationModal(true);
     }
   }, [user, dataInitialized]);
+
+  // Migration handler
+  const handleMigration = async () => {
+    const migrationManager = createMigrationManager((progress) => {
+      setMigrationProgress(progress);
+    });
+
+    const localData = migrationManager.detectLocalStorageData();
+    
+    if (!localData.hasData) {
+      setShowMigrationModal(false);
+      return;
+    }
+
+    const result = await migrationManager.migrateToSupabase(localData, {
+      createCategory,
+      updateCategory,
+      deleteCategory,
+      createItem,
+      updateItem,
+      deleteItem,
+      bulkCreateItems,
+      bulkUpdateItems,
+      bulkDeleteItems,
+      refreshData
+    });
+
+    if (result.success) {
+      showNotification('Migration completed successfully!', 'success');
+      await refreshData();
+    } else {
+      showNotification(`Migration completed with ${result.errors.length} errors`, 'error');
+    }
+
+    setShowMigrationModal(false);
+    setMigrationProgress(null);
+  };
 
   // Show auth modal if user is not authenticated (except on landing)
   useEffect(() => {
@@ -200,11 +293,10 @@ function AppContent() {
   const handleAddItem = async (item: Item) => {
     if (user) {
       try {
-        console.log('🆕 Creating item via Supabase:', item.title);
-        const newItem = await createItem(item);
-        if (newItem) {
+        const result = await createItem(item);
+        if (result) {
+          await refreshData();
           showNotification('Item created successfully', 'success');
-          // No need to manually refresh - real-time subscriptions will handle the update
         } else {
           showNotification('Failed to create item', 'error');
         }
@@ -213,7 +305,6 @@ function AppContent() {
         showNotification('Failed to create item', 'error');
       }
     } else {
-      // For unauthenticated users, use localStorage
       setLocalItems(prevItems => [...prevItems, item]);
       showNotification('Item created', 'success');
     }
@@ -307,7 +398,7 @@ function AppContent() {
       case 'notes':
         return <GlobalNotes items={items} setItems={setItems} />;
       case 'settings':
-        return <Settings onOpenMigrationModal={() => setShowMigrationModal(true)} />;
+        return <Settings />;
       
       default:
         return (
@@ -379,6 +470,14 @@ function AppContent() {
             isCollapsed={isAiSidebarCollapsed}
             onResize={setAiSidebarWidth}
             onToggleCollapse={() => setIsAiSidebarCollapsed(!isAiSidebarCollapsed)}
+            // Pass Supabase operations for authenticated users
+            supabaseCallbacks={user ? {
+              createItem,
+              updateItem,
+              deleteItem,
+              bulkCreateItems,
+              refreshData
+            } : undefined}
           />
         )}
 
@@ -390,26 +489,48 @@ function AppContent() {
 
         {/* Migration Modal */}
         {showMigrationModal && (
-          <MigrationModal
-            isOpen={showMigrationModal}
-            onClose={() => setShowMigrationModal(false)}
-            supabaseActions={{
-              createCategory,
-              updateCategory,
-              deleteCategory,
-              createItem,
-              updateItem,
-              deleteItem,
-              bulkCreateItems,
-              bulkUpdateItems,
-              bulkDeleteItems,
-              refreshData
-            }}
-            onMigrationComplete={() => {
-              showNotification('Migration completed successfully!', 'success');
-              refreshData();
-            }}
-          />
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+                Migrate Your Data
+              </h2>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                We found existing data in your browser. Would you like to migrate it to your Supabase account for cross-device sync?
+              </p>
+              
+              {migrationProgress && (
+                <div className="mb-4">
+                  <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
+                    <span>{migrationProgress.message}</span>
+                    <span>{migrationProgress.progress}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${migrationProgress.progress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex space-x-3">
+                <button
+                  onClick={handleMigration}
+                  disabled={!!migrationProgress}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-2 px-4 rounded-lg"
+                >
+                  {migrationProgress ? 'Migrating...' : 'Migrate Data'}
+                </button>
+                <button
+                  onClick={() => setShowMigrationModal(false)}
+                  disabled={!!migrationProgress}
+                  className="flex-1 bg-gray-300 hover:bg-gray-400 disabled:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg"
+                >
+                  Skip
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </ThemeProvider>

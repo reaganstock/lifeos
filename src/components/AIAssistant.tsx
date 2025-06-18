@@ -122,6 +122,14 @@ interface AIAssistantProps {
   currentNoteTitle?: string;
   onUpdateNoteContent?: (content: string) => void;
   onUpdateNoteTitle?: (title: string) => void;
+  // Supabase operations for authenticated users
+  supabaseCallbacks?: {
+    createItem?: (item: any) => Promise<any>;
+    updateItem?: (id: string, item: any) => Promise<any>;
+    deleteItem?: (id: string) => Promise<any>;
+    bulkCreateItems?: (items: any[]) => Promise<any>;
+    refreshData?: () => Promise<void>;
+  };
 }
 
 const AIAssistant: React.FC<AIAssistantProps> = ({
@@ -142,9 +150,22 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   currentNoteContent,
   currentNoteTitle,
   onUpdateNoteContent,
-  onUpdateNoteTitle
+  onUpdateNoteTitle,
+  // Supabase operations
+  supabaseCallbacks
 }) => {
   
+  // Configure geminiService with Supabase callbacks for authenticated users
+  useEffect(() => {
+    if (supabaseCallbacks) {
+      console.log('✅ AIAssistant: Configuring geminiService with Supabase callbacks for authenticated user');
+      geminiService.setSupabaseCallbacks(supabaseCallbacks);
+    } else {
+      console.log('✅ AIAssistant: Clearing geminiService Supabase callbacks for unauthenticated user');
+      geminiService.clearSupabaseCallbacks();
+    }
+  }, [supabaseCallbacks]);
+
   // IMMEDIATE DEBUG - Check what props we're getting
   useEffect(() => {
     console.log('🚨 AIAssistant PROPS DEBUG:');
@@ -154,7 +175,8 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     console.log('🚨 onUpdateNoteTitle exists?', !!onUpdateNoteTitle);
     console.log('🚨 currentView:', currentView);
     console.log('🚨 isSidebarMode:', isSidebarMode);
-  }, [currentNoteContent, currentNoteTitle, onUpdateNoteContent, onUpdateNoteTitle, currentView, isSidebarMode]);
+    console.log('🚨 supabaseCallbacks exists?', !!supabaseCallbacks);
+  }, [currentNoteContent, currentNoteTitle, onUpdateNoteContent, onUpdateNoteTitle, currentView, isSidebarMode, supabaseCallbacks]);
 
   const [inputMessage, setInputMessage] = useState('');
   const [showSessions, setShowSessions] = useState(false);
@@ -165,6 +187,11 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   // Function calling states
   const [isProcessingFunction, setIsProcessingFunction] = useState(false);
   const [functionResult, setFunctionResult] = useState<string | null>(null);
+  
+  // AI processing states
+  const [isAIThinking, setIsAIThinking] = useState(false);
+  const [isCallingFunction, setIsCallingFunction] = useState(false);
+  const [currentFunctionName, setCurrentFunctionName] = useState<string | null>(null);
   
   // Smart intent detection - only use function calling when necessary
   const needsFunctionCalling = (transcript: string): boolean => {
@@ -594,6 +621,12 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
       
       if (provider === 'gemini') {
         currentVoiceServiceRef.current = new GeminiLiveService();
+        
+        // Configure with Supabase callbacks if available
+        if (supabaseCallbacks && typeof currentVoiceServiceRef.current.setSupabaseCallbacks === 'function') {
+          console.log('✅ AIAssistant: Configuring GeminiLiveService with Supabase callbacks');
+          currentVoiceServiceRef.current.setSupabaseCallbacks(supabaseCallbacks);
+        }
         
         // Set up event handlers
         currentVoiceServiceRef.current.onConnectionState((connected: boolean) => {
@@ -1252,6 +1285,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     setIsRecording(false);
     
     chatService.setProcessing(true);
+    setIsAIThinking(true);
     
     try {
       // Emergency session check - ensure we have an active session
@@ -1380,6 +1414,14 @@ User message: ${messageToSend}`;
           itemsCount: items?.length || 0
         });
 
+        // Check if this looks like a function call command
+        const needsFunction = needsFunctionCalling(processMessage);
+        if (needsFunction) {
+          setIsAIThinking(false);
+          setIsCallingFunction(true);
+          setCurrentFunctionName('Processing Request');
+        }
+
         const response = await chatService.processGeorgetownCommand(
           processMessage, 
           currentCategoryId,
@@ -1388,6 +1430,18 @@ User message: ${messageToSend}`;
         );
 
         console.log('📥 AIAssistant: Received response from chatService:', response);
+
+        // Check if function was called based on response
+        if (response.functionResults && response.functionResults.length > 0) {
+          setIsCallingFunction(false);
+          const functionName = response.functionResults[0].function;
+          setCurrentFunctionName(`Executed: ${functionName}`);
+          
+          // Show function result briefly
+          setTimeout(() => {
+            setCurrentFunctionName(null);
+          }, 2000);
+        }
 
         // Check if there's a pending function call
         if (response.pendingFunctionCall) {
@@ -1435,7 +1489,9 @@ User message: ${messageToSend}`;
             aiResponse = `I can see the image${selectedImages.length > 1 ? 's' : ''} you uploaded. ${response.message}`;
           }
           
+          console.log('💬 AIAssistant: Adding AI response to chat:', aiResponse);
           await chatService.addMessage('assistant', aiResponse);
+          console.log('✅ AIAssistant: AI response added successfully');
         }
       }
       
@@ -1444,6 +1500,9 @@ User message: ${messageToSend}`;
       await chatService.addMessage('assistant', "I had trouble processing that request. Could you try rephrasing it?");
     } finally {
       chatService.setProcessing(false);
+      setIsAIThinking(false);
+      setIsCallingFunction(false);
+      setCurrentFunctionName(null);
     }
   };
 
@@ -2335,17 +2394,54 @@ User message: ${messageToSend}`;
                     }}
                   >
                     <div className="flex items-center space-x-3">
-                      <div className="flex space-x-1">
-                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
-                        <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></div>
-                        <div className="w-2 h-2 bg-pink-500 rounded-full animate-pulse"></div>
-                      </div>
-                      <span className={`text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-                        Processing...
-                      </span>
+                      {/* Thinking indicator */}
+                      {isAIThinking && (
+                        <>
+                          <div className="flex space-x-1">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                          </div>
+                          <span className={`text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                            Thinking...
+                          </span>
+                        </>
+                      )}
+                      
+                      {/* Function call indicator */}
+                      {isCallingFunction && (
+                        <>
+                          <div className="flex space-x-1">
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                          </div>
+                          <span className={`text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                            {currentFunctionName || 'Executing function...'}
+                          </span>
+                        </>
+                      )}
+                      
+                      {/* Fallback processing indicator */}
+                      {!isAIThinking && !isCallingFunction && (
+                        <>
+                          <div className="flex space-x-1">
+                            <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
+                            <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></div>
+                            <div className="w-2 h-2 bg-pink-500 rounded-full animate-pulse"></div>
+                          </div>
+                          <span className={`text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                            Processing...
+                          </span>
+                        </>
+                      )}
+                      
                       <button
                         onClick={async () => {
                           chatService.setProcessing(false);
+                          setIsAIThinking(false);
+                          setIsCallingFunction(false);
+                          setCurrentFunctionName(null);
                           await chatService.addMessage('system', 'Response cancelled by user');
                         }}
                         className={`ml-3 px-3 py-1 rounded-lg text-xs transition-all hover:scale-105 ${

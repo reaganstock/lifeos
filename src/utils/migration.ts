@@ -35,62 +35,17 @@ export class MigrationManager {
 
   public detectLocalStorageData(): LocalStorageData {
     try {
-      // Check multiple possible localStorage keys for items
-      const possibleItemKeys = [
-        'lifeStructureItems',
-        'lifeOS-items', 
-        'georgetownAI_items',
-        'items'
-      ];
-      
-      const possibleCategoryKeys = [
-        'lifeStructureCategories',
-        'lifeOS-categories',
-        'categories'
-      ];
+      const itemsData = localStorage.getItem('lifeOS-items')
+      const categoriesData = localStorage.getItem('lifeOS-categories')
 
-      let items: Item[] = [];
-      let categories: Category[] = [];
-
-      // Try to find items from any possible key
-      for (const key of possibleItemKeys) {
-        const data = localStorage.getItem(key);
-        if (data) {
-          try {
-            const parsed = JSON.parse(data);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              items = parsed;
-              console.log(`📊 Migration: Found ${items.length} items in localStorage key: ${key}`);
-              break; // Use the first valid items array found
-            }
-          } catch (error) {
-            console.warn(`Error parsing localStorage key ${key}:`, error);
-          }
-        }
-      }
-
-      // Try to find categories from any possible key
-      for (const key of possibleCategoryKeys) {
-        const data = localStorage.getItem(key);
-        if (data) {
-          try {
-            const parsed = JSON.parse(data);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              categories = parsed;
-              console.log(`📊 Migration: Found ${categories.length} categories in localStorage key: ${key}`);
-              break; // Use the first valid categories array found
-            }
-          } catch (error) {
-            console.warn(`Error parsing localStorage key ${key}:`, error);
-          }
-        }
-      }
+      const items: Item[] = itemsData ? JSON.parse(itemsData) : []
+      const categories: Category[] = categoriesData ? JSON.parse(categoriesData) : []
 
       // Convert date strings back to Date objects
       const processedItems = items.map(item => ({
         ...item,
-        createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
-        updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
+        createdAt: new Date(item.createdAt),
+        updatedAt: new Date(item.updatedAt),
         dueDate: item.dueDate ? new Date(item.dueDate) : undefined,
         dateTime: item.dateTime ? new Date(item.dateTime) : undefined,
         metadata: item.metadata ? {
@@ -98,12 +53,12 @@ export class MigrationManager {
           startTime: item.metadata.startTime ? new Date(item.metadata.startTime) : undefined,
           endTime: item.metadata.endTime ? new Date(item.metadata.endTime) : undefined,
         } : undefined,
-      }));
+      }))
 
       return {
         categories,
         items: processedItems,
-        hasData: categories.length > 0 || processedItems.length > 0,
+        hasData: categories.length > 0 || items.length > 0,
       }
     } catch (error) {
       console.error('Error detecting localStorage data:', error)
@@ -223,51 +178,15 @@ export class MigrationManager {
       const backup = {
         timestamp: new Date().toISOString(),
         data: localData,
-        allLocalStorageKeys: Object.keys(localStorage)
       }
       localStorage.setItem('lifeOS-migration-backup', JSON.stringify(backup))
 
-      // Clear all possible localStorage keys that could contain items or app data
-      const keysToRemove = [
-        // Items data keys
-        'lifeStructureItems',
-        'lifeOS-items',
-        'georgetownAI_items',
-        'items',
-        
-        // Categories data keys  
-        'lifeStructureCategories',
-        'lifeOS-categories',
-        'categories',
-        
-        // Other app data that should be synced from Supabase
-        'lifeStructure_backup',
-        'georgetownAI_voiceModel',
-        'georgetownAI_openaiVoice',
-        'georgetownAI_geminiVoice',
-        
-        // UI state that should be reset
-        'sidebarWidth',
-        'sidebarCollapsed',
-        'aiSidebarWidth',
-        'sidebarAutoHide',
-        'lifeStructureLogo',
-        'lifeStructureTitle',
-        'lifeStructureSubtitle'
-      ];
+      // Clear the original localStorage data
+      localStorage.removeItem('lifeOS-items')
+      localStorage.removeItem('lifeOS-categories')
 
-      keysToRemove.forEach(key => {
-        if (localStorage.getItem(key)) {
-          console.log(`🧹 Migration cleanup: Removing localStorage key: ${key}`);
-          localStorage.removeItem(key);
-        }
-      });
-
-      // Set flags to indicate migration is complete and skip landing
+      // Set a flag to indicate migration is complete
       localStorage.setItem('lifeOS-migrated', 'true')
-      localStorage.setItem('skipLanding', 'true')
-
-      console.log('✅ Migration cleanup completed successfully');
 
     } catch (error) {
       console.error('Error during cleanup:', error)

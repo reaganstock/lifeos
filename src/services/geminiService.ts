@@ -17,10 +17,36 @@ export interface GeminiResponse {
   functionResults?: any[];
   itemsModified?: boolean;
   itemCreated?: any;
+  thinkingContent?: string;
 }
 
 export class GeminiService {
   private itemsModified: boolean = false;
+  private supabaseCallbacks: {
+    createItem?: (item: any) => Promise<any>;
+    updateItem?: (id: string, item: any) => Promise<any>;
+    deleteItem?: (id: string) => Promise<any>;
+    bulkCreateItems?: (items: any[]) => Promise<any>;
+    refreshData?: () => Promise<void>;
+  } = {};
+
+  // Set Supabase callbacks for authenticated users
+  setSupabaseCallbacks(callbacks: {
+    createItem?: (item: any) => Promise<any>;
+    updateItem?: (id: string, item: any) => Promise<any>;
+    deleteItem?: (id: string) => Promise<any>;
+    bulkCreateItems?: (items: any[]) => Promise<any>;
+    refreshData?: () => Promise<void>;
+  }): void {
+    this.supabaseCallbacks = callbacks;
+    console.log('✅ GEMINI SERVICE: Supabase callbacks configured for authenticated user');
+  }
+
+  // Clear Supabase callbacks for unauthenticated users
+  clearSupabaseCallbacks(): void {
+    this.supabaseCallbacks = {};
+    console.log('✅ GEMINI SERVICE: Supabase callbacks cleared for unauthenticated user');
+  }
 
   private async makeGeminiRequest(messages: any[], tools?: any[]) {
     // Get current model from global state, fallback to default
@@ -50,6 +76,10 @@ export class GeminiService {
       requestBody.tools = [{
         functionDeclarations: tools
       }];
+      console.log('🔧 DEBUG: Added tools to request:', tools.length, 'tools');
+      console.log('🔧 DEBUG: Request body with tools:', JSON.stringify(requestBody, null, 2));
+    } else {
+      console.log('⚠️ DEBUG: NO TOOLS provided to API request!');
     }
 
     if (!GEMINI_API_KEY) {
@@ -123,18 +153,28 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
     
     // Use function calling intelligently - not for every message
     const tools = this.getTools();
+    console.log('🔧 DEBUG: Tools being sent:', tools.length, 'tools');
+    console.log('🔧 DEBUG: First few tools:', tools.slice(0, 3).map(t => t.name));
     
     try {
       const response = await this.makeGeminiRequest(messages, tools);
       console.log('🤖 Gemini Response:', response);
+      
+      // CRITICAL DEBUG: Check what we actually received
+      console.log('🔍 DEBUG: Response structure:', JSON.stringify(response, null, 2));
+      console.log('🔍 DEBUG: Candidates:', response.candidates);
+      console.log('🔍 DEBUG: Parts:', response.candidates?.[0]?.content?.parts);
       
       // Handle function calls - EXECUTE IMMEDIATELY like OpenRouter
       const functionResults: any[] = [];
       
       if (response.candidates?.[0]?.content?.parts) {
         const parts = response.candidates[0].content.parts;
+        console.log('🔍 DEBUG: Processing parts:', parts);
         
         for (const part of parts) {
+          console.log('🔍 DEBUG: Checking part:', part);
+          console.log('🔍 DEBUG: Part has functionCall?', !!(part as any).functionCall);
           if ((part as any).functionCall) {
             const functionCall = (part as any).functionCall;
             console.log('🎯 Executing function immediately:', functionCall.name);
@@ -158,9 +198,13 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
         }
       }
       
-      // Get text response
+      // Get text response and thinking content
       const textResponse = response.candidates?.[0]?.content?.parts
         ?.find((part: any) => part.text)?.text || 'Unable to complete the requested action.';
+      
+      // Extract thinking content if available (for thinking models)
+      const thinkingContent = response.candidates?.[0]?.content?.parts
+        ?.find((part: any) => part.thought)?.thought;
       
       // If functions were executed, let AI respond conversationally about the results
       if (functionResults.length > 0) {
@@ -189,10 +233,9 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
           console.log('🔄 Action summary for natural response:', actionSummary);
           
           const followUpMessages = [
-            ...messages,
             { 
-              role: 'assistant', 
-              content: `[ACTIONS COMPLETED] ${actionSummary}. Now respond naturally and conversationally about what was accomplished, as if speaking to a friend.` 
+              role: 'user', 
+              content: `I just completed these actions: ${actionSummary}. Please provide a natural, conversational response about what was accomplished. Be friendly and specific about what was created/done. Tell me exactly what was created and where it was placed. Don't just say "Done!" - give me details about what happened.` 
             }
           ];
           
@@ -210,7 +253,8 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
               success: true,
               response: naturalResponse,
               functionResults,
-              itemsModified: this.itemsModified
+              itemsModified: this.itemsModified,
+              thinkingContent
             };
           } catch (error) {
             console.error('❌ Follow-up response error:', error);
@@ -223,7 +267,8 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
               success: true,
               response: naturalFallback,
               functionResults,
-              itemsModified: this.itemsModified
+              itemsModified: this.itemsModified,
+              thinkingContent
             };
           }
         } else {
@@ -231,7 +276,8 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
             success: true,
             response: textResponse,
             functionResults,
-            itemsModified: this.itemsModified
+            itemsModified: this.itemsModified,
+            thinkingContent
           };
         }
       }
@@ -239,7 +285,8 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
       return {
         success: true,
         response: textResponse,
-        itemsModified: false
+        itemsModified: false,
+        thinkingContent
       };
       
     } catch (error) {
@@ -260,6 +307,15 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
     ).slice(0, 10); // Show next 10 events for context
 
     return `You are an AI assistant for lifeOS, a comprehensive life management system. 
+
+🚨 CRITICAL FUNCTION CALLING RULES - NO EXCEPTIONS:
+1. You MUST call functions for EVERY action request
+2. NEVER respond conversationally without calling the appropriate function first
+3. If user asks to "create", "add", "make", "update", "delete", "mark", "change" etc. → MANDATORY function call
+4. Even for bulk requests like "create 10 goals" → MUST use bulkCreateItems function
+5. NEVER say "I'll create..." or "I can help..." - ACTUALLY CALL THE FUNCTION
+6. Function calls are REQUIRED, not optional
+7. If no function exists for the request, explain that specifically
 
 CURRENT DATE/TIME CONTEXT - CRITICAL:
 Today is: ${today.toLocaleDateString()} (${today.toISOString().split('T')[0]})
@@ -1449,17 +1505,52 @@ Please specify your preference or say "create anyway" to override.`,
       };
     }
 
-    items.push(newItem);
-    this.saveStoredItems(items);
-
-    return {
-      success: true,
-      function: 'createItem',
-      result: {
-        message: `✅ Created ${args.type}: "${args.title}"${isAllDayEvent ? ' (All Day)' : ''}`,
-        item: newItem
+    // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
+    if (this.supabaseCallbacks.createItem) {
+      console.log('🔄 GEMINI SERVICE: Creating item via Supabase for authenticated user');
+      try {
+        const supabaseItem = await this.supabaseCallbacks.createItem(newItem);
+        if (this.supabaseCallbacks.refreshData) {
+          await this.supabaseCallbacks.refreshData();
+        }
+        
+        return {
+          success: true,
+          function: 'createItem',
+          result: {
+            message: `✅ Created ${args.type}: "${args.title}"${isAllDayEvent ? ' (All Day)' : ''}`,
+            item: supabaseItem || newItem
+          }
+        };
+      } catch (error) {
+        console.error('❌ GEMINI SERVICE: Supabase createItem failed:', error);
+        // Fall back to localStorage
+        items.push(newItem);
+        this.saveStoredItems(items);
+        
+        return {
+          success: true,
+          function: 'createItem',
+          result: {
+            message: `✅ Created ${args.type}: "${args.title}" (saved locally due to sync error)`,
+            item: newItem
+          }
+        };
       }
-    };
+    } else {
+      console.log('🔄 GEMINI SERVICE: Creating item via localStorage for unauthenticated user');
+      items.push(newItem);
+      this.saveStoredItems(items);
+
+      return {
+        success: true,
+        function: 'createItem',
+        result: {
+          message: `✅ Created ${args.type}: "${args.title}"${isAllDayEvent ? ' (All Day)' : ''}`,
+          item: newItem
+        }
+      };
+    }
   }
 
   // Helper methods for enhanced functionality
@@ -1546,7 +1637,6 @@ Please specify your preference or say "create anyway" to override.`,
   private async bulkCreateItems(args: any) {
     console.log('🚀 Bulk creating items from JSON:', args.itemsJson);
     
-    const items = this.getStoredItems();
     const newItems: Item[] = [];
     
     try {
@@ -1555,63 +1645,94 @@ Please specify your preference or say "create anyway" to override.`,
       console.log('📦 Parsed items:', itemsData);
       
       for (const itemData of itemsData) {
-      const newItem: Item = {
-        id: this.generateUniqueId(),
-        title: itemData.title,
-        text: this.stripMarkdownSymbols(itemData.text || ''),
-        type: itemData.type,
-        categoryId: itemData.categoryId,
-        completed: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        dueDate: itemData.dueDate ? new Date(itemData.dueDate) : undefined,
-        dateTime: itemData.dateTime ? new Date(itemData.dateTime) : undefined,
-        metadata: {
-          priority: itemData.priority || 'medium',
-          aiGenerated: true,
-          // Add routine-specific metadata
-          ...(itemData.type === 'routine' && {
-            frequency: itemData.frequency || 'daily',
-            duration: itemData.duration || 30,
-            currentStreak: 0,
-            bestStreak: 0,
-            completedToday: false,
-            completedDates: []
-          }),
-          // Add event-specific metadata
-          ...(itemData.type === 'event' && {
-            startTime: itemData.startTime ? new Date(itemData.startTime) : (itemData.dateTime ? new Date(itemData.dateTime) : undefined),
-            endTime: itemData.endTime ? new Date(itemData.endTime) : undefined,
-            location: itemData.location || undefined,
-            isRecurring: itemData.isRecurring || false,
-            recurrencePattern: itemData.recurrencePattern || undefined,
-            duration: itemData.endTime && itemData.startTime ? 
-              Math.round((new Date(itemData.endTime).getTime() - new Date(itemData.startTime).getTime()) / (1000 * 60)) : 
-              undefined
-          }),
-          // Add note-specific metadata
-          ...(itemData.type === 'note' && {
-            tags: itemData.tags ? itemData.tags.split(',').map((t: string) => t.trim()) : [],
-            hasImage: itemData.hasImage || false,
-            imageUrl: itemData.imageUrl || undefined,
-            hasCustomTitle: !!itemData.title
-          }),
-          // For non-routines, just add frequency if provided
-          ...(itemData.type !== 'routine' && itemData.frequency && { frequency: itemData.frequency })
-        }
-      };
-      
+        const newItem: Item = {
+          id: this.generateUniqueId(),
+          title: itemData.title,
+          text: this.stripMarkdownSymbols(itemData.text || ''),
+          type: itemData.type,
+          categoryId: itemData.categoryId,
+          completed: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          dueDate: itemData.dueDate ? new Date(itemData.dueDate) : undefined,
+          dateTime: itemData.dateTime ? new Date(itemData.dateTime) : undefined,
+          metadata: {
+            priority: itemData.priority || 'medium',
+            aiGenerated: true,
+            // Add routine-specific metadata
+            ...(itemData.type === 'routine' && {
+              frequency: itemData.frequency || 'daily',
+              duration: itemData.duration || 30,
+              currentStreak: 0,
+              bestStreak: 0,
+              completedToday: false,
+              completedDates: []
+            }),
+            // Add event-specific metadata
+            ...(itemData.type === 'event' && {
+              startTime: itemData.startTime ? new Date(itemData.startTime) : (itemData.dateTime ? new Date(itemData.dateTime) : undefined),
+              endTime: itemData.endTime ? new Date(itemData.endTime) : undefined,
+              location: itemData.location || undefined,
+              isRecurring: itemData.isRecurring || false,
+              recurrencePattern: itemData.recurrencePattern || undefined,
+              duration: itemData.endTime && itemData.startTime ? 
+                Math.round((new Date(itemData.endTime).getTime() - new Date(itemData.startTime).getTime()) / (1000 * 60)) : 
+                undefined
+            }),
+            // Add note-specific metadata
+            ...(itemData.type === 'note' && {
+              tags: itemData.tags ? itemData.tags.split(',').map((t: string) => t.trim()) : [],
+              hasImage: itemData.hasImage || false,
+              imageUrl: itemData.imageUrl || undefined,
+              hasCustomTitle: !!itemData.title
+            }),
+            // For non-routines, just add frequency if provided
+            ...(itemData.type !== 'routine' && itemData.frequency && { frequency: itemData.frequency })
+          }
+        };
+        
         newItems.push(newItem);
-      items.push(newItem);
-    }
-    
-    this.saveStoredItems(items);
-    
-    return {
-      success: true,
-      function: 'bulkCreateItems',
-        result: { created: newItems.length, items: newItems }
-      };
+      }
+      
+      // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
+      if (this.supabaseCallbacks.bulkCreateItems) {
+        console.log('🔄 GEMINI SERVICE: Bulk creating items via Supabase for authenticated user');
+        try {
+          const supabaseItems = await this.supabaseCallbacks.bulkCreateItems(newItems);
+          if (this.supabaseCallbacks.refreshData) {
+            await this.supabaseCallbacks.refreshData();
+          }
+          
+          return {
+            success: true,
+            function: 'bulkCreateItems',
+            result: { created: newItems.length, items: supabaseItems || newItems }
+          };
+        } catch (error) {
+          console.error('❌ GEMINI SERVICE: Supabase bulkCreateItems failed:', error);
+          // Fall back to localStorage
+          const items = this.getStoredItems();
+          items.push(...newItems);
+          this.saveStoredItems(items);
+          
+          return {
+            success: true,
+            function: 'bulkCreateItems',
+            result: { created: newItems.length, items: newItems, fallbackUsed: true }
+          };
+        }
+      } else {
+        console.log('🔄 GEMINI SERVICE: Bulk creating items via localStorage for unauthenticated user');
+        const items = this.getStoredItems();
+        items.push(...newItems);
+        this.saveStoredItems(items);
+        
+        return {
+          success: true,
+          function: 'bulkCreateItems',
+          result: { created: newItems.length, items: newItems }
+        };
+      }
     } catch (error) {
       console.error('❌ Error parsing items JSON:', error);
       throw new Error(`Failed to parse items JSON: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -1625,7 +1746,19 @@ Please specify your preference or say "create anyway" to override.`,
     let itemIndex = -1;
     
     // Enhanced item finding logic
-    if (args.id) {
+    if (args.itemId) {
+      // Try exact ID match first
+      itemIndex = items.findIndex(item => item.id === args.itemId);
+      
+      // If not found by ID, try title matching
+      if (itemIndex === -1) {
+        const searchTitle = args.itemId.toLowerCase();
+        itemIndex = items.findIndex(item => 
+          item.title.toLowerCase().includes(searchTitle) ||
+          searchTitle.includes(item.title.toLowerCase())
+        );
+      }
+    } else if (args.id) {
       itemIndex = items.findIndex(item => item.id === args.id);
     } else if (args.title) {
       // Find by title (case-insensitive, partial match)
@@ -1641,19 +1774,20 @@ Please specify your preference or say "create anyway" to override.`,
         success: false,
         function: 'updateItem',
         result: {
-          message: `❌ Item not found: ${args.id || args.title}`,
+          message: `❌ Item not found: ${args.itemId || args.id || args.title}`,
           availableItems: items.slice(-5).map(item => ({ id: item.id, title: item.title, type: item.type }))
         }
       };
     }
 
+    const originalItem = items[itemIndex];
     const updates: Partial<Item> = { updatedAt: new Date() };
     
     // Handle basic updates
     if (args.title !== undefined) updates.title = args.title;
     if (args.text !== undefined) updates.text = args.text;
     if (args.completed !== undefined) updates.completed = args.completed;
-    if (args.priority !== undefined) updates.metadata = { ...items[itemIndex].metadata, priority: args.priority };
+    if (args.priority !== undefined) updates.metadata = { ...originalItem.metadata, priority: args.priority };
     
     // Enhanced category mapping
     if (args.categoryId !== undefined || args.newCategoryId !== undefined) {
@@ -1670,8 +1804,8 @@ Please specify your preference or say "create anyway" to override.`,
       updates.dateTime = newDateTime;
       
       // If this is an event and we're updating dateTime, also update startTime
-      if (items[itemIndex].type === 'event') {
-        const currentStartTime = items[itemIndex].metadata?.startTime;
+      if (originalItem.type === 'event') {
+        const currentStartTime = originalItem.metadata?.startTime;
         if (currentStartTime) {
           // Extract the time portion from the current startTime
           const currentTime = new Date(currentStartTime);
@@ -1681,7 +1815,7 @@ Please specify your preference or say "create anyway" to override.`,
           const newStartTime = new Date(newDateTime.toISOString().split('T')[0] + 'T' + timeStr);
           
           // Also update endTime if it exists
-          const currentEndTime = items[itemIndex].metadata?.endTime;
+          const currentEndTime = originalItem.metadata?.endTime;
           if (currentEndTime) {
             const currentEndTimeObj = new Date(currentEndTime);
             const currentDuration = currentEndTimeObj.getTime() - currentTime.getTime();
@@ -1703,7 +1837,7 @@ Please specify your preference or say "create anyway" to override.`,
     }
     
     // Handle metadata updates
-    const currentMetadata = items[itemIndex].metadata || {};
+    const currentMetadata = originalItem.metadata || {};
     let metadataUpdates = {};
     
     // Event-specific metadata
@@ -1735,22 +1869,58 @@ Please specify your preference or say "create anyway" to override.`,
       updates.metadata = { ...currentMetadata, ...metadataUpdates };
     }
 
-    // Apply updates
-    items[itemIndex] = { ...items[itemIndex], ...updates };
-    this.saveStoredItems(items);
+    const updatedItem = { ...originalItem, ...updates };
 
-    return {
-      success: true,
-      function: 'updateItem',
-      result: {
-        message: `✅ Updated ${items[itemIndex].type}: "${items[itemIndex].title}"`,
-        item: items[itemIndex]
+    // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
+    if (this.supabaseCallbacks.updateItem) {
+      console.log('🔄 GEMINI SERVICE: Updating item via Supabase for authenticated user');
+      try {
+        const supabaseItem = await this.supabaseCallbacks.updateItem(originalItem.id, updatedItem);
+        if (this.supabaseCallbacks.refreshData) {
+          await this.supabaseCallbacks.refreshData();
+        }
+        
+        return {
+          success: true,
+          function: 'updateItem',
+          result: {
+            message: `✅ Updated ${updatedItem.type}: "${updatedItem.title}"`,
+            item: supabaseItem || updatedItem
+          }
+        };
+      } catch (error) {
+        console.error('❌ GEMINI SERVICE: Supabase updateItem failed:', error);
+        // Fall back to localStorage
+        items[itemIndex] = updatedItem;
+        this.saveStoredItems(items);
+        
+        return {
+          success: true,
+          function: 'updateItem',
+          result: {
+            message: `✅ Updated ${updatedItem.type}: "${updatedItem.title}" (saved locally due to sync error)`,
+            item: updatedItem
+          }
+        };
       }
-    };
+    } else {
+      console.log('🔄 GEMINI SERVICE: Updating item via localStorage for unauthenticated user');
+      items[itemIndex] = updatedItem;
+      this.saveStoredItems(items);
+
+      return {
+        success: true,
+        function: 'updateItem',
+        result: {
+          message: `✅ Updated ${updatedItem.type}: "${updatedItem.title}"`,
+          item: updatedItem
+        }
+      };
+    }
   }
 
   private async deleteItem(args: any) {
-     const items = this.getStoredItems();
+    const items = this.getStoredItems();
     
     // Clean the search term - remove common words like "todo", "goal", "event", etc.
     const cleanSearchTerm = (term: string) => {
@@ -1822,19 +1992,56 @@ Please specify your preference or say "create anyway" to override.`,
     }
     
     const deletedItem = items[itemIndex];
-    const filteredItems = items.filter((_, index) => index !== itemIndex);
-     
-     this.saveStoredItems(filteredItems);
-     
-     return {
-       success: true,
-      function: 'deleteItem',
-      result: { 
-        deleted: 1, 
-        item: deletedItem,
-        message: `Successfully deleted "${deletedItem.title}"`
+
+    // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
+    if (this.supabaseCallbacks.deleteItem) {
+      console.log('🔄 GEMINI SERVICE: Deleting item via Supabase for authenticated user');
+      try {
+        await this.supabaseCallbacks.deleteItem(deletedItem.id);
+        if (this.supabaseCallbacks.refreshData) {
+          await this.supabaseCallbacks.refreshData();
+        }
+        
+        return {
+          success: true,
+          function: 'deleteItem',
+          result: { 
+            deleted: 1, 
+            item: deletedItem,
+            message: `Successfully deleted "${deletedItem.title}"`
+          }
+        };
+      } catch (error) {
+        console.error('❌ GEMINI SERVICE: Supabase deleteItem failed:', error);
+        // Fall back to localStorage
+        const filteredItems = items.filter((_, index) => index !== itemIndex);
+        this.saveStoredItems(filteredItems);
+        
+        return {
+          success: true,
+          function: 'deleteItem',
+          result: { 
+            deleted: 1, 
+            item: deletedItem,
+            message: `Successfully deleted "${deletedItem.title}" (saved locally due to sync error)`
+          }
+        };
       }
-    };
+    } else {
+      console.log('🔄 GEMINI SERVICE: Deleting item via localStorage for unauthenticated user');
+      const filteredItems = items.filter((_, index) => index !== itemIndex);
+      this.saveStoredItems(filteredItems);
+      
+      return {
+        success: true,
+        function: 'deleteItem',
+        result: { 
+          deleted: 1, 
+          item: deletedItem,
+          message: `Successfully deleted "${deletedItem.title}"`
+        }
+      };
+    }
   }
 
     private async bulkUpdateItems(args: any) {
@@ -1921,30 +2128,86 @@ Please specify your preference or say "create anyway" to override.`,
     }
     console.log('📝 Updates to apply:', updates);
     
-    selectedItems.forEach(item => {
-      const itemIndex = items.findIndex(i => i.id === item.id);
-      if (itemIndex !== -1) {
-        // Handle metadata merging properly
-        const updatedItem = {
-          ...items[itemIndex],
-          ...updates,
-          updatedAt: new Date()
-        };
-        
-        // Merge metadata if both exist
-        if (updates.metadata && items[itemIndex].metadata) {
-          updatedItem.metadata = {
-            ...items[itemIndex].metadata,
-            ...updates.metadata
+    // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
+    if (this.supabaseCallbacks.updateItem) {
+      console.log('🔄 GEMINI SERVICE: Bulk updating items via Supabase for authenticated user');
+      try {
+        for (const item of selectedItems) {
+          // Handle metadata merging properly
+          const updatedItem = {
+            ...item,
+            ...updates,
+            updatedAt: new Date()
           };
+          
+          // Merge metadata if both exist
+          if (updates.metadata && item.metadata) {
+            updatedItem.metadata = {
+              ...item.metadata,
+              ...updates.metadata
+            };
+          }
+          
+          await this.supabaseCallbacks.updateItem(item.id, updatedItem);
+          console.log(`✅ Updated item via Supabase: ${item.title}`);
         }
         
-        items[itemIndex] = updatedItem;
-        console.log(`✅ Updated item: ${items[itemIndex].title}`);
+        if (this.supabaseCallbacks.refreshData) {
+          await this.supabaseCallbacks.refreshData();
+        }
+      } catch (error) {
+        console.error('❌ GEMINI SERVICE: Supabase bulkUpdateItems failed:', error);
+        // Fall back to localStorage
+        selectedItems.forEach(item => {
+          const itemIndex = items.findIndex(i => i.id === item.id);
+          if (itemIndex !== -1) {
+            // Handle metadata merging properly
+            const updatedItem = {
+              ...items[itemIndex],
+              ...updates,
+              updatedAt: new Date()
+            };
+            
+            // Merge metadata if both exist
+            if (updates.metadata && items[itemIndex].metadata) {
+              updatedItem.metadata = {
+                ...items[itemIndex].metadata,
+                ...updates.metadata
+              };
+            }
+            
+            items[itemIndex] = updatedItem;
+            console.log(`✅ Updated item: ${items[itemIndex].title}`);
+          }
+        });
+        this.saveStoredItems(items);
       }
-    });
-     
-     this.saveStoredItems(items);
+    } else {
+      console.log('🔄 GEMINI SERVICE: Bulk updating items via localStorage for unauthenticated user');
+      selectedItems.forEach(item => {
+        const itemIndex = items.findIndex(i => i.id === item.id);
+        if (itemIndex !== -1) {
+          // Handle metadata merging properly
+          const updatedItem = {
+            ...items[itemIndex],
+            ...updates,
+            updatedAt: new Date()
+          };
+          
+          // Merge metadata if both exist
+          if (updates.metadata && items[itemIndex].metadata) {
+            updatedItem.metadata = {
+              ...items[itemIndex].metadata,
+              ...updates.metadata
+            };
+          }
+          
+          items[itemIndex] = updatedItem;
+          console.log(`✅ Updated item: ${items[itemIndex].title}`);
+        }
+      });
+      this.saveStoredItems(items);
+    }
      
          const updatedTitles = selectedItems.map(item => item.title).join(', ');
     const updateDetails = [];
@@ -2037,13 +2300,35 @@ Please specify your preference or say "create anyway" to override.`,
       };
     }
     
-    // Remove the selected items
-     const remainingItems = items.filter(item => 
-      !selectedItems.some(selected => selected.id === item.id)
-     );
-     
-    console.log('📦 Total items after deletion:', remainingItems.length);
-     this.saveStoredItems(remainingItems);
+    // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
+    if (this.supabaseCallbacks.deleteItem) {
+      console.log('🔄 GEMINI SERVICE: Bulk deleting items via Supabase for authenticated user');
+      try {
+        for (const item of selectedItems) {
+          await this.supabaseCallbacks.deleteItem(item.id);
+          console.log(`✅ Deleted item via Supabase: ${item.title}`);
+        }
+        
+        if (this.supabaseCallbacks.refreshData) {
+          await this.supabaseCallbacks.refreshData();
+        }
+      } catch (error) {
+        console.error('❌ GEMINI SERVICE: Supabase bulkDeleteItems failed:', error);
+        // Fall back to localStorage
+        const remainingItems = items.filter(item => 
+          !selectedItems.some(selected => selected.id === item.id)
+        );
+        console.log('📦 Total items after deletion:', remainingItems.length);
+        this.saveStoredItems(remainingItems);
+      }
+    } else {
+      console.log('🔄 GEMINI SERVICE: Bulk deleting items via localStorage for unauthenticated user');
+      const remainingItems = items.filter(item => 
+        !selectedItems.some(selected => selected.id === item.id)
+      );
+      console.log('📦 Total items after deletion:', remainingItems.length);
+      this.saveStoredItems(remainingItems);
+    }
      
      return {
        success: true,
@@ -2206,6 +2491,8 @@ Please specify your preference or say "create anyway" to override.`,
 
   // Helper methods for localStorage
   private getStoredItems(): Item[] {
+    // For authenticated users with Supabase callbacks, we should use provided items context
+    // This function is primarily for localStorage operations for unauthenticated users
     try {
       const savedItems = localStorage.getItem('lifeStructureItems');
       if (!savedItems) return [];
@@ -2392,25 +2679,62 @@ Please specify your preference or say "create anyway" to override.`,
       };
     }
     
-    const currentText = items[itemIndex].text || '';
+    const originalItem = items[itemIndex];
+    const currentText = originalItem.text || '';
     const cleanedText = this.stripMarkdownSymbols(currentText);
     
-    items[itemIndex] = {
-      ...items[itemIndex],
+    const updatedItem = {
+      ...originalItem,
       text: cleanedText,
       updatedAt: new Date()
     };
-    
-    this.saveStoredItems(items);
-    
-    return {
-      success: true,
-      function: 'removeAsterisks',
-      result: {
-        item: items[itemIndex],
-        message: `Removed all asterisks and symbols from "${items[itemIndex].title}"`
+
+    // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
+    if (this.supabaseCallbacks.updateItem) {
+      console.log('🔄 GEMINI SERVICE: Removing asterisks via Supabase for authenticated user');
+      try {
+        const supabaseItem = await this.supabaseCallbacks.updateItem(originalItem.id, updatedItem);
+        if (this.supabaseCallbacks.refreshData) {
+          await this.supabaseCallbacks.refreshData();
+        }
+        
+        return {
+          success: true,
+          function: 'removeAsterisks',
+          result: {
+            item: supabaseItem || updatedItem,
+            message: `Removed all asterisks and symbols from "${updatedItem.title}"`
+          }
+        };
+      } catch (error) {
+        console.error('❌ GEMINI SERVICE: Supabase removeAsterisks failed:', error);
+        // Fall back to localStorage
+        items[itemIndex] = updatedItem;
+        this.saveStoredItems(items);
+        
+        return {
+          success: true,
+          function: 'removeAsterisks',
+          result: {
+            item: updatedItem,
+            message: `Removed all asterisks and symbols from "${updatedItem.title}" (saved locally due to sync error)`
+          }
+        };
       }
-    };
+    } else {
+      console.log('🔄 GEMINI SERVICE: Removing asterisks via localStorage for unauthenticated user');
+      items[itemIndex] = updatedItem;
+      this.saveStoredItems(items);
+      
+      return {
+        success: true,
+        function: 'removeAsterisks',
+        result: {
+          item: updatedItem,
+          message: `Removed all asterisks and symbols from "${updatedItem.title}"`
+        }
+      };
+    }
   }
 
   // Consolidate duplicate items
@@ -2452,20 +2776,64 @@ Please specify your preference or say "create anyway" to override.`,
       }
     };
     
-    // Remove original items and add consolidated one
-    const remainingItems = items.filter(item => !filteredItems.some(fi => fi.id === item.id));
-    remainingItems.push(consolidatedItem);
-    this.saveStoredItems(remainingItems);
-    
-    return {
-      success: true,
-      function: 'consolidateItems',
-      result: { 
-        message: `Consolidated ${filteredItems.length} items into "${consolidatedTitle}"`,
-        consolidatedItem,
-        removedItems: filteredItems.length
+    // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
+    if (this.supabaseCallbacks.deleteItem && this.supabaseCallbacks.createItem) {
+      console.log('🔄 GEMINI SERVICE: Consolidating items via Supabase for authenticated user');
+      try {
+        // First delete all the original items
+        for (const item of filteredItems) {
+          await this.supabaseCallbacks.deleteItem(item.id);
+          console.log(`✅ Deleted original item via Supabase: ${item.title}`);
+        }
+        
+        // Then create the consolidated item
+        const supabaseItem = await this.supabaseCallbacks.createItem(consolidatedItem);
+        if (this.supabaseCallbacks.refreshData) {
+          await this.supabaseCallbacks.refreshData();
+        }
+        
+        return {
+          success: true,
+          function: 'consolidateItems',
+          result: { 
+            message: `Consolidated ${filteredItems.length} items into "${consolidatedTitle}"`,
+            consolidatedItem: supabaseItem || consolidatedItem,
+            removedItems: filteredItems.length
+          }
+        };
+      } catch (error) {
+        console.error('❌ GEMINI SERVICE: Supabase consolidateItems failed:', error);
+        // Fall back to localStorage
+        const remainingItems = items.filter(item => !filteredItems.some(fi => fi.id === item.id));
+        remainingItems.push(consolidatedItem);
+        this.saveStoredItems(remainingItems);
+        
+        return {
+          success: true,
+          function: 'consolidateItems',
+          result: { 
+            message: `Consolidated ${filteredItems.length} items into "${consolidatedTitle}" (saved locally due to sync error)`,
+            consolidatedItem,
+            removedItems: filteredItems.length
+          }
+        };
       }
-    };
+    } else {
+      console.log('🔄 GEMINI SERVICE: Consolidating items via localStorage for unauthenticated user');
+      const remainingItems = items.filter(item => !filteredItems.some(fi => fi.id === item.id));
+      remainingItems.push(consolidatedItem);
+      this.saveStoredItems(remainingItems);
+      
+      return {
+        success: true,
+        function: 'consolidateItems',
+        result: { 
+          message: `Consolidated ${filteredItems.length} items into "${consolidatedTitle}"`,
+          consolidatedItem,
+          removedItems: filteredItems.length
+        }
+      };
+    }
   }
 
   private async copyRoutineFromPerson(args: any): Promise<any> {

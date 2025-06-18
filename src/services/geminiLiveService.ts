@@ -109,6 +109,31 @@ export class GeminiLiveService {
   private currentItems: Item[] = [];
   private currentCategories: Category[] = [];
   private onRefreshItems?: () => void;
+  private supabaseCallbacks: {
+    createItem?: (item: any) => Promise<any>;
+    updateItem?: (id: string, item: any) => Promise<any>;
+    deleteItem?: (id: string) => Promise<any>;
+    bulkCreateItems?: (items: any[]) => Promise<any>;
+    refreshData?: () => Promise<void>;
+  } = {};
+
+  // Set Supabase callbacks for authenticated users
+  setSupabaseCallbacks(callbacks: {
+    createItem?: (item: any) => Promise<any>;
+    updateItem?: (id: string, item: any) => Promise<any>;
+    deleteItem?: (id: string) => Promise<any>;
+    bulkCreateItems?: (items: any[]) => Promise<any>;
+    refreshData?: () => Promise<void>;
+  }): void {
+    this.supabaseCallbacks = callbacks;
+    console.log('✅ GEMINI LIVE SERVICE: Supabase callbacks configured for authenticated user');
+  }
+
+  // Clear Supabase callbacks for unauthenticated users
+  clearSupabaseCallbacks(): void {
+    this.supabaseCallbacks = {};
+    console.log('✅ GEMINI LIVE SERVICE: Supabase callbacks cleared for unauthenticated user');
+  }
   
   // Add helper method to get stored items (same as other services)
   // EXECUTE FUNCTION DIRECTLY - SAME AS GEMINI SERVICE

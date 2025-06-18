@@ -491,7 +491,8 @@ class ChatService {
         message: result.response || result.message || 'No response from AI',
         functionResults: result.functionResults || [],
         itemsModified: result.itemsModified || false,
-        pendingFunctionCall: result.pendingFunctionCall // Pass through pending function call
+        pendingFunctionCall: result.pendingFunctionCall, // Pass through pending function call
+        thinkingContent: result.thinkingContent // Pass through thinking content for thinking models
       };
 
       console.log('📤 ChatService: Final response being returned:', response);
