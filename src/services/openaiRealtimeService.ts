@@ -46,6 +46,12 @@ export class OpenAIRealtimeService {
   private lastResponseId: string | null = null; // Track last response to prevent duplicates
   private lastTranscriptTime: number = 0; // Debounce transcript updates
   
+  // Rate limiting for function calls to prevent runaway execution
+  private functionCallHistory: number[] = [];
+  private readonly MAX_FUNCTION_CALLS_PER_MINUTE = 10;
+  private lastFunctionCallTime = 0;
+  private readonly MIN_FUNCTION_CALL_INTERVAL = 2000; // 2 seconds between calls
+  
   // Store current life data for function calls
   private currentItems: any[] = [];
   private currentCategories: any[] = [];
@@ -99,6 +105,18 @@ export class OpenAIRealtimeService {
   clearSupabaseCallbacks(): void {
     this.supabaseCallbacks = {};
     console.log('✅ OPENAI REALTIME SERVICE: Supabase callbacks cleared for unauthenticated user');
+  }
+
+  // CRITICAL FIX: Update context with current items and categories
+  updateContext(items: any[], categories: any[]): void {
+    console.log('🔄 OPENAI REALTIME SERVICE: Updating context with', items.length, 'items and', categories.length, 'categories');
+    this.currentItems = items;
+    this.currentCategories = categories;
+    
+    // Forward to geminiService since we delegate function calls to it
+    geminiService.processMessage('', items, []); // This updates geminiService's currentItems
+    
+    console.log('✅ OPENAI REALTIME SERVICE: Context updated successfully');
   }
 
   // Event listener registration methods
@@ -552,8 +570,11 @@ ADVANCED OPERATIONS:
 - Category management and organization
 - Conflict detection and resolution for scheduling
 
-🚨 CRITICAL: YOU MUST USE FUNCTIONS - NO EXCEPTIONS!
-WHEN USER SAYS THESE TRIGGER WORDS → IMMEDIATELY CALL FUNCTIONS:
+🎯 SMART FUNCTION USAGE - ACTIONS ONLY:
+Only call functions when user wants to CREATE, MODIFY, or DELETE something.
+DO NOT call functions for questions, inquiries, or informational requests.
+
+WHEN USER SAYS ACTION WORDS → CALL FUNCTIONS:
 • "add", "create", "make", "new" + "goal" → createItem({type: "goal"})
 • "add", "create", "make", "new" + "note" → createItem({type: "note"})  
 • "add", "create", "make", "new" + "todo"/"task" → createItem({type: "todo"})
@@ -561,21 +582,22 @@ WHEN USER SAYS THESE TRIGGER WORDS → IMMEDIATELY CALL FUNCTIONS:
 • "routine" → createItem({type: "routine"})
 • "update", "change", "edit" → updateItem()
 • "delete", "remove" → deleteItem()
-• "what are my", "show me", "find" → searchItems()
+
+WHEN USER ASKS QUESTIONS → ANSWER FROM CONTEXT:
+• "what are my", "show me", "tell me about" → ANSWER from current context, DO NOT call searchItems()
+• "how many", "do I have" → ANSWER from current context, DO NOT call functions
+• "what did I write", "what's in my" → ANSWER from current context, DO NOT call functions
 
 🔥 EXACT EXAMPLES:
 User: "add a new goal for me about how to"
-You: [IMMEDIATELY CALL createItem({type: "goal", title: "how to", categoryId: "personal"})]
+You: [CALL createItem({type: "goal", title: "how to", categoryId: "personal"})]
 Then respond: "Done! I've created a new goal about how to."
 
-User: "create a note about basketball"  
-You: [IMMEDIATELY CALL createItem({type: "note", title: "basketball", categoryId: "content"})]
-Then respond: "Got it! Created a note about basketball."
+User: "what are my goals?"
+You: [NO FUNCTION CALL] Answer from context: "You have 3 goals: React Development, Fitness Goal, and Learn Spanish."
 
-🚫 NEVER SAY: "I can't", "Unfortunately", "I'll create that", "Let me add that", "One moment please"
-✅ ALWAYS DO: Call the function FIRST, then give a brief confirmation
-
-🚨 CRITICAL: If user says incomplete requests like "add a new goal for me about how to" - CREATE IT ANYWAY with whatever they provided. Don't ask for more details!
+🚫 NEVER CALL FUNCTIONS FOR: Questions, inquiries, "what", "how many", "tell me about"
+✅ ALWAYS CALL FUNCTIONS FOR: "add", "create", "update", "delete", "schedule", "make"
 
 YOU HAVE FULL ACCESS TO THEIR DATA THROUGH THESE FUNCTIONS!
 
@@ -903,6 +925,27 @@ Remember: You have COMPLETE control over their digital life through these functi
   }
 
   private async handleFunctionCall(event: any): Promise<void> {
+    // Rate limiting check
+    const now = Date.now();
+    if (now - this.lastFunctionCallTime < this.MIN_FUNCTION_CALL_INTERVAL) {
+      console.warn('⚠️ OPENAI REALTIME SERVICE: Function call rate limited - too soon after last call');
+      return;
+    }
+    
+    // Clean old function calls from history (older than 1 minute)
+    this.functionCallHistory = this.functionCallHistory.filter(time => now - time < 60000);
+    
+    // Check if we're hitting the rate limit
+    if (this.functionCallHistory.length >= this.MAX_FUNCTION_CALLS_PER_MINUTE) {
+      console.error('❌ OPENAI REALTIME SERVICE: Function call rate limit exceeded! Blocking call.');
+      return;
+    }
+    
+    // Add this call to history
+    this.functionCallHistory.push(now);
+    this.lastFunctionCallTime = now;
+    
+    console.log('🎯 OPENAI REALTIME SERVICE: Function calls in last minute:', this.functionCallHistory.length);
     console.log('🎯 OPENAI REALTIME SERVICE: Handling function call:', event);
     
     try {
@@ -995,6 +1038,27 @@ Remember: You have COMPLETE control over their digital life through these functi
   }
 
   private async handleFunctionCallFromOutputItem(item: any): Promise<void> {
+    // Rate limiting check (same as handleFunctionCall)
+    const now = Date.now();
+    if (now - this.lastFunctionCallTime < this.MIN_FUNCTION_CALL_INTERVAL) {
+      console.warn('⚠️ OPENAI REALTIME SERVICE: Function call rate limited - too soon after last call (from output item)');
+      return;
+    }
+    
+    // Clean old function calls from history (older than 1 minute)
+    this.functionCallHistory = this.functionCallHistory.filter(time => now - time < 60000);
+    
+    // Check if we're hitting the rate limit
+    if (this.functionCallHistory.length >= this.MAX_FUNCTION_CALLS_PER_MINUTE) {
+      console.error('❌ OPENAI REALTIME SERVICE: Function call rate limit exceeded! Blocking call (from output item).');
+      return;
+    }
+    
+    // Add this call to history
+    this.functionCallHistory.push(now);
+    this.lastFunctionCallTime = now;
+    
+    console.log('🎯 OPENAI REALTIME SERVICE: Function calls in last minute:', this.functionCallHistory.length);
     console.log('🎯 OPENAI REALTIME SERVICE: Handling function call from output item:', item);
     
     try {

@@ -109,6 +109,12 @@ export class GeminiLiveService {
   private currentItems: Item[] = [];
   private currentCategories: Category[] = [];
   private onRefreshItems?: () => void;
+  
+  // Rate limiting for function calls to prevent runaway execution
+  private functionCallHistory: number[] = [];
+  private readonly MAX_FUNCTION_CALLS_PER_MINUTE = 10;
+  private lastFunctionCallTime = 0;
+  private readonly MIN_FUNCTION_CALL_INTERVAL = 2000; // 2 seconds between calls
   private supabaseCallbacks: {
     createItem?: (item: any) => Promise<any>;
     updateItem?: (id: string, item: any) => Promise<any>;
@@ -126,13 +132,29 @@ export class GeminiLiveService {
     refreshData?: () => Promise<void>;
   }): void {
     this.supabaseCallbacks = callbacks;
-    console.log('✅ GEMINI LIVE SERVICE: Supabase callbacks configured for authenticated user');
+    // Forward callbacks to geminiService so it can use them when we delegate functions
+    geminiService.setSupabaseCallbacks(callbacks);
+    console.log('✅ GEMINI LIVE SERVICE: Supabase callbacks configured for authenticated user and forwarded to geminiService');
   }
 
   // Clear Supabase callbacks for unauthenticated users
   clearSupabaseCallbacks(): void {
     this.supabaseCallbacks = {};
-    console.log('✅ GEMINI LIVE SERVICE: Supabase callbacks cleared for unauthenticated user');
+    // Clear callbacks from geminiService as well
+    geminiService.clearSupabaseCallbacks();
+    console.log('✅ GEMINI LIVE SERVICE: Supabase callbacks cleared for unauthenticated user and from geminiService');
+  }
+
+  // CRITICAL FIX: Update context with current items and categories
+  updateContext(items: Item[], categories: Category[]): void {
+    console.log('🔄 GEMINI LIVE SERVICE: Updating context with', items.length, 'items and', categories.length, 'categories');
+    this.currentItems = items;
+    this.currentCategories = categories;
+    
+    // Forward to geminiService since we delegate function calls to it
+    geminiService.processMessage('', items, []); // This updates geminiService's currentItems
+    
+    console.log('✅ GEMINI LIVE SERVICE: Context updated successfully');
   }
   
   // Add helper method to get stored items (same as other services)
@@ -1147,36 +1169,44 @@ ADVANCED OPERATIONS:
 - Category management and organization
 - Conflict detection and resolution for scheduling
 
-CRITICAL FUNCTION USAGE - MANDATORY FUNCTION CALLS:
+CRITICAL FUNCTION USAGE - SMART EXECUTION:
 
-⚠️ ABSOLUTELY CRITICAL: You MUST call functions for EVERY user request. NO EXCEPTIONS!
+🎯 FUNCTION CALLS FOR ACTIONS ONLY:
+Only call functions when user wants to CREATE, MODIFY, or DELETE something.
+DO NOT call functions for questions, inquiries, or informational requests.
 
-REQUIRED FUNCTION CALLS:
-- User: "create a todo" → MUST call createItem with type="todo"
-- User: "add a goal" → MUST call createItem with type="goal"  
-- User: "schedule meeting" → MUST call createItem with type="event"
-- User: "update my goal" → MUST call updateItem with itemId and changes
-- User: "delete that todo" → MUST call deleteItem with itemId
-- User: "mark complete" → MUST call updateItem with completed=true
-- User: "change category" → MUST call updateItem with newCategoryId
-- User: "show my todos" → MUST call searchItems with type="todo"
+REQUIRED FUNCTION CALLS FOR ACTIONS:
+- User: "create a todo" → CALL createItem with type="todo"
+- User: "add a goal" → CALL createItem with type="goal"  
+- User: "schedule meeting" → CALL createItem with type="event"
+- User: "update my goal" → CALL updateItem with itemId and changes
+- User: "delete that todo" → CALL deleteItem with itemId
+- User: "mark complete" → CALL updateItem with completed=true
+- User: "change category" → CALL updateItem with newCategoryId
+
+NO FUNCTION CALLS FOR QUESTIONS:
+- User: "what are my notes?" → ANSWER from current context, DO NOT call searchItems
+- User: "tell me about my goals" → ANSWER from current context, DO NOT call functions
+- User: "how many todos do I have?" → ANSWER from current context, DO NOT call functions
+- User: "what did I write about X?" → ANSWER from current context, DO NOT call functions
 
 🚨 CRITICAL RULES:
-1. NEVER respond without calling a function if the user wants to modify data
-2. NEVER say "I'll do that" without actually calling the function
-3. NEVER say "Done!" unless you actually executed a function
-4. ALWAYS provide required arguments (title, type, itemId, etc.)
-5. If you don't have enough info, ask for it, then call the function
-6. FUNCTIONS ARE MANDATORY - not optional suggestions
+1. ONLY call functions for CREATE/UPDATE/DELETE requests
+2. NEVER call functions for questions, inquiries, or data viewing
+3. You have full access to current data in context - use it to answer questions
+4. For actions: Call function FIRST, then confirm
+5. For questions: Answer directly from the context provided above
 
-VOICE RESPONSE PATTERN:
+VOICE RESPONSE PATTERN FOR ACTIONS:
 1. Acknowledge request: "Creating that todo..."
 2. Call the function IMMEDIATELY 
 3. Confirm with result: "Created todo: [title]"
 
-NEVER say you don't have access to their data - you DO have complete access through these functions!
+VOICE RESPONSE PATTERN FOR QUESTIONS:
+1. Answer directly from context: "You have 5 todos. Here they are..."
+2. NO function calls needed for informational requests
 
-Remember: You have COMPLETE control over their digital life through these functions. Use them IMMEDIATELY and ALWAYS for every request!`;
+YOU HAVE COMPLETE ACCESS to their data through the context above. Use it to answer questions without calling functions!`;
   }
 
   private getGeminiTools() {
@@ -1206,7 +1236,28 @@ Remember: You have COMPLETE control over their digital life through these functi
 
   private async handleFunctionCall(toolCallData: any): Promise<void> {
     try {
+      // Rate limiting check
+      const now = Date.now();
+      if (now - this.lastFunctionCallTime < this.MIN_FUNCTION_CALL_INTERVAL) {
+        console.warn('⚠️ GEMINI LIVE SERVICE: Function call rate limited - too soon after last call');
+        return;
+      }
+      
+      // Clean old function calls from history (older than 1 minute)
+      this.functionCallHistory = this.functionCallHistory.filter(time => now - time < 60000);
+      
+      // Check if we're hitting the rate limit
+      if (this.functionCallHistory.length >= this.MAX_FUNCTION_CALLS_PER_MINUTE) {
+        console.error('❌ GEMINI LIVE SERVICE: Function call rate limit exceeded! Blocking call.');
+        return;
+      }
+      
+      // Add this call to history
+      this.functionCallHistory.push(now);
+      this.lastFunctionCallTime = now;
+      
       console.log('🔧🔧🔧 GEMINI LIVE SERVICE: =======FUNCTION CALL HANDLER START=======');
+      console.log('🔧🔧🔧 GEMINI LIVE SERVICE: Function calls in last minute:', this.functionCallHistory.length);
       console.log('🔧🔧🔧 GEMINI LIVE SERVICE: Handling function call:', toolCallData);
       console.log('🔧🔧🔧 GEMINI LIVE SERVICE: Tool call data keys:', Object.keys(toolCallData || {}));
       console.log('🔧🔧🔧 GEMINI LIVE SERVICE: Tool call data structure:', JSON.stringify(toolCallData, null, 2));
