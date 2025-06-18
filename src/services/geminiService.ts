@@ -3324,10 +3324,12 @@ Please specify your preference or say "create anyway" to override.`,
         function: 'generateFullDaySchedule',
         result: {
           message: `Generated full schedule with ${createdEvents.length} events`,
-        eventsCreated: createdEvents.length,
-        dateRange: `${startDate} to ${endDate}`
-      }
-    };
+          eventsCreated: createdEvents.length,
+          dateRange: `${startDate} to ${endDate}`,
+          events: createdEvents
+        }
+      };
+    }
   }
 
   private generateDaySchedule(date: string, routines: Item[], goals: Item[], workingHours: string, intensity: string): any[] {
