@@ -22,6 +22,7 @@ export interface GeminiResponse {
 
 export class GeminiService {
   private itemsModified: boolean = false;
+  private currentItems: Item[] = []; // Store current items from Supabase or localStorage
   private supabaseCallbacks: {
     createItem?: (item: any) => Promise<any>;
     updateItem?: (id: string, item: any) => Promise<any>;
@@ -124,6 +125,10 @@ export class GeminiService {
     conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = []
   ): Promise<GeminiResponse> {
     console.log('🚀 GEMINI DIRECT API - Processing:', message);
+    
+    // Store current items for use by functions
+    this.currentItems = items;
+    console.log('📊 GEMINI SERVICE: Stored', items.length, 'current items for function access');
     
     this.itemsModified = false;
     
@@ -1743,12 +1748,20 @@ Please specify your preference or say "create anyway" to override.`,
     console.log('🔄 Updating item with args:', args);
     
     const items = this.getStoredItems();
-    let itemIndex = -1;
+    console.log('📊 Found', items.length, 'items to search through');
+    console.log('🔍 Looking for item with itemId:', args.itemId, 'title:', args.title);
     
-    // Enhanced item finding logic
+    let itemIndex = -1;
+    let searchMethod = '';
+    
+    // Enhanced item finding logic with better debugging
     if (args.itemId) {
       // Try exact ID match first
       itemIndex = items.findIndex(item => item.id === args.itemId);
+      if (itemIndex !== -1) {
+        searchMethod = 'exact ID match';
+        console.log('✅ Found item by exact ID:', items[itemIndex].title);
+      }
       
       // If not found by ID, try title matching
       if (itemIndex === -1) {
@@ -1757,9 +1770,30 @@ Please specify your preference or say "create anyway" to override.`,
           item.title.toLowerCase().includes(searchTitle) ||
           searchTitle.includes(item.title.toLowerCase())
         );
+        if (itemIndex !== -1) {
+          searchMethod = 'title contains match';
+          console.log('✅ Found item by title match:', items[itemIndex].title);
+        }
+      }
+      
+      // If still not found, try broader partial matching
+      if (itemIndex === -1) {
+        const searchTerms = args.itemId.toLowerCase().split(' ').filter(term => term.length > 2);
+        itemIndex = items.findIndex(item => {
+          const itemTitle = item.title.toLowerCase();
+          return searchTerms.some(term => itemTitle.includes(term));
+        });
+        if (itemIndex !== -1) {
+          searchMethod = 'partial word match';
+          console.log('✅ Found item by partial match:', items[itemIndex].title);
+        }
       }
     } else if (args.id) {
       itemIndex = items.findIndex(item => item.id === args.id);
+      if (itemIndex !== -1) {
+        searchMethod = 'args.id match';
+        console.log('✅ Found item by args.id:', items[itemIndex].title);
+      }
     } else if (args.title) {
       // Find by title (case-insensitive, partial match)
       const searchTitle = args.title.toLowerCase();
@@ -1767,18 +1801,27 @@ Please specify your preference or say "create anyway" to override.`,
         item.title.toLowerCase().includes(searchTitle) ||
         searchTitle.includes(item.title.toLowerCase())
       );
+      if (itemIndex !== -1) {
+        searchMethod = 'title parameter match';
+        console.log('✅ Found item by title parameter:', items[itemIndex].title);
+      }
     }
     
     if (itemIndex === -1) {
+      console.log('❌ Item not found! Searched for:', args.itemId || args.id || args.title);
+      console.log('📋 Available items:', items.slice(0, 5).map(item => `"${item.title}" (${item.type}) - ID: ${item.id}`));
+      
       return {
         success: false,
         function: 'updateItem',
         result: {
-          message: `❌ Item not found: ${args.itemId || args.id || args.title}`,
-          availableItems: items.slice(-5).map(item => ({ id: item.id, title: item.title, type: item.type }))
+          message: `❌ Item not found: "${args.itemId || args.id || args.title}". Available items: ${items.slice(0, 3).map(item => `"${item.title}"`).join(', ')}`,
+          availableItems: items.slice(0, 5).map(item => ({ id: item.id, title: item.title, type: item.type }))
         }
       };
     }
+    
+    console.log('🎯 Found item using', searchMethod, '- Title:', items[itemIndex].title);
 
     const originalItem = items[itemIndex];
     const updates: Partial<Item> = { updatedAt: new Date() };
@@ -2489,22 +2532,29 @@ Please specify your preference or say "create anyway" to override.`,
     };
   }
 
-  // Helper methods for localStorage
+  // Helper methods for localStorage and current items
   private getStoredItems(): Item[] {
-    // For authenticated users with Supabase callbacks, we should use provided items context
-    // This function is primarily for localStorage operations for unauthenticated users
+    // Use current items from Supabase/context if available (authenticated users)
+    if (this.currentItems.length > 0) {
+      console.log('📊 GEMINI SERVICE: Using current items from context:', this.currentItems.length);
+      return this.currentItems;
+    }
+    
+    // Fall back to localStorage for unauthenticated users or when no current items
     try {
       const savedItems = localStorage.getItem('lifeStructureItems');
       if (!savedItems) return [];
       
       const parsedItems = JSON.parse(savedItems);
-      return parsedItems.map((item: any) => ({
+      const items = parsedItems.map((item: any) => ({
         ...item,
         createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
         updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
         dueDate: item.dueDate ? new Date(item.dueDate) : undefined,
         dateTime: item.dateTime ? new Date(item.dateTime) : undefined
       }));
+      console.log('📊 GEMINI SERVICE: Using localStorage items:', items.length);
+      return items;
     } catch (error) {
       console.error('Error loading items from localStorage:', error);
       return [];
