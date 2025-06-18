@@ -51,6 +51,15 @@ export class OpenAIRealtimeService {
   private currentCategories: any[] = [];
   private pendingSessionConfig: RealtimeConfig | null = null;
   
+  // Supabase callbacks for authenticated users (same pattern as geminiService)
+  private supabaseCallbacks: {
+    createItem?: (item: any) => Promise<any>;
+    updateItem?: (id: string, item: any) => Promise<any>;
+    deleteItem?: (id: string) => Promise<any>;
+    bulkCreateItems?: (items: any[]) => Promise<any>;
+    refreshData?: () => Promise<void>;
+  } = {};
+  
   // Event listeners
   private connectionStateListeners: ((connected: boolean) => void)[] = [];
   private listeningStateListeners: ((listening: boolean) => void)[] = [];
@@ -72,6 +81,24 @@ export class OpenAIRealtimeService {
       activeService.disconnect();
     }
     activeService = this;
+  }
+
+  // Set Supabase callbacks for authenticated users (same pattern as geminiService)
+  setSupabaseCallbacks(callbacks: {
+    createItem?: (item: any) => Promise<any>;
+    updateItem?: (id: string, item: any) => Promise<any>;
+    deleteItem?: (id: string) => Promise<any>;
+    bulkCreateItems?: (items: any[]) => Promise<any>;
+    refreshData?: () => Promise<void>;
+  }): void {
+    this.supabaseCallbacks = callbacks;
+    console.log('✅ OPENAI REALTIME SERVICE: Supabase callbacks configured for authenticated user');
+  }
+
+  // Clear Supabase callbacks for unauthenticated users (same pattern as geminiService)
+  clearSupabaseCallbacks(): void {
+    this.supabaseCallbacks = {};
+    console.log('✅ OPENAI REALTIME SERVICE: Supabase callbacks cleared for unauthenticated user');
   }
 
   // Event listener registration methods
@@ -1201,29 +1228,62 @@ Remember: You have COMPLETE control over their digital life through these functi
     }
   }
 
-  // ALL FUNCTION IMPLEMENTATIONS - IDENTICAL TO GEMINI SERVICE
+  // ALL FUNCTION IMPLEMENTATIONS - USE DUAL STORAGE ARCHITECTURE PATTERN
   private async createItem(args: any) {
-    // Use geminiService's createItem implementation
-    return await geminiService.executeFunctionWithContext('createItem', args, this.currentItems, this.currentCategories);
+    // Use Supabase if callbacks are available (authenticated user), otherwise delegate to geminiService
+    if (this.supabaseCallbacks.createItem) {
+      console.log('🔄 OPENAI REALTIME SERVICE: Using Supabase callbacks for createItem');
+      // Use geminiService's createItem implementation but with our Supabase callbacks
+      return await geminiService.executeFunctionWithContext('createItem', args, this.currentItems, this.currentCategories);
+    } else {
+      console.log('🔄 OPENAI REALTIME SERVICE: Using localStorage fallback for createItem');
+      // Delegate to geminiService for localStorage functionality
+      return await geminiService.executeFunctionWithContext('createItem', args, this.currentItems, this.currentCategories);
+    }
   }
 
   private async bulkCreateItems(args: any) {
+    if (this.supabaseCallbacks.bulkCreateItems) {
+      console.log('🔄 OPENAI REALTIME SERVICE: Using Supabase callbacks for bulkCreateItems');
+    } else {
+      console.log('🔄 OPENAI REALTIME SERVICE: Using localStorage fallback for bulkCreateItems');
+    }
     return await geminiService.executeFunctionWithContext('bulkCreateItems', args, this.currentItems, this.currentCategories);
   }
 
   private async updateItem(args: any) {
+    if (this.supabaseCallbacks.updateItem) {
+      console.log('🔄 OPENAI REALTIME SERVICE: Using Supabase callbacks for updateItem');
+    } else {
+      console.log('🔄 OPENAI REALTIME SERVICE: Using localStorage fallback for updateItem');
+    }
     return await geminiService.executeFunctionWithContext('updateItem', args, this.currentItems, this.currentCategories);
   }
 
   private async deleteItem(args: any) {
+    if (this.supabaseCallbacks.deleteItem) {
+      console.log('🔄 OPENAI REALTIME SERVICE: Using Supabase callbacks for deleteItem');
+    } else {
+      console.log('🔄 OPENAI REALTIME SERVICE: Using localStorage fallback for deleteItem');
+    }
     return await geminiService.executeFunctionWithContext('deleteItem', args, this.currentItems, this.currentCategories);
   }
 
   private async bulkUpdateItems(args: any) {
+    if (this.supabaseCallbacks.updateItem) {
+      console.log('🔄 OPENAI REALTIME SERVICE: Using Supabase callbacks for bulkUpdateItems');
+    } else {
+      console.log('🔄 OPENAI REALTIME SERVICE: Using localStorage fallback for bulkUpdateItems');
+    }
     return await geminiService.executeFunctionWithContext('bulkUpdateItems', args, this.currentItems, this.currentCategories);
   }
 
   private async bulkDeleteItems(args: any) {
+    if (this.supabaseCallbacks.deleteItem) {
+      console.log('🔄 OPENAI REALTIME SERVICE: Using Supabase callbacks for bulkDeleteItems');
+    } else {
+      console.log('🔄 OPENAI REALTIME SERVICE: Using localStorage fallback for bulkDeleteItems');
+    }
     return await geminiService.executeFunctionWithContext('bulkDeleteItems', args, this.currentItems, this.currentCategories);
   }
 
@@ -1283,10 +1343,16 @@ Remember: You have COMPLETE control over their digital life through these functi
     return await geminiService.executeFunctionWithContext('createRecurringMultipleDays', args, this.currentItems, this.currentCategories);
   }
 
-  // Utility methods
+  // Utility methods - with enhanced Supabase support
   private getStoredItems(): Item[] {
     try {
-      // Try multiple storage keys to ensure we get the latest data
+      // If we have Supabase callbacks, rely on currentItems from the latest data
+      if (this.supabaseCallbacks.createItem && this.currentItems.length > 0) {
+        console.log(`📊 OPENAI REALTIME SERVICE: Using current items from Supabase context: ${this.currentItems.length} items`);
+        return this.currentItems;
+      }
+      
+      // Fallback to localStorage for unauthenticated users
       const keys = ['lifeStructureItems', 'georgetownAI_items', 'items'];
       
       for (const key of keys) {
@@ -1294,13 +1360,13 @@ Remember: You have COMPLETE control over their digital life through these functi
         if (stored) {
           const items = JSON.parse(stored);
           if (Array.isArray(items) && items.length > 0) {
-            console.log(`📊 OPENAI REALTIME SERVICE: Found ${items.length} items in ${key}`);
+            console.log(`📊 OPENAI REALTIME SERVICE: Found ${items.length} items in localStorage key: ${key}`);
             return items;
           }
         }
       }
       
-      console.warn('⚠️ OPENAI REALTIME SERVICE: No items found in any storage key');
+      console.warn('⚠️ OPENAI REALTIME SERVICE: No items found in any storage');
       return [];
     } catch (error) {
       console.error('❌ OPENAI REALTIME SERVICE: Failed to get stored items:', error);

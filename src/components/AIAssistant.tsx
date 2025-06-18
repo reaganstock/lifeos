@@ -155,14 +155,18 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   supabaseCallbacks
 }) => {
   
-  // Configure geminiService with Supabase callbacks for authenticated users
+  // Configure AI services with Supabase callbacks for authenticated users
   useEffect(() => {
     if (supabaseCallbacks) {
       console.log('✅ AIAssistant: Configuring geminiService with Supabase callbacks for authenticated user');
       geminiService.setSupabaseCallbacks(supabaseCallbacks);
+      console.log('✅ AIAssistant: Configuring openaiRealtimeService with Supabase callbacks for authenticated user');
+      openaiRealtimeService.setSupabaseCallbacks(supabaseCallbacks);
     } else {
       console.log('✅ AIAssistant: Clearing geminiService Supabase callbacks for unauthenticated user');
       geminiService.clearSupabaseCallbacks();
+      console.log('✅ AIAssistant: Clearing openaiRealtimeService Supabase callbacks for unauthenticated user');
+      openaiRealtimeService.clearSupabaseCallbacks();
     }
   }, [supabaseCallbacks]);
 
@@ -746,6 +750,12 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
         }
       } else {
         currentVoiceServiceRef.current = openaiRealtimeService;
+        
+        // Configure Supabase callbacks for authenticated users
+        if (supabaseCallbacks && typeof currentVoiceServiceRef.current.setSupabaseCallbacks === 'function') {
+          console.log('✅ AIAssistant: Configuring OpenAI Realtime Service with Supabase callbacks');
+          currentVoiceServiceRef.current.setSupabaseCallbacks(supabaseCallbacks);
+        }
         
         // Set up event handlers
         currentVoiceServiceRef.current.onConnectionState((connected: boolean) => {
