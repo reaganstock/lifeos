@@ -63,24 +63,37 @@ const dbItemToLocal = (dbItem: Item, reverseMapping?: Map<string, string>): Loca
   metadata: (dbItem.metadata as LocalItem['metadata']) || { priority: 'medium' },
 })
 
-const localItemToDb = (localItem: Omit<LocalItem, 'id'>, userId: string, categoryMapping?: Map<string, string>) => ({
-  title: localItem.title,
-  text: localItem.text,
-  type: localItem.type,
-  completed: localItem.completed,
-  category_id: categoryMapping ? (categoryMapping.get(localItem.categoryId) || localItem.categoryId) : localItem.categoryId,
-  due_date: localItem.dueDate?.toISOString(),
-  date_time: localItem.dateTime?.toISOString(),
-  attachment: localItem.attachment,
-  metadata: localItem.metadata ? JSON.parse(JSON.stringify(localItem.metadata, (key, value) => {
-    // Convert Date objects to ISO strings for JSON storage
-    if (value instanceof Date) {
-      return value.toISOString();
-    }
-    return value;
-  })) : null,
-  user_id: userId,
-})
+const localItemToDb = (localItem: Omit<LocalItem, 'id'>, userId: string, categoryMapping?: Map<string, string>) => {
+  // Map category ID to database UUID if mapping exists
+  const mappedCategoryId = categoryMapping ? (categoryMapping.get(localItem.categoryId) || localItem.categoryId) : localItem.categoryId
+  
+  console.log('🗂️ Category mapping:', {
+    originalId: localItem.categoryId,
+    mappedId: mappedCategoryId,
+    hasMapping: categoryMapping?.has(localItem.categoryId) || false
+  })
+  
+  return {
+    title: localItem.title,
+    text: localItem.text || '',
+    type: localItem.type,
+    completed: localItem.completed || false,
+    category_id: mappedCategoryId,
+    due_date: localItem.dueDate?.toISOString() || null,
+    date_time: localItem.dateTime?.toISOString() || null,
+    attachment: localItem.attachment || null,
+    metadata: localItem.metadata ? JSON.parse(JSON.stringify(localItem.metadata, (key, value) => {
+      // Convert Date objects to ISO strings for JSON storage
+      if (value instanceof Date) {
+        return value.toISOString();
+      }
+      return value;
+    })) : null,
+    user_id: userId,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }
+}
 
 export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
   const { user, initialized: authInitialized } = useAuthContext()
@@ -221,8 +234,7 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
 
   const refreshData = useCallback(async () => {
     if (!user) {
-      setCategories([])
-      setItems([])
+      console.log('⚠️ SUPABASE DATA: No user found during refresh, keeping existing data to prevent accidental clearing')
       setLoading(false)
       setInitialized(true)
       return
@@ -264,10 +276,15 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
 
   // Real-time subscriptions
   useEffect(() => {
-    if (!user || !initialized) return
+    if (!user || !initialized) {
+      console.log('⏳ Skipping realtime setup - user:', !!user, 'initialized:', initialized)
+      return
+    }
+
+    console.log('🔄 Setting up realtime subscriptions for user:', user.id)
 
     const categoriesSubscription = supabase
-      .channel('categories-changes')
+      .channel(`categories-changes-${user.id}`)
       .on(
         'postgres_changes',
         {
@@ -276,24 +293,30 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
           table: 'categories',
           filter: `user_id=eq.${user.id}`,
         },
-        () => {
-          // Directly fetch and update categories without depending on fetchCategories function
+        (payload) => {
+          console.log('📁 Categories change detected:', payload.eventType, payload.new)
+          // Refresh categories data
           supabase
             .from('categories')
             .select('*')
             .eq('user_id', user.id)
             .order('priority', { ascending: true })
-            .then(({ data }) => {
-              if (data) {
+            .then(({ data, error }) => {
+              if (error) {
+                console.error('❌ Error refreshing categories:', error)
+              } else if (data) {
+                console.log('✅ Categories updated via realtime:', data.length, 'categories')
                 setCategories(data.map(dbCategoryToLocal))
               }
             })
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        console.log('📁 Categories subscription status:', status)
+      })
 
     const itemsSubscription = supabase
-      .channel('items-changes')
+      .channel(`items-changes-${user.id}`)
       .on(
         'postgres_changes',
         {
@@ -302,27 +325,34 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
           table: 'items',
           filter: `user_id=eq.${user.id}`,
         },
-        () => {
-          // Directly fetch and update items without depending on fetchItems function
+        (payload) => {
+          console.log('📝 Items change detected:', payload.eventType, payload.new)
+          // Refresh items data
           supabase
             .from('items')
             .select('*')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false })
-            .then(({ data }) => {
-              if (data) {
+            .then(({ data, error }) => {
+              if (error) {
+                console.error('❌ Error refreshing items:', error)
+              } else if (data) {
+                console.log('✅ Items updated via realtime:', data.length, 'items')
                 setItems(data.map(item => dbItemToLocal(item, reverseMapping)))
               }
             })
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        console.log('📝 Items subscription status:', status)
+      })
 
     return () => {
+      console.log('🔄 Unsubscribing from realtime channels')
       categoriesSubscription.unsubscribe()
       itemsSubscription.unsubscribe()
     }
-  }, [user?.id, initialized, reverseMapping]) // Use user.id instead of user object
+  }, [user?.id, initialized, reverseMapping])
 
   // Category operations
   const createCategory = async (category: Omit<LocalCategory, 'id'>): Promise<LocalCategory | null> => {
@@ -370,6 +400,34 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
     if (!user) return false
 
     try {
+      // First, count how many items will be affected
+      const { data: itemCount, error: countError } = await supabase
+        .from('items')
+        .select('id', { count: 'exact' })
+        .eq('category_id', id)
+        .eq('user_id', user.id)
+
+      if (countError) throw countError
+
+      const affectedItemsCount = itemCount?.length || 0
+      const categoryName = categories.find(cat => cat.id === id)?.name || 'Unknown Category'
+
+      // Show warning with item count
+      let confirmMessage = `Are you sure you want to delete the category "${categoryName}"?`
+      
+      if (affectedItemsCount > 0) {
+        confirmMessage += `\n\n⚠️ WARNING: This will also delete ${affectedItemsCount} item${affectedItemsCount === 1 ? '' : 's'} (notes, todos, events, goals, routines) assigned to this category.\n\nThis action cannot be undone.`
+      } else {
+        confirmMessage += '\n\nThis action cannot be undone.'
+      }
+
+      // Show confirmation dialog
+      const confirmed = window.confirm(confirmMessage)
+      if (!confirmed) {
+        return false
+      }
+
+      // If confirmed, delete the category (items will be cascade deleted by database foreign key)
       const { error } = await supabase
         .from('categories')
         .delete()
@@ -390,17 +448,33 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
     if (!user) return null
 
     try {
+      console.log('🆕 Creating item:', {
+        title: item.title,
+        type: item.type,
+        categoryId: item.categoryId,
+        hasMapping: categoryMapping.has(item.categoryId)
+      })
+      
+      const dbItem = localItemToDb(item, user.id, categoryMapping)
+      console.log('🗄️ Database item data:', dbItem)
+      
       const { data, error } = await supabase
         .from('items')
-        .insert([localItemToDb(item, user.id, categoryMapping)])
+        .insert([dbItem])
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error('❌ Supabase item creation error:', error)
+        throw error
+      }
+      
+      console.log('✅ Item created successfully:', data)
       return dbItemToLocal(data, reverseMapping)
-    } catch (err) {
-      console.error('Error creating item:', err)
-      setError('Failed to create item')
+    } catch (err: any) {
+      console.error('❌ Error creating item:', err)
+      const errorMessage = err?.message || err?.details || 'Failed to create item'
+      setError(`Failed to create item: ${errorMessage}`)
       return null
     }
   }
@@ -457,18 +531,27 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
     if (!user) return []
 
     try {
+      console.log('📦 Bulk creating', items.length, 'items')
       const dbItems = items.map(item => localItemToDb(item, user.id, categoryMapping))
+      
+      console.log('🗄️ Database items data:', dbItems)
       
       const { data, error } = await supabase
         .from('items')
         .insert(dbItems)
         .select()
 
-      if (error) throw error
+      if (error) {
+        console.error('❌ Supabase bulk creation error:', error)
+        throw error
+      }
+      
+      console.log('✅ Bulk created', data?.length || 0, 'items successfully')
       return (data || []).map(item => dbItemToLocal(item, reverseMapping))
-    } catch (err) {
-      console.error('Error bulk creating items:', err)
-      setError('Failed to create items')
+    } catch (err: any) {
+      console.error('❌ Error bulk creating items:', err)
+      const errorMessage = err?.message || err?.details || 'Failed to create items'
+      setError(`Failed to create items: ${errorMessage}`)
       return []
     }
   }

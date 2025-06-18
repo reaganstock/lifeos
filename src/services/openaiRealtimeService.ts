@@ -17,6 +17,7 @@ export interface RealtimeConfig {
   // Digital Life Context
   items?: any[];
   categories?: any[];
+  onRefreshItems?: () => void;
 }
 
 export interface VoiceTranscript {
@@ -63,6 +64,7 @@ export class OpenAIRealtimeService {
     updateItem?: (id: string, item: any) => Promise<any>;
     deleteItem?: (id: string) => Promise<any>;
     bulkCreateItems?: (items: any[]) => Promise<any>;
+    createCategory?: (category: any) => Promise<any>;
     refreshData?: () => Promise<void>;
   } = {};
   
@@ -95,6 +97,7 @@ export class OpenAIRealtimeService {
     updateItem?: (id: string, item: any) => Promise<any>;
     deleteItem?: (id: string) => Promise<any>;
     bulkCreateItems?: (items: any[]) => Promise<any>;
+    createCategory?: (category: any) => Promise<any>;
     refreshData?: () => Promise<void>;
   }): void {
     this.supabaseCallbacks = callbacks;
@@ -199,6 +202,14 @@ export class OpenAIRealtimeService {
     // Store the items and categories for function calls
     this.currentItems = config.items || [];
     this.currentCategories = config.categories || [];
+    
+    // Store the refresh callback for UI updates
+    if (config.onRefreshItems) {
+      this.supabaseCallbacks.refreshData = async () => {
+        config.onRefreshItems!();
+      };
+      console.log('✅ OPENAI REALTIME SERVICE: onRefreshItems callback configured');
+    }
     
     // Prevent multiple simultaneous connections
     if (this.isConnecting) {
@@ -608,7 +619,7 @@ RESPONSE STYLE:
 - Be proactive in suggesting actions
 - Confirm actions with brief, natural responses like "Done!" or "Got it!"
 
-Remember: You have COMPLETE control over their digital life through these functions. Use them actively and confidently!`;
+Remember: Only use functions for CREATE/UPDATE/DELETE actions. Answer questions directly from the context provided above.`;
 
     console.log('📝 OPENAI REALTIME SERVICE: Generated instructions length:', instructionsText.length);
     return instructionsText;
@@ -1294,11 +1305,73 @@ Remember: You have COMPLETE control over their digital life through these functi
 
   // ALL FUNCTION IMPLEMENTATIONS - USE DUAL STORAGE ARCHITECTURE PATTERN
   private async createItem(args: any) {
+    console.log('🎯 OPENAI REALTIME SERVICE: Creating item with args:', args);
+    
+    // CRITICAL FIX: Validate and map category ID for Supabase compatibility
+    if (args.categoryId && this.supabaseCallbacks.createItem) {
+      // Map legacy category IDs to valid Supabase category UUIDs (or create new category)
+      const validCategoryId = await this.mapToValidSupabaseCategoryId(args.categoryId);
+      console.log('🔄 OPENAI REALTIME SERVICE: Mapped category ID:', args.categoryId, '->', validCategoryId);
+      args.categoryId = validCategoryId;
+    }
+    
     // Use Supabase if callbacks are available (authenticated user), otherwise delegate to geminiService
     if (this.supabaseCallbacks.createItem) {
       console.log('🔄 OPENAI REALTIME SERVICE: Using Supabase callbacks for createItem');
-      // Use geminiService's createItem implementation but with our Supabase callbacks
-      return await geminiService.executeFunctionWithContext('createItem', args, this.currentItems, this.currentCategories);
+      
+      try {
+        // Use geminiService's createItem implementation but with our Supabase callbacks
+        const result = await geminiService.executeFunctionWithContext('createItem', args, this.currentItems, this.currentCategories);
+        
+        // CRITICAL FIX: Only refresh and claim success if item was actually created
+        if (result.success && result.newItem) {
+          console.log('✅ OPENAI REALTIME SERVICE: Successfully created item:', result.newItem.title);
+          if (this.supabaseCallbacks.refreshData) {
+            await this.supabaseCallbacks.refreshData();
+          }
+          return {
+            success: true,
+            function: 'createItem',
+            result: {
+              message: `✅ Successfully created ${result.newItem.type}: "${result.newItem.title}".`,
+              itemCreated: result.newItem
+            }
+          };
+        } else {
+          console.error('❌ OPENAI REALTIME SERVICE: createItem failed - no item created');
+          return {
+            success: false,
+            function: 'createItem',
+            result: {
+              message: `❌ Failed to create item. Please check the category name and try again.`,
+              error: 'Item was not successfully created'
+            }
+          };
+        }
+      } catch (error) {
+        console.error('❌ OPENAI REALTIME SERVICE: Supabase createItem failed:', error);
+        
+        // If foreign key constraint error, provide helpful error message
+        if (error instanceof Error && error.message.includes('foreign key constraint')) {
+          return {
+            success: false,
+            function: 'createItem',
+            result: {
+              message: `❌ Failed to create item: Invalid category '${args.categoryId}'. Please choose from your existing categories.`,
+              error: `Category '${args.categoryId}' doesn't exist`
+            }
+          };
+        }
+        
+        return {
+          success: false,
+          function: 'createItem',
+          result: {
+            message: `❌ Failed to create item: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          }
+        };
+      }
     } else {
       console.log('🔄 OPENAI REALTIME SERVICE: Using localStorage fallback for createItem');
       // Delegate to geminiService for localStorage functionality
@@ -1307,48 +1380,177 @@ Remember: You have COMPLETE control over their digital life through these functi
   }
 
   private async bulkCreateItems(args: any) {
+    console.log('🎯 OPENAI REALTIME SERVICE: Bulk creating items with args:', args);
+    
+    // CRITICAL FIX: Validate category IDs for all items
+    if (args.items && Array.isArray(args.items) && this.supabaseCallbacks.createItem) {
+      for (const item of args.items) {
+        if (item.categoryId) {
+          item.categoryId = await this.mapToValidSupabaseCategoryId(item.categoryId);
+        }
+      }
+    }
+    
     if (this.supabaseCallbacks.bulkCreateItems) {
       console.log('🔄 OPENAI REALTIME SERVICE: Using Supabase callbacks for bulkCreateItems');
+      
+      try {
+        const result = await geminiService.executeFunctionWithContext('bulkCreateItems', args, this.currentItems, this.currentCategories);
+        
+        // CRITICAL FIX: Only refresh and claim success if items were actually created
+        if (result.success && result.newItems && result.newItems.length > 0) {
+          console.log('✅ OPENAI REALTIME SERVICE: Successfully created', result.newItems.length, 'items, calling refreshData');
+          if (this.supabaseCallbacks.refreshData) {
+            await this.supabaseCallbacks.refreshData();
+          }
+          return {
+            success: true,
+            function: 'bulkCreateItems',
+            result: {
+              message: `✅ Successfully created ${result.newItems.length} items.`,
+              itemsCreated: result.newItems.length
+            }
+          };
+        } else {
+          console.error('❌ OPENAI REALTIME SERVICE: bulkCreateItems failed - no items created');
+          return {
+            success: false,
+            function: 'bulkCreateItems',
+            result: {
+              message: `❌ Failed to create items. Please check the category names and try again.`,
+              error: 'No items were successfully created'
+            }
+          };
+        }
+      } catch (error) {
+        console.error('❌ OPENAI REALTIME SERVICE: Supabase bulkCreateItems failed:', error);
+        return {
+          success: false,
+          function: 'bulkCreateItems',
+          result: {
+            message: `❌ Failed to create items: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          }
+        };
+      }
     } else {
       console.log('🔄 OPENAI REALTIME SERVICE: Using localStorage fallback for bulkCreateItems');
+      return await geminiService.executeFunctionWithContext('bulkCreateItems', args, this.currentItems, this.currentCategories);
     }
-    return await geminiService.executeFunctionWithContext('bulkCreateItems', args, this.currentItems, this.currentCategories);
   }
 
   private async updateItem(args: any) {
+    console.log('🎯 OPENAI REALTIME SERVICE: Updating item with args:', args);
+    
+    // CRITICAL FIX: Validate category ID if being updated
+    if (args.newCategoryId && this.supabaseCallbacks.updateItem) {
+      args.newCategoryId = this.mapToValidSupabaseCategoryId(args.newCategoryId);
+    }
+    
     if (this.supabaseCallbacks.updateItem) {
       console.log('🔄 OPENAI REALTIME SERVICE: Using Supabase callbacks for updateItem');
+      
+      try {
+        const result = await geminiService.executeFunctionWithContext('updateItem', args, this.currentItems, this.currentCategories);
+        
+        // CRITICAL FIX: Call refresh callback after successful update
+        if (result.success && this.supabaseCallbacks.refreshData) {
+          console.log('🔄 OPENAI REALTIME SERVICE: Calling refreshData after successful item update');
+          await this.supabaseCallbacks.refreshData();
+        }
+        
+        return result;
+      } catch (error) {
+        console.error('❌ OPENAI REALTIME SERVICE: Supabase updateItem failed:', error);
+        throw error;
+      }
     } else {
       console.log('🔄 OPENAI REALTIME SERVICE: Using localStorage fallback for updateItem');
+      return await geminiService.executeFunctionWithContext('updateItem', args, this.currentItems, this.currentCategories);
     }
-    return await geminiService.executeFunctionWithContext('updateItem', args, this.currentItems, this.currentCategories);
   }
 
   private async deleteItem(args: any) {
+    console.log('🎯 OPENAI REALTIME SERVICE: Deleting item with args:', args);
+    
     if (this.supabaseCallbacks.deleteItem) {
       console.log('🔄 OPENAI REALTIME SERVICE: Using Supabase callbacks for deleteItem');
+      
+      try {
+        const result = await geminiService.executeFunctionWithContext('deleteItem', args, this.currentItems, this.currentCategories);
+        
+        // CRITICAL FIX: Call refresh callback after successful deletion
+        if (result.success && this.supabaseCallbacks.refreshData) {
+          console.log('🔄 OPENAI REALTIME SERVICE: Calling refreshData after successful item deletion');
+          await this.supabaseCallbacks.refreshData();
+        }
+        
+        return result;
+      } catch (error) {
+        console.error('❌ OPENAI REALTIME SERVICE: Supabase deleteItem failed:', error);
+        throw error;
+      }
     } else {
       console.log('🔄 OPENAI REALTIME SERVICE: Using localStorage fallback for deleteItem');
+      return await geminiService.executeFunctionWithContext('deleteItem', args, this.currentItems, this.currentCategories);
     }
-    return await geminiService.executeFunctionWithContext('deleteItem', args, this.currentItems, this.currentCategories);
   }
 
   private async bulkUpdateItems(args: any) {
+    console.log('🎯 OPENAI REALTIME SERVICE: Bulk updating items with args:', args);
+    
+    // CRITICAL FIX: Validate category ID if being updated
+    if (args.newCategoryId && this.supabaseCallbacks.updateItem) {
+      args.newCategoryId = this.mapToValidSupabaseCategoryId(args.newCategoryId);
+    }
+    
     if (this.supabaseCallbacks.updateItem) {
       console.log('🔄 OPENAI REALTIME SERVICE: Using Supabase callbacks for bulkUpdateItems');
+      
+      try {
+        const result = await geminiService.executeFunctionWithContext('bulkUpdateItems', args, this.currentItems, this.currentCategories);
+        
+        // CRITICAL FIX: Call refresh callback after successful update
+        if (result.success && this.supabaseCallbacks.refreshData) {
+          console.log('🔄 OPENAI REALTIME SERVICE: Calling refreshData after successful bulk update');
+          await this.supabaseCallbacks.refreshData();
+        }
+        
+        return result;
+      } catch (error) {
+        console.error('❌ OPENAI REALTIME SERVICE: Supabase bulkUpdateItems failed:', error);
+        throw error;
+      }
     } else {
       console.log('🔄 OPENAI REALTIME SERVICE: Using localStorage fallback for bulkUpdateItems');
+      return await geminiService.executeFunctionWithContext('bulkUpdateItems', args, this.currentItems, this.currentCategories);
     }
-    return await geminiService.executeFunctionWithContext('bulkUpdateItems', args, this.currentItems, this.currentCategories);
   }
 
   private async bulkDeleteItems(args: any) {
+    console.log('🎯 OPENAI REALTIME SERVICE: Bulk deleting items with args:', args);
+    
     if (this.supabaseCallbacks.deleteItem) {
       console.log('🔄 OPENAI REALTIME SERVICE: Using Supabase callbacks for bulkDeleteItems');
+      
+      try {
+        const result = await geminiService.executeFunctionWithContext('bulkDeleteItems', args, this.currentItems, this.currentCategories);
+        
+        // CRITICAL FIX: Call refresh callback after successful deletion
+        if (result.success && this.supabaseCallbacks.refreshData) {
+          console.log('🔄 OPENAI REALTIME SERVICE: Calling refreshData after successful bulk deletion');
+          await this.supabaseCallbacks.refreshData();
+        }
+        
+        return result;
+      } catch (error) {
+        console.error('❌ OPENAI REALTIME SERVICE: Supabase bulkDeleteItems failed:', error);
+        throw error;
+      }
     } else {
       console.log('🔄 OPENAI REALTIME SERVICE: Using localStorage fallback for bulkDeleteItems');
+      return await geminiService.executeFunctionWithContext('bulkDeleteItems', args, this.currentItems, this.currentCategories);
     }
-    return await geminiService.executeFunctionWithContext('bulkDeleteItems', args, this.currentItems, this.currentCategories);
   }
 
   private async searchItems(args: any) {
@@ -1368,15 +1570,65 @@ Remember: You have COMPLETE control over their digital life through these functi
   }
 
   private async copyRoutineFromPerson(args: any) {
-    return await geminiService.executeFunctionWithContext('copyRoutineFromPerson', args, this.currentItems, this.currentCategories);
+    console.log('🎯 OPENAI REALTIME SERVICE: Copying routine from person, args:', args);
+    
+    // CRITICAL FIX: Validate category ID
+    if (args.categoryId && this.supabaseCallbacks.createItem) {
+      args.categoryId = this.mapToValidSupabaseCategoryId(args.categoryId);
+    }
+    
+    try {
+      const result = await geminiService.executeFunctionWithContext('copyRoutineFromPerson', args, this.currentItems, this.currentCategories);
+      
+      // CRITICAL FIX: Call refresh callback after successful creation
+      if (result.success && this.supabaseCallbacks.refreshData) {
+        console.log('🔄 OPENAI REALTIME SERVICE: Calling refreshData after routine copy');
+        await this.supabaseCallbacks.refreshData();
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('❌ OPENAI REALTIME SERVICE: copyRoutineFromPerson failed:', error);
+      throw error;
+    }
   }
 
   private async generateFullDaySchedule(args: any) {
-    return await geminiService.executeFunctionWithContext('generateFullDaySchedule', args, this.currentItems, this.currentCategories);
+    console.log('🎯 OPENAI REALTIME SERVICE: Generating full day schedule, args:', args);
+    
+    try {
+      const result = await geminiService.executeFunctionWithContext('generateFullDaySchedule', args, this.currentItems, this.currentCategories);
+      
+      // CRITICAL FIX: Call refresh callback after successful creation
+      if (result.success && this.supabaseCallbacks.refreshData) {
+        console.log('🔄 OPENAI REALTIME SERVICE: Calling refreshData after schedule generation');
+        await this.supabaseCallbacks.refreshData();
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('❌ OPENAI REALTIME SERVICE: generateFullDaySchedule failed:', error);
+      throw error;
+    }
   }
 
   private async createCalendarFromNotes(args: any) {
-    return await geminiService.executeFunctionWithContext('createCalendarFromNotes', args, this.currentItems, this.currentCategories);
+    console.log('🎯 OPENAI REALTIME SERVICE: Creating calendar from notes, args:', args);
+    
+    try {
+      const result = await geminiService.executeFunctionWithContext('createCalendarFromNotes', args, this.currentItems, this.currentCategories);
+      
+      // CRITICAL FIX: Call refresh callback after successful creation
+      if (result.success && this.supabaseCallbacks.refreshData) {
+        console.log('🔄 OPENAI REALTIME SERVICE: Calling refreshData after calendar creation');
+        await this.supabaseCallbacks.refreshData();
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('❌ OPENAI REALTIME SERVICE: createCalendarFromNotes failed:', error);
+      throw error;
+    }
   }
 
   private async bulkRescheduleEvents(args: any) {
@@ -1384,11 +1636,51 @@ Remember: You have COMPLETE control over their digital life through these functi
   }
 
   private async createRecurringEvent(args: any) {
-    return await geminiService.executeFunctionWithContext('createRecurringEvent', args, this.currentItems, this.currentCategories);
+    console.log('🎯 OPENAI REALTIME SERVICE: Creating recurring event, args:', args);
+    
+    // CRITICAL FIX: Validate category ID
+    if (args.categoryId && this.supabaseCallbacks.createItem) {
+      args.categoryId = this.mapToValidSupabaseCategoryId(args.categoryId);
+    }
+    
+    try {
+      const result = await geminiService.executeFunctionWithContext('createRecurringEvent', args, this.currentItems, this.currentCategories);
+      
+      // CRITICAL FIX: Call refresh callback after successful creation
+      if (result.success && this.supabaseCallbacks.refreshData) {
+        console.log('🔄 OPENAI REALTIME SERVICE: Calling refreshData after recurring event creation');
+        await this.supabaseCallbacks.refreshData();
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('❌ OPENAI REALTIME SERVICE: createRecurringEvent failed:', error);
+      throw error;
+    }
   }
 
   private async createMultipleDateEvents(args: any) {
-    return await geminiService.executeFunctionWithContext('createMultipleDateEvents', args, this.currentItems, this.currentCategories);
+    console.log('🎯 OPENAI REALTIME SERVICE: Creating multiple date events, args:', args);
+    
+    // CRITICAL FIX: Validate category ID
+    if (args.categoryId && this.supabaseCallbacks.createItem) {
+      args.categoryId = this.mapToValidSupabaseCategoryId(args.categoryId);
+    }
+    
+    try {
+      const result = await geminiService.executeFunctionWithContext('createMultipleDateEvents', args, this.currentItems, this.currentCategories);
+      
+      // CRITICAL FIX: Call refresh callback after successful creation
+      if (result.success && this.supabaseCallbacks.refreshData) {
+        console.log('🔄 OPENAI REALTIME SERVICE: Calling refreshData after multiple date events creation');
+        await this.supabaseCallbacks.refreshData();
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('❌ OPENAI REALTIME SERVICE: createMultipleDateEvents failed:', error);
+      throw error;
+    }
   }
 
   private async deleteRecurringEvent(args: any) {
@@ -1400,11 +1692,187 @@ Remember: You have COMPLETE control over their digital life through these functi
   }
 
   private async createItemWithConflictOverride(args: any) {
-    return await geminiService.executeFunctionWithContext('createItemWithConflictOverride', args, this.currentItems, this.currentCategories);
+    console.log('🎯 OPENAI REALTIME SERVICE: Creating item with conflict override, args:', args);
+    
+    // CRITICAL FIX: Validate category ID
+    if (args.categoryId && this.supabaseCallbacks.createItem) {
+      args.categoryId = this.mapToValidSupabaseCategoryId(args.categoryId);
+    }
+    
+    try {
+      const result = await geminiService.executeFunctionWithContext('createItemWithConflictOverride', args, this.currentItems, this.currentCategories);
+      
+      // CRITICAL FIX: Call refresh callback after successful creation
+      if (result.success && this.supabaseCallbacks.refreshData) {
+        console.log('🔄 OPENAI REALTIME SERVICE: Calling refreshData after conflict override creation');
+        await this.supabaseCallbacks.refreshData();
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('❌ OPENAI REALTIME SERVICE: createItemWithConflictOverride failed:', error);
+      throw error;
+    }
   }
 
   private async createRecurringMultipleDays(args: any) {
-    return await geminiService.executeFunctionWithContext('createRecurringMultipleDays', args, this.currentItems, this.currentCategories);
+    console.log('🎯 OPENAI REALTIME SERVICE: Creating recurring multiple days, args:', args);
+    
+    // CRITICAL FIX: Validate category ID
+    if (args.categoryId && this.supabaseCallbacks.createItem) {
+      args.categoryId = this.mapToValidSupabaseCategoryId(args.categoryId);
+    }
+    
+    try {
+      const result = await geminiService.executeFunctionWithContext('createRecurringMultipleDays', args, this.currentItems, this.currentCategories);
+      
+      // CRITICAL FIX: Call refresh callback after successful creation
+      if (result.success && this.supabaseCallbacks.refreshData) {
+        console.log('🔄 OPENAI REALTIME SERVICE: Calling refreshData after recurring creation');
+        await this.supabaseCallbacks.refreshData();
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('❌ OPENAI REALTIME SERVICE: createRecurringMultipleDays failed:', error);
+      throw error;
+    }
+  }
+
+  // CRITICAL FIX: Map category names to valid Supabase UUIDs or create new categories
+  private async mapToValidSupabaseCategoryId(categoryId: string): Promise<string> {
+    console.log('🔄 OPENAI REALTIME SERVICE: Mapping category:', categoryId, 'from', this.currentCategories.length, 'available categories');
+    
+    // First check if the category ID is already valid (exists in current categories)
+    const existingCategory = this.currentCategories.find(cat => 
+      cat.id === categoryId || cat.name?.toLowerCase() === categoryId.toLowerCase()
+    );
+    
+    if (existingCategory) {
+      console.log('✅ OPENAI REALTIME SERVICE: Found existing category:', categoryId, '->', existingCategory.id);
+      return existingCategory.id;
+    }
+    
+    // Map common legacy category names to actual category names, then find their UUIDs
+    const categoryNameMapping: { [key: string]: string } = {
+      'personal': 'Self-Regulation',
+      'work': 'Mobile Apps/AI/Entrepreneurship',
+      'fitness': 'Gym/Calisthenics',
+      'social': 'Social/Charisma/Dating', 
+      'spiritual': 'Catholicism',
+      'education': 'Content Creation',
+      'health': 'Self-Regulation',
+      'dating': 'Social/Charisma/Dating',
+      'workout': 'Gym/Calisthenics',
+      'exercise': 'Gym/Calisthenics',
+      'gym': 'Gym/Calisthenics',
+      'church': 'Catholicism',
+      'prayer': 'Catholicism',
+      'study': 'Content Creation',
+      'learning': 'Content Creation',
+      'coding': 'Mobile Apps/AI/Entrepreneurship',
+      'programming': 'Mobile Apps/AI/Entrepreneurship',
+      // Common AI-generated category names
+      'general': 'Self-Regulation',
+      'misc': 'Self-Regulation',
+      'notes': 'Content Creation',
+      'default': 'Self-Regulation',
+      'other': 'Self-Regulation'
+    };
+    
+    const mappedName = categoryNameMapping[categoryId.toLowerCase()];
+    if (mappedName) {
+      const mappedCategory = this.currentCategories.find(cat => 
+        cat.name === mappedName
+      );
+      
+      if (mappedCategory) {
+        console.log('✅ OPENAI REALTIME SERVICE: Mapped legacy category:', categoryId, '->', mappedName, '->', mappedCategory.id);
+        return mappedCategory.id;
+      }
+    }
+    
+    // NEW: Create the category dynamically if it doesn't exist
+    if (this.supabaseCallbacks.createCategory) {
+      console.log('🆕 OPENAI REALTIME SERVICE: Creating new category:', categoryId);
+      
+      // Generate a nice category name from the ID
+      const categoryName = this.generateCategoryName(categoryId);
+      const categoryColor = this.generateCategoryColor(categoryId);
+      
+      try {
+        const newCategory = await this.supabaseCallbacks.createCategory({
+          name: categoryName,
+          icon: '📁',
+          color: categoryColor,
+          priority: this.currentCategories.length, // Add to end
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+        
+        if (newCategory) {
+          console.log('✅ OPENAI REALTIME SERVICE: Created new category:', categoryName, '->', newCategory.id);
+          // Add to current categories so it's available immediately
+          this.currentCategories.push(newCategory);
+          return newCategory.id;
+        }
+      } catch (error) {
+        console.error('❌ OPENAI REALTIME SERVICE: Failed to create category:', error);
+      }
+    }
+    
+    // Fallback: find any category with "Self-Regulation" in the name
+    const fallbackCategory = this.currentCategories.find(cat => 
+      cat.name?.includes('Self-Regulation') || cat.name?.includes('self-regulation')
+    );
+    
+    if (fallbackCategory) {
+      console.warn('⚠️ OPENAI REALTIME SERVICE: Category not found, using fallback:', categoryId, '->', fallbackCategory.id);
+      return fallbackCategory.id;
+    }
+    
+    // Last resort: use the first available category
+    if (this.currentCategories.length > 0) {
+      const firstCategory = this.currentCategories[0];
+      console.warn('⚠️ OPENAI REALTIME SERVICE: Using first available category as fallback:', categoryId, '->', firstCategory.id);
+      return firstCategory.id;
+    }
+    
+    // This should never happen if categories are loaded properly
+    console.error('❌ OPENAI REALTIME SERVICE: No categories available! Cannot map category:', categoryId);
+    throw new Error(`No categories available to map category: ${categoryId}`);
+  }
+  
+  // Helper to generate nice category names from IDs
+  private generateCategoryName(categoryId: string): string {
+    // Clean up the category ID to make a nice name
+    return categoryId
+      .split(/[-_\s]+/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  }
+  
+  // Helper to generate category colors
+  private generateCategoryColor(categoryId: string): string {
+    const colors = [
+      '#3B82F6', // Blue
+      '#10B981', // Green  
+      '#F59E0B', // Yellow
+      '#EF4444', // Red
+      '#8B5CF6', // Purple
+      '#F97316', // Orange
+      '#06B6D4', // Cyan
+      '#84CC16', // Lime
+      '#EC4899', // Pink
+      '#6366F1'  // Indigo
+    ];
+    
+    // Use hash of category name to pick consistent color
+    let hash = 0;
+    for (let i = 0; i < categoryId.length; i++) {
+      hash = categoryId.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
   }
 
   // Utility methods - with enhanced Supabase support

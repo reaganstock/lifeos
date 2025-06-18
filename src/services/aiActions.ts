@@ -1065,23 +1065,47 @@ export const setCurrentModel = (modelId: string) => {
   return true;
 };
 
+// Add caching to prevent excessive localStorage reads and logging
+let lastChecked = 0;
+let cachedStoredModel: string | null = null;
+const CACHE_DURATION = 5000; // Cache for 5 seconds
+
 export const getCurrentModel = () => {
-  // Always check localStorage for latest value
+  const now = Date.now();
+  
+  // Use cached value if recent enough (prevent excessive localStorage reads)
+  if (now - lastChecked < CACHE_DURATION && cachedStoredModel !== null) {
+    return currentModel;
+  }
+  
+  // Only check localStorage and log when cache is stale
   try {
     const stored = localStorage.getItem(MODEL_STORAGE_KEY);
+    lastChecked = now;
+    cachedStoredModel = stored;
+    
     if (stored && AVAILABLE_MODELS.find(m => m.id === stored)) {
-      currentModel = stored;
-      console.log('🔄 getCurrentModel: Loaded from localStorage:', stored);
+      // Only log if model actually changed
+      if (currentModel !== stored) {
+        console.log('🔄 getCurrentModel: Model changed to:', stored);
+        currentModel = stored;
+      } else {
+        currentModel = stored;
+      }
     } else {
-      console.log('🔄 getCurrentModel: Using default model:', DEFAULT_MODEL);
-      currentModel = DEFAULT_MODEL;
+      // Only log if switching to default
+      if (currentModel !== DEFAULT_MODEL) {
+        console.log('🔄 getCurrentModel: Using default model:', DEFAULT_MODEL);
+        currentModel = DEFAULT_MODEL;
+      } else {
+        currentModel = DEFAULT_MODEL;
+      }
     }
   } catch (error) {
     console.warn('Failed to get model from localStorage:', error);
     currentModel = DEFAULT_MODEL;
   }
   
-  console.log('🔄 getCurrentModel: Final model:', currentModel);
   return currentModel;
 };
 

@@ -1131,71 +1131,29 @@ Examples:
 
 PERSONALITY: You are warm, helpful, and proactive. Greet the user with "Hi, I'm your Digital Life, how are you?" when they first connect. Remember, you're speaking with the "${voiceName}" voice.
 
-🎯 COMPREHENSIVE FUNCTION CAPABILITIES:
-You have access to POWERFUL functions that can:
+🚨 CRITICAL RULE - READ THIS FIRST:
+ONLY call functions when user wants to CREATE, MODIFY, or DELETE something.
+NEVER call functions for questions, inquiries, or informational requests.
+You have full access to all user data in the context above.
 
-GOALS MANAGEMENT:
-- Create, update, delete goals with progress tracking
-- Bulk operations on multiple goals
-- Set goal progress percentages and due dates
-
-NOTES & KNOWLEDGE:
-- Create, search, and edit notes with real-time text editing
-- Support for voice recordings and images
-- Search and filter notes by content or tags
-- Replace text within notes, fix formatting
-
-ROUTINES & HABITS:
-- Create daily, weekly, monthly, yearly routines
-- Track routine completion and generate printable schedules
-- Copy routines from famous people (like Elon Musk's schedule)
-- Generate full day schedules with intensity levels
-
-CALENDAR & EVENTS:
-- Create single events and recurring events
-- Reschedule events intelligently with conflict detection
-- Create events from notes and generate learning schedules
-- Bulk operations on calendar events
-- Create multi-day events and handle time zone scheduling
-
-TODOS & TASKS:
-- Create, complete, and manage todos with priorities
-- Bulk operations on multiple todos
-- Set due dates and categorize tasks
-
-ADVANCED OPERATIONS:
-- Bulk create/update/delete across all item types
-- Intelligent search and filtering
-- Category management and organization
-- Conflict detection and resolution for scheduling
-
-CRITICAL FUNCTION USAGE - SMART EXECUTION:
-
-🎯 FUNCTION CALLS FOR ACTIONS ONLY:
-Only call functions when user wants to CREATE, MODIFY, or DELETE something.
-DO NOT call functions for questions, inquiries, or informational requests.
-
-REQUIRED FUNCTION CALLS FOR ACTIONS:
+✅ FUNCTION CALLS FOR ACTIONS ONLY:
 - User: "create a todo" → CALL createItem with type="todo"
 - User: "add a goal" → CALL createItem with type="goal"  
 - User: "schedule meeting" → CALL createItem with type="event"
 - User: "update my goal" → CALL updateItem with itemId and changes
 - User: "delete that todo" → CALL deleteItem with itemId
 - User: "mark complete" → CALL updateItem with completed=true
-- User: "change category" → CALL updateItem with newCategoryId
 
-NO FUNCTION CALLS FOR QUESTIONS:
-- User: "what are my notes?" → ANSWER from current context, DO NOT call searchItems
-- User: "tell me about my goals" → ANSWER from current context, DO NOT call functions
-- User: "how many todos do I have?" → ANSWER from current context, DO NOT call functions
-- User: "what did I write about X?" → ANSWER from current context, DO NOT call functions
+❌ NO FUNCTION CALLS FOR QUESTIONS:
+- User: "what are my notes?" → ANSWER from context above, DO NOT call functions
+- User: "tell me about my goals" → ANSWER from context above, DO NOT call functions
+- User: "how many todos do I have?" → COUNT from context above, DO NOT call functions
+- User: "what did I write about X?" → ANSWER from note content above, DO NOT call functions
 
-🚨 CRITICAL RULES:
-1. ONLY call functions for CREATE/UPDATE/DELETE requests
-2. NEVER call functions for questions, inquiries, or data viewing
-3. You have full access to current data in context - use it to answer questions
-4. For actions: Call function FIRST, then confirm
-5. For questions: Answer directly from the context provided above
+🎯 AVAILABLE FUNCTIONS (use only for CREATE/UPDATE/DELETE):
+- createItem, updateItem, deleteItem, bulkCreateItems
+- searchItems ONLY for complex filtering tasks, NOT for simple questions
+- Bulk operations, scheduling, conflict detection
 
 VOICE RESPONSE PATTERN FOR ACTIONS:
 1. Acknowledge request: "Creating that todo..."
@@ -2081,7 +2039,13 @@ YOU HAVE COMPLETE ACCESS to their data through the context above. Use it to answ
       }
     } else if (message.serverContent) {
       if (message.serverContent.inputTranscription) {
-        this.onTranscript(message.serverContent.inputTranscription);
+        // FIX: Call notifyTranscript instead of onTranscript to prevent infinite recursion
+        this.notifyTranscript({
+          text: message.serverContent.inputTranscription.transcript || message.serverContent.inputTranscription,
+          isFinal: message.serverContent.inputTranscription.isFinal || true,
+          timestamp: Date.now(),
+          isUser: true
+        });
       }
     } else {
       console.log('[GEMINI LIVE SERVICE] Received non-audio, non-transcript message:', message);

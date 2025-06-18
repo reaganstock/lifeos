@@ -128,6 +128,7 @@ interface AIAssistantProps {
     updateItem?: (id: string, item: any) => Promise<any>;
     deleteItem?: (id: string) => Promise<any>;
     bulkCreateItems?: (items: any[]) => Promise<any>;
+    createCategory?: (category: any) => Promise<any>;
     refreshData?: () => Promise<void>;
   };
 }
@@ -293,7 +294,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
         
         // If items were modified, refresh the UI
         if (result.itemsModified) {
-          console.log('🔄 Items were modified, refreshing UI...');
+          console.log('✅ Items were modified, calling onRefreshItems');
           onRefreshItems();
         }
       } else {
@@ -308,19 +309,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     }
   }, [items, onRefreshItems]);
   
-  // Listen for real-time item modifications from function calls
-  useEffect(() => {
-    const handleItemsModified = (event: CustomEvent) => {
-      console.log('📡 Items modified event received:', event.detail);
-      onRefreshItems();
-    };
-    
-    window.addEventListener('itemsModified', handleItemsModified as EventListener);
-    
-    return () => {
-      window.removeEventListener('itemsModified', handleItemsModified as EventListener);
-    };
-  }, [onRefreshItems]);
+  // Real-time subscriptions handle data updates - custom event listener removed to prevent duplicate refreshes
   
   // Voice mode states with persistence
   const [selectedVoiceModel, setSelectedVoiceModel] = useState<VoiceModel>(() => {
@@ -445,6 +434,9 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [currentSession?.messages]);
+
+  // DISABLED: Real-time context updates were causing continuous screen refreshing
+  // Voice services will get context at connection time only to prevent refresh loops
 
   // Focus input when panel opens
   useEffect(() => {
@@ -621,7 +613,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
           setIsVoiceMode(false);
           alert('Voice connection timed out. Please try again.');
         }
-      }, 15000); // 15 second timeout
+      }, 5000); // 5 second timeout - faster response for better UX
       
       if (provider === 'gemini') {
         currentVoiceServiceRef.current = new GeminiLiveService();
@@ -696,7 +688,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
               setIsProcessingFunction(false);
               setFunctionResult('✅ Done!');
               setTimeout(() => setFunctionResult(null), 2000);
-              onRefreshItems(); // Refresh UI after function execution
+              // Real-time subscriptions handle data updates - no manual refresh needed
             }, 1000);
           });
         }
@@ -821,7 +813,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
               setIsProcessingFunction(false);
               setFunctionResult('✅ Done!');
               setTimeout(() => setFunctionResult(null), 2000);
-              onRefreshItems(); // Refresh UI after function execution
+              // Real-time subscriptions handle data updates - no manual refresh needed
             }, 1000);
           });
         }
@@ -850,7 +842,8 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
           voice: selectedOpenAIVoice.id,
           apiKey: process.env.REACT_APP_OPENAI_API_KEY,
           items,
-          categories
+          categories,
+          onRefreshItems
         });
       }
       
@@ -1372,7 +1365,7 @@ User message: ${messageToSend}`;
         } else {
           // In note mode, if AI modified items, check if it was the current note
           if (response.itemsModified) {
-            onRefreshItems();
+            // Real-time subscriptions handle updates - no manual refresh needed
             // The note content will be updated through the normal item update flow
             
             // SAFE FIX: Add a small delay to allow localStorage to be updated, then trigger note refresh
@@ -1488,8 +1481,9 @@ User message: ${messageToSend}`;
             await chatService.addMessage('system', `✅ Created ${response.itemCreated.type}: "${response.itemCreated.title}"`);
           }
 
-          // Refresh items if AI modified anything
+          // If items were modified, refresh the UI
           if (response.itemsModified) {
+            console.log('✅ Items modified, calling onRefreshItems');
             onRefreshItems();
           }
 
@@ -1577,8 +1571,9 @@ User message: ${messageToSend}`;
           await chatService.addMessage('system', `✅ Created ${response.itemCreated.type}: "${response.itemCreated.title}"`);
         }
 
-        // Refresh items if AI modified anything
+        // If items were modified, refresh the UI
         if (response.itemsModified) {
+          console.log('✅ Items modified, calling onRefreshItems');
           onRefreshItems();
         }
 

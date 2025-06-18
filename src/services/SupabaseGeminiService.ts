@@ -142,15 +142,29 @@ export class SupabaseGeminiService {
                     metadata: item.metadata || { priority: 'medium' }
                   }))
 
+                  console.log('🤖 AI attempting to create', itemsToCreate.length, 'items')
                   const createdItems = await SupabaseItemService.bulkCreateItems(itemsToCreate)
+                  
                   if (createdItems.length > 0) {
                     itemsModified = true
                     itemCreated = createdItems[0] // For backward compatibility
                     functionResults.push({
                       function: 'create_items',
-                      result: `Created ${createdItems.length} items successfully`
+                      result: `Successfully created ${createdItems.length} items`
                     })
+                    console.log('✅ AI function: Created', createdItems.length, 'items successfully')
+                  } else {
+                    functionResults.push({
+                      function: 'create_items',
+                      result: `Failed to create items - check database connection and permissions`
+                    })
+                    console.log('❌ AI function: Failed to create items')
                   }
+                } else {
+                  functionResults.push({
+                    function: 'create_items',
+                    result: `Invalid items array provided`
+                  })
                 }
                 break
 

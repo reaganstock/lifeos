@@ -1552,9 +1552,7 @@ Please specify your preference or say "create anyway" to override.`,
       console.log('🔄 GEMINI SERVICE: Creating item via Supabase for authenticated user');
       try {
         const supabaseItem = await this.supabaseCallbacks.createItem(newItem);
-        if (this.supabaseCallbacks.refreshData) {
-          await this.supabaseCallbacks.refreshData();
-        }
+        // Real-time subscriptions handle data updates automatically - manual refresh removed
         
         return {
           success: true,
@@ -1682,8 +1680,24 @@ Please specify your preference or say "create anyway" to override.`,
     const newItems: Item[] = [];
     
     try {
-      // Parse the JSON string
-      const itemsData = JSON.parse(args.itemsJson || '[]');
+      // Clean malformed JSON from Gemini before parsing
+      let cleanedJson = args.itemsJson || '[]';
+      
+      // Fix common Gemini JSON malformation patterns
+      cleanedJson = cleanedJson
+        // Fix duplicate key patterns like "type": "note": "note" -> "type": "note"
+        .replace(/"(\w+)":\s*"([^"]+)":\s*"[^"]*"/g, '"$1": "$2"')
+        // Fix missing commas between properties
+        .replace(/"\s*}\s*{/g, '"}, {')
+        // Remove trailing commas before closing brackets/braces
+        .replace(/,(\s*[}\]])/g, '$1')
+        // Fix malformed array structures
+        .replace(/\]\s*\[/g, '], [');
+      
+      console.log('🧹 Cleaned JSON:', cleanedJson);
+      
+      // Parse the cleaned JSON string
+      const itemsData = JSON.parse(cleanedJson);
       console.log('📦 Parsed items:', itemsData);
       
       for (const itemData of itemsData) {
@@ -1741,9 +1755,7 @@ Please specify your preference or say "create anyway" to override.`,
         console.log('🔄 GEMINI SERVICE: Bulk creating items via Supabase for authenticated user');
         try {
           const supabaseItems = await this.supabaseCallbacks.bulkCreateItems(newItems);
-          if (this.supabaseCallbacks.refreshData) {
-            await this.supabaseCallbacks.refreshData();
-          }
+          // Real-time subscriptions handle data updates automatically - manual refresh removed
           
           return {
             success: true,
@@ -1956,9 +1968,7 @@ Please specify your preference or say "create anyway" to override.`,
       console.log('🔄 GEMINI SERVICE: Updating item via Supabase for authenticated user');
       try {
         const supabaseItem = await this.supabaseCallbacks.updateItem(originalItem.id, updatedItem);
-        if (this.supabaseCallbacks.refreshData) {
-          await this.supabaseCallbacks.refreshData();
-        }
+        // Real-time subscriptions handle data updates automatically - manual refresh removed
         
         return {
           success: true,
@@ -2078,9 +2088,7 @@ Please specify your preference or say "create anyway" to override.`,
       console.log('🔄 GEMINI SERVICE: Deleting item via Supabase for authenticated user');
       try {
         await this.supabaseCallbacks.deleteItem(deletedItem.id);
-        if (this.supabaseCallbacks.refreshData) {
-          await this.supabaseCallbacks.refreshData();
-        }
+        // Real-time subscriptions handle data updates automatically - manual refresh removed
         
         return {
           success: true,
@@ -2232,9 +2240,7 @@ Please specify your preference or say "create anyway" to override.`,
           console.log(`✅ Updated item via Supabase: ${item.title}`);
         }
         
-        if (this.supabaseCallbacks.refreshData) {
-          await this.supabaseCallbacks.refreshData();
-        }
+        // Real-time subscriptions handle data updates automatically - manual refresh removed
       } catch (error) {
         console.error('❌ GEMINI SERVICE: Supabase bulkUpdateItems failed:', error);
         // Fall back to localStorage
@@ -2389,9 +2395,7 @@ Please specify your preference or say "create anyway" to override.`,
           console.log(`✅ Deleted item via Supabase: ${item.title}`);
         }
         
-        if (this.supabaseCallbacks.refreshData) {
-          await this.supabaseCallbacks.refreshData();
-        }
+        // Real-time subscriptions handle data updates automatically - manual refresh removed
       } catch (error) {
         console.error('❌ GEMINI SERVICE: Supabase bulkDeleteItems failed:', error);
         // Fall back to localStorage
@@ -2796,9 +2800,7 @@ Please specify your preference or say "create anyway" to override.`,
       console.log('🔄 GEMINI SERVICE: Removing asterisks via Supabase for authenticated user');
       try {
         const supabaseItem = await this.supabaseCallbacks.updateItem(originalItem.id, updatedItem);
-        if (this.supabaseCallbacks.refreshData) {
-          await this.supabaseCallbacks.refreshData();
-        }
+        // Real-time subscriptions handle data updates automatically - manual refresh removed
         
         return {
           success: true,
@@ -2890,9 +2892,7 @@ Please specify your preference or say "create anyway" to override.`,
         
         // Then create the consolidated item
         const supabaseItem = await this.supabaseCallbacks.createItem(consolidatedItem);
-        if (this.supabaseCallbacks.refreshData) {
-          await this.supabaseCallbacks.refreshData();
-        }
+        // Real-time subscriptions handle data updates automatically - manual refresh removed
         
         return {
           success: true,
@@ -3217,9 +3217,7 @@ Please specify your preference or say "create anyway" to override.`,
       console.log('🔄 GEMINI SERVICE: Creating routine events via Supabase for authenticated user');
       try {
         const supabaseEvents = await this.supabaseCallbacks.bulkCreateItems(createdEvents);
-        if (this.supabaseCallbacks.refreshData) {
-          await this.supabaseCallbacks.refreshData();
-        }
+        // Real-time subscriptions handle data updates automatically - manual refresh removed
         
         return {
           success: true,
@@ -3322,9 +3320,8 @@ Please specify your preference or say "create anyway" to override.`,
       console.log('🔄 GEMINI SERVICE: Creating full day schedule via Supabase for authenticated user');
       try {
         const supabaseEvents = await this.supabaseCallbacks.bulkCreateItems(createdEvents);
-        if (this.supabaseCallbacks.refreshData) {
-          await this.supabaseCallbacks.refreshData();
-        }
+        // Real-time subscriptions will handle data refresh automatically
+        // Removed manual refreshData call to prevent accidental data clearing
         
         return {
           success: true,
@@ -3500,9 +3497,7 @@ Please specify your preference or say "create anyway" to override.`,
       console.log('🔄 GEMINI SERVICE: Creating calendar from notes via Supabase for authenticated user');
       try {
         const supabaseEvents = await this.supabaseCallbacks.bulkCreateItems(createdEvents);
-        if (this.supabaseCallbacks.refreshData) {
-          await this.supabaseCallbacks.refreshData();
-        }
+        // Real-time subscriptions handle data updates automatically - manual refresh removed
         
         return {
           success: true,
@@ -3684,9 +3679,7 @@ Please specify your preference or say "create anyway" to override.`,
         console.log('🔄 GEMINI SERVICE: Creating recurring events via Supabase for authenticated user');
         try {
           const supabaseEvents = await this.supabaseCallbacks.bulkCreateItems(createdEvents);
-          if (this.supabaseCallbacks.refreshData) {
-            await this.supabaseCallbacks.refreshData();
-          }
+          // Real-time subscriptions handle data updates automatically - manual refresh removed
           
           return {
             success: true,
@@ -3882,9 +3875,7 @@ Please specify your preference or say "create anyway" to override.`,
           
           await Promise.all(updatePromises);
           
-          if (this.supabaseCallbacks.refreshData) {
-            await this.supabaseCallbacks.refreshData();
-          }
+          // Real-time subscriptions handle data updates automatically - manual refresh removed
           
           const message = rescheduledCount > 0 
             ? `✅ Successfully rescheduled ${rescheduledCount} events by ${timeShift}${errors.length > 0 ? ` (${errors.length} errors)` : ''}`
@@ -4027,9 +4018,7 @@ Please specify your preference or say "create anyway" to override.`,
           console.log('🔄 GEMINI SERVICE: Creating multiple date events via Supabase for authenticated user');
           try {
             const supabaseEvents = await this.supabaseCallbacks.bulkCreateItems(createdEvents);
-            if (this.supabaseCallbacks.refreshData) {
-              await this.supabaseCallbacks.refreshData();
-            }
+            // Real-time subscriptions handle data updates automatically - manual refresh removed
             
             const message = `✅ Created ${createdEvents.length} events: "${args.title}"${errors.length > 0 ? ` (${errors.length} conflicts/errors)` : ''}`;
             
@@ -4143,9 +4132,7 @@ Please specify your preference or say "create anyway" to override.`,
           console.log('🔄 GEMINI SERVICE: Deleting single event via Supabase for authenticated user');
           try {
             await this.supabaseCallbacks.deleteItem(eventId);
-            if (this.supabaseCallbacks.refreshData) {
-              await this.supabaseCallbacks.refreshData();
-            }
+            // Real-time subscriptions handle data updates automatically - manual refresh removed
             
             return {
               success: true,
@@ -4222,9 +4209,7 @@ Please specify "delete this one" or "delete all" to proceed.`,
           );
           await Promise.all(deletePromises);
           
-          if (this.supabaseCallbacks.refreshData) {
-            await this.supabaseCallbacks.refreshData();
-          }
+          // Real-time subscriptions handle data updates automatically - manual refresh removed
           
           return {
             success: true,
@@ -4373,9 +4358,7 @@ Please specify "delete this one" or "delete all" to proceed.`,
           console.log('🔄 GEMINI SERVICE: Creating recurring multiple day events via Supabase for authenticated user');
           try {
             const supabaseEvents = await this.supabaseCallbacks.bulkCreateItems(createdEvents);
-            if (this.supabaseCallbacks.refreshData) {
-              await this.supabaseCallbacks.refreshData();
-            }
+            // Real-time subscriptions handle data updates automatically - manual refresh removed
             
             const message = `✅ Created ${createdEvents.length} recurring events: "${args.title}" for ${daysOfWeek.join(' and ')}${errors.length > 0 ? ` (${errors.length} conflicts/errors)` : ''}`;
             
@@ -4678,9 +4661,7 @@ Please specify "delete this one" or "delete all" to proceed.`,
             await Promise.all(updatePromises);
           }
           
-          if (this.supabaseCallbacks.refreshData) {
-            await this.supabaseCallbacks.refreshData();
-          }
+          // Real-time subscriptions handle data updates automatically - manual refresh removed
           
           const message = eventsToReschedule.length > 0 
             ? `✅ Canceled "${canceledEvent!.title}" and intelligently rescheduled ${eventsToReschedule.length} related events`

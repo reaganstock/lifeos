@@ -160,9 +160,9 @@ function AppContent() {
               await bulkDeleteItems(itemsToDelete.map(item => item.id));
             }
             
-            // Refresh data to get latest from Supabase
-            console.log('🔄 Refreshing data from Supabase');
-            await refreshData();
+            // Real-time subscriptions will handle the update automatically
+            // No need for manual refresh - prevents UI disruption
+            console.log('✅ Items will be updated via real-time subscription');
             showNotification('Items updated successfully', 'success');
           } catch (error) {
             console.error('❌ Error updating items via Supabase:', error);
@@ -476,6 +476,7 @@ function AppContent() {
               updateItem,
               deleteItem,
               bulkCreateItems,
+              createCategory,
               refreshData
             } : undefined}
           />

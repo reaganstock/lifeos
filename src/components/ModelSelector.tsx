@@ -27,8 +27,8 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ className = '' }) => {
     
     window.addEventListener('modelChanged', handleModelChange as EventListener);
     
-    // Set up interval to keep checking (backup)
-    const interval = setInterval(forceSync, 2000);
+    // Set up less frequent interval to keep checking (backup) - reduced from 2s to 30s
+    const interval = setInterval(forceSync, 30000);
     
     return () => {
       window.removeEventListener('modelChanged', handleModelChange as EventListener);

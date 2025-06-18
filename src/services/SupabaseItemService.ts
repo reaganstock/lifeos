@@ -337,7 +337,12 @@ export class SupabaseItemService {
                 dueDate: args.dueDate ? new Date(args.dueDate) : undefined,
                 metadata: args.metadata || { priority: 'medium' }
               })
-              if (newItem) itemsModified = true
+              if (newItem) {
+                itemsModified = true
+                console.log('✅ SupabaseItemService: Successfully created item:', newItem.title)
+              } else {
+                console.log('❌ SupabaseItemService: Failed to create item:', args.title)
+              }
               break
 
             case 'update_item':
@@ -353,9 +358,18 @@ export class SupabaseItemService {
         }
       }
 
+      // Enhance response with function execution results
+      let enhancedResponse = response.content || response.error || 'No response'
+      
+      if (itemsModified) {
+        enhancedResponse = enhancedResponse + ' ✅ Database operations completed successfully.'
+      } else if (response.toolCalls && response.toolCalls.length > 0) {
+        enhancedResponse = enhancedResponse + ' ❌ Some database operations may have failed.'
+      }
+
       return {
-        success: !response.error,
-        response: response.content || response.error || 'No response',
+        success: !response.error && (response.toolCalls?.length === 0 || itemsModified),
+        response: enhancedResponse,
         itemsModified
       }
     } catch (error) {
