@@ -119,23 +119,46 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
       
       const localCategories = (data || []).map(dbCategoryToLocal)
       
-      // Build category mapping from legacy IDs to UUIDs and reverse
+      // Build FLEXIBLE category mapping - works for any user's categories, not just hardcoded ones
       const mapping = new Map<string, string>()
       const reverse = new Map<string, string>()
-      const nameToLegacyId: Record<string, string> = {
-        'Self-Regulation': 'self-regulation',
-        'Gym/Calisthenics': 'gym-calisthenics', 
-        'Mobile Apps/AI/Entrepreneurship': 'mobile-apps',
-        'Catholicism': 'catholicism',
-        'Social/Charisma/Dating': 'social-charisma',
-        'Content Creation': 'content'
-      }
       
+      // Create legacy mappings based on ACTUAL user categories (not hardcoded assumptions)
       data?.forEach(dbCategory => {
-        const legacyId = nameToLegacyId[dbCategory.name]
-        if (legacyId) {
-          mapping.set(legacyId, dbCategory.id)
-          reverse.set(dbCategory.id, legacyId)
+        // Create a legacy-style ID from the category name (for backwards compatibility)
+        const legacyId = dbCategory.name.toLowerCase()
+          .replace(/[^a-z0-9\s]/g, '') // Remove special characters
+          .replace(/\s+/g, '-') // Replace spaces with hyphens
+          .substring(0, 20) // Limit length
+        
+        mapping.set(legacyId, dbCategory.id)
+        reverse.set(dbCategory.id, legacyId)
+        
+        // Also map by exact name (case insensitive)
+        mapping.set(dbCategory.name.toLowerCase(), dbCategory.id)
+        
+        // Create common aliases for typical category types
+        const categoryName = dbCategory.name.toLowerCase()
+        if (categoryName.includes('regulation') || categoryName.includes('personal') || categoryName.includes('self')) {
+          mapping.set('personal', dbCategory.id)
+          mapping.set('self-regulation', dbCategory.id)
+        }
+        if (categoryName.includes('gym') || categoryName.includes('fitness') || categoryName.includes('workout') || categoryName.includes('exercise')) {
+          mapping.set('fitness', dbCategory.id)
+          mapping.set('gym', dbCategory.id)
+          mapping.set('workout', dbCategory.id)
+        }
+        if (categoryName.includes('app') || categoryName.includes('business') || categoryName.includes('work') || categoryName.includes('career')) {
+          mapping.set('work', dbCategory.id)
+          mapping.set('business', dbCategory.id)
+        }
+        if (categoryName.includes('social') || categoryName.includes('dating') || categoryName.includes('relationship')) {
+          mapping.set('social', dbCategory.id)
+          mapping.set('dating', dbCategory.id)
+        }
+        if (categoryName.includes('content') || categoryName.includes('creation') || categoryName.includes('study') || categoryName.includes('learning')) {
+          mapping.set('content', dbCategory.id)
+          mapping.set('study', dbCategory.id)
         }
       })
       

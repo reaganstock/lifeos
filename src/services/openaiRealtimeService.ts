@@ -1753,43 +1753,60 @@ Remember: Only use functions for CREATE/UPDATE/DELETE actions. Answer questions 
       return existingCategory.id;
     }
     
-    // Map common legacy category names to actual category names, then find their UUIDs
-    const categoryNameMapping: { [key: string]: string } = {
-      'personal': 'Self-Regulation',
-      'work': 'Mobile Apps/AI/Entrepreneurship',
-      'fitness': 'Gym/Calisthenics',
-      'social': 'Social/Charisma/Dating', 
-      'spiritual': 'Catholicism',
-      'education': 'Content Creation',
-      'health': 'Self-Regulation',
-      'dating': 'Social/Charisma/Dating',
-      'workout': 'Gym/Calisthenics',
-      'exercise': 'Gym/Calisthenics',
-      'gym': 'Gym/Calisthenics',
-      'church': 'Catholicism',
-      'prayer': 'Catholicism',
-      'study': 'Content Creation',
-      'learning': 'Content Creation',
-      'coding': 'Mobile Apps/AI/Entrepreneurship',
-      'programming': 'Mobile Apps/AI/Entrepreneurship',
-      // Common AI-generated category names
-      'general': 'Self-Regulation',
-      'misc': 'Self-Regulation',
-      'notes': 'Content Creation',
-      'default': 'Self-Regulation',
-      'other': 'Self-Regulation'
+    // FLEXIBLE mapping: Find categories by semantic similarity instead of hardcoded names
+    const findBestCategoryMatch = (searchTerm: string): any | null => {
+      const term = searchTerm.toLowerCase();
+      
+      // First try exact name match
+      let match = this.currentCategories.find(cat => 
+        cat.name?.toLowerCase() === term
+      );
+      if (match) return match;
+      
+      // Then try partial name match
+      match = this.currentCategories.find(cat => 
+        cat.name?.toLowerCase().includes(term) || term.includes(cat.name?.toLowerCase())
+      );
+      if (match) return match;
+      
+      // Semantic mapping based on ACTUAL user categories (not hardcoded assumptions)
+      const semanticGroups = [
+        { keywords: ['personal', 'self', 'regulation', 'health', 'general', 'misc', 'default', 'other'], type: 'personal' },
+        { keywords: ['work', 'business', 'career', 'job', 'coding', 'programming', 'app', 'tech'], type: 'work' },
+        { keywords: ['fitness', 'gym', 'workout', 'exercise', 'health', 'sport', 'training'], type: 'fitness' },
+        { keywords: ['social', 'dating', 'relationship', 'friends', 'charisma'], type: 'social' },
+        { keywords: ['study', 'learning', 'education', 'content', 'creation', 'notes', 'knowledge'], type: 'education' },
+        { keywords: ['spiritual', 'church', 'prayer', 'faith', 'religion'], type: 'spiritual' }
+      ];
+      
+      // Find which semantic group the search term belongs to
+      let targetType: string | null = null;
+      for (const group of semanticGroups) {
+        if (group.keywords.some(keyword => term.includes(keyword) || keyword.includes(term))) {
+          targetType = group.type;
+          break;
+        }
+      }
+      
+      // Find a user category that matches the semantic type
+      if (targetType) {
+        const semanticKeywords = semanticGroups.find(g => g.type === targetType)?.keywords || [];
+        match = this.currentCategories.find(cat => {
+          const catName = cat.name?.toLowerCase() || '';
+          return semanticKeywords.some(keyword => 
+            catName.includes(keyword) || keyword.includes(catName)
+          );
+        });
+        if (match) return match;
+      }
+      
+      return null;
     };
     
-    const mappedName = categoryNameMapping[categoryId.toLowerCase()];
-    if (mappedName) {
-      const mappedCategory = this.currentCategories.find(cat => 
-        cat.name === mappedName
-      );
-      
-      if (mappedCategory) {
-        console.log('✅ OPENAI REALTIME SERVICE: Mapped legacy category:', categoryId, '->', mappedName, '->', mappedCategory.id);
-        return mappedCategory.id;
-      }
+    const matchedCategory = findBestCategoryMatch(categoryId);
+    if (matchedCategory) {
+      console.log('✅ OPENAI REALTIME SERVICE: Found semantic category match:', categoryId, '->', matchedCategory.name, '->', matchedCategory.id);
+      return matchedCategory.id;
     }
     
     // NEW: Create the category dynamically if it doesn't exist
@@ -1821,13 +1838,15 @@ Remember: Only use functions for CREATE/UPDATE/DELETE actions. Answer questions 
       }
     }
     
-    // Fallback: find any category with "Self-Regulation" in the name
-    const fallbackCategory = this.currentCategories.find(cat => 
-      cat.name?.includes('Self-Regulation') || cat.name?.includes('self-regulation')
-    );
+    // Fallback: find the most generic/personal category from user's actual categories
+    const fallbackCategory = this.currentCategories.find(cat => {
+      const name = cat.name?.toLowerCase() || '';
+      return name.includes('personal') || name.includes('general') || name.includes('self') || 
+             name.includes('misc') || name.includes('other') || cat.priority === 0;
+    });
     
     if (fallbackCategory) {
-      console.warn('⚠️ OPENAI REALTIME SERVICE: Category not found, using fallback:', categoryId, '->', fallbackCategory.id);
+      console.warn('⚠️ OPENAI REALTIME SERVICE: Category not found, using personal/general fallback:', categoryId, '->', fallbackCategory.name, '->', fallbackCategory.id);
       return fallbackCategory.id;
     }
     

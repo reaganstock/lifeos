@@ -1594,33 +1594,78 @@ Please specify your preference or say "create anyway" to override.`,
   }
 
   // Helper methods for enhanced functionality
-  private mapToExistingCategory(userCategory: string): string {
-    const categoryMap: { [key: string]: string } = {
-      'dating': 'social-charisma',
-      'fitness': 'gym-calisthenics',
-      'work': 'mobile-apps',
-      'personal': 'self-regulation',
-      'education': 'content',
-      'health': 'self-regulation',
-      'spiritual': 'catholicism',
-      'social': 'social-charisma',
-      'medical': 'self-regulation',
-      'doctor': 'self-regulation',
-      'workout': 'gym-calisthenics',
-      'exercise': 'gym-calisthenics',
-      'gym': 'gym-calisthenics',
-      'church': 'catholicism',
-      'prayer': 'catholicism',
-      'mass': 'catholicism',
-      'study': 'content',
-      'learning': 'content',
-      'coding': 'mobile-apps',
-      'programming': 'mobile-apps',
-      'development': 'mobile-apps'
-    };
+  private mapToExistingCategory(userCategory: string, currentCategories?: any[]): string {
+    // If no current categories available, return the input as-is
+    if (!currentCategories || currentCategories.length === 0) {
+      return userCategory;
+    }
 
-    const lowerCategory = userCategory.toLowerCase();
-    return categoryMap[lowerCategory] || userCategory;
+    const searchTerm = userCategory.toLowerCase();
+    
+    // First try exact name match (case insensitive)
+    const exactMatch = currentCategories.find(cat => 
+      cat.name?.toLowerCase() === searchTerm
+    );
+    if (exactMatch) {
+      return exactMatch.id;
+    }
+    
+    // Try partial name match
+    const partialMatch = currentCategories.find(cat => 
+      cat.name?.toLowerCase().includes(searchTerm) || searchTerm.includes(cat.name?.toLowerCase())
+    );
+    if (partialMatch) {
+      return partialMatch.id;
+    }
+    
+    // FLEXIBLE semantic mapping based on user's ACTUAL categories
+    const findSemanticMatch = (term: string): any | null => {
+      const semanticGroups = [
+        { keywords: ['personal', 'self', 'regulation', 'health', 'general', 'misc', 'default', 'other', 'medical', 'doctor'], type: 'personal' },
+        { keywords: ['work', 'business', 'career', 'job', 'coding', 'programming', 'app', 'tech', 'development'], type: 'work' },
+        { keywords: ['fitness', 'gym', 'workout', 'exercise', 'health', 'sport', 'training'], type: 'fitness' },
+        { keywords: ['social', 'dating', 'relationship', 'friends', 'charisma'], type: 'social' },
+        { keywords: ['study', 'learning', 'education', 'content', 'creation', 'notes', 'knowledge'], type: 'education' },
+        { keywords: ['spiritual', 'church', 'prayer', 'faith', 'religion', 'mass'], type: 'spiritual' }
+      ];
+      
+      // Find which semantic group the search term belongs to
+      let targetType: string | null = null;
+      for (const group of semanticGroups) {
+        if (group.keywords.some(keyword => term.includes(keyword) || keyword.includes(term))) {
+          targetType = group.type;
+          break;
+        }
+      }
+      
+      // Find a user category that matches the semantic type
+      if (targetType) {
+        const semanticKeywords = semanticGroups.find(g => g.type === targetType)?.keywords || [];
+        const match = currentCategories.find(cat => {
+          const catName = cat.name?.toLowerCase() || '';
+          return semanticKeywords.some(keyword => 
+            catName.includes(keyword) || keyword.includes(catName)
+          );
+        });
+        if (match) return match;
+      }
+      
+      return null;
+    };
+    
+    const semanticMatch = findSemanticMatch(searchTerm);
+    if (semanticMatch) {
+      console.log('✅ GEMINI SERVICE: Found semantic category match:', userCategory, '->', semanticMatch.name, '->', semanticMatch.id);
+      return semanticMatch.id;
+    }
+    
+    // If no match found, return the first available category ID or original input
+    if (currentCategories.length > 0) {
+      console.warn('⚠️ GEMINI SERVICE: No category match found, using first available:', userCategory, '->', currentCategories[0].name);
+      return currentCategories[0].id;
+    }
+    
+    return userCategory;
   }
 
   private detectAllDayEvent(args: any): boolean {
@@ -3991,7 +4036,7 @@ Please specify your preference or say "create anyway" to override.`,
             title: args.title,
             text: args.text || '',
             type: 'event',
-            categoryId: this.mapToExistingCategory(args.categoryId) || 'self-regulation',
+            categoryId: this.mapToExistingCategory(args.categoryId) || 'personal',
             completed: false,
             createdAt: new Date(),
             updatedAt: new Date(),
@@ -4327,7 +4372,7 @@ Please specify "delete this one" or "delete all" to proceed.`,
             title: args.title,
             text: args.text || '',
             type: 'event',
-            categoryId: this.mapToExistingCategory(args.categoryId) || 'mobile-apps',
+            categoryId: this.mapToExistingCategory(args.categoryId) || 'work',
             completed: false,
             createdAt: new Date(),
             updatedAt: new Date(),
