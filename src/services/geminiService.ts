@@ -1778,10 +1778,10 @@ Please specify your preference or say "create anyway" to override.`,
       
       // If still not found, try broader partial matching
       if (itemIndex === -1) {
-        const searchTerms = args.itemId.toLowerCase().split(' ').filter(term => term.length > 2);
+        const searchTerms = args.itemId.toLowerCase().split(' ').filter((term: string) => term.length > 2);
         itemIndex = items.findIndex(item => {
           const itemTitle = item.title.toLowerCase();
-          return searchTerms.some(term => itemTitle.includes(term));
+          return searchTerms.some((term: string) => itemTitle.includes(term));
         });
         if (itemIndex !== -1) {
           searchMethod = 'partial word match';
