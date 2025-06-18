@@ -2532,18 +2532,27 @@ Please specify your preference or say "create anyway" to override.`,
     };
   }
 
-  // Helper methods for localStorage and current items
-  private getStoredItems(): Item[] {
+  // Helper method to get current items with comprehensive debugging
+  private getCurrentItems(): Item[] {
+    console.log('🔍 GEMINI SERVICE: getCurrentItems() called');
+    console.log('📊 this.currentItems.length:', this.currentItems.length);
+    console.log('📊 Supabase callbacks available:', Object.keys(this.supabaseCallbacks).length > 0);
+    
     // Use current items from Supabase/context if available (authenticated users)
     if (this.currentItems.length > 0) {
-      console.log('📊 GEMINI SERVICE: Using current items from context:', this.currentItems.length);
+      console.log('✅ GEMINI SERVICE: Using current items from Supabase context:', this.currentItems.length);
+      console.log('📋 Sample items:', this.currentItems.slice(0, 3).map(item => `"${item.title}" (${item.type})`));
       return this.currentItems;
     }
     
     // Fall back to localStorage for unauthenticated users or when no current items
+    console.log('⚠️ GEMINI SERVICE: currentItems empty, falling back to localStorage');
     try {
       const savedItems = localStorage.getItem('lifeStructureItems');
-      if (!savedItems) return [];
+      if (!savedItems) {
+        console.log('❌ GEMINI SERVICE: No localStorage data found');
+        return [];
+      }
       
       const parsedItems = JSON.parse(savedItems);
       const items = parsedItems.map((item: any) => ({
@@ -2554,11 +2563,17 @@ Please specify your preference or say "create anyway" to override.`,
         dateTime: item.dateTime ? new Date(item.dateTime) : undefined
       }));
       console.log('📊 GEMINI SERVICE: Using localStorage items:', items.length);
+      console.log('📋 Sample localStorage items:', items.slice(0, 3).map(item => `"${item.title}" (${item.type})`));
       return items;
     } catch (error) {
-      console.error('Error loading items from localStorage:', error);
+      console.error('❌ Error loading items from localStorage:', error);
       return [];
     }
+  }
+
+  // Helper methods for localStorage and current items (legacy compatibility)
+  private getStoredItems(): Item[] {
+    return this.getCurrentItems();
   }
 
   private saveStoredItems(items: Item[]): void {
