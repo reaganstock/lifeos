@@ -190,7 +190,7 @@ const GlobalGoals: React.FC<GlobalGoalsProps> = ({ items, setItems }) => {
     : 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       <div className="p-6 max-w-7xl mx-auto">
         {/* Floating Header */}
         <div className="sticky top-6 z-40 mb-8">
@@ -253,7 +253,7 @@ const GlobalGoals: React.FC<GlobalGoalsProps> = ({ items, setItems }) => {
               </div>
 
               {/* Quick Stats */}
-              <div className="bg-gradient-to-br from-red-50 to-orange-50 rounded-xl p-4 border border-red-100">
+              <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl p-4 border border-blue-100">
                 <h3 className="text-sm font-semibold text-gray-700 mb-3">Quick Stats</h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">

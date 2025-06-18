@@ -318,15 +318,17 @@ const GlobalTodos: React.FC<GlobalTodosProps> = ({ items, setItems }) => {
                 onClick={() => !isEditing && handleTodoClick(todo.id)}
                 onDoubleClick={() => !isEditing && startEditingTodo(todo)}
               >
-                {/* Priority indicator bar */}
+                {/* Priority indicator bar - using category color with opacity variation */}
                 <div 
-                  className={`absolute left-0 top-0 bottom-0 w-1 transition-all duration-300 ${
-                    overdue ? 'bg-gray-900' : 
-                    dueToday ? 'bg-orange-500' : 
-                    priority === 'high' ? 'bg-red-400' :
-                    priority === 'medium' ? 'bg-yellow-400' :
-                    'bg-green-400'
-                  }`}
+                  className="absolute left-0 top-0 bottom-0 w-1 transition-all duration-300"
+                  style={{ 
+                    backgroundColor: category?.color || '#3b82f6',
+                    opacity: overdue ? 1 : 
+                             dueToday ? 0.9 : 
+                             priority === 'high' ? 0.8 :
+                             priority === 'medium' ? 0.6 :
+                             0.4
+                  }}
                 />
                 
                 <div className="p-6 pl-8">
@@ -435,11 +437,17 @@ const GlobalTodos: React.FC<GlobalTodosProps> = ({ items, setItems }) => {
                             </span>
                             
                             {todo.dueDate && (
-                              <span className={`flex items-center ${
-                                overdue ? 'text-red-600 font-medium' : 
-                                dueToday ? 'text-orange-600 font-medium' : 
-                                'text-gray-500'
-                              }`}>
+                              <span 
+                                className={`flex items-center ${
+                                  overdue ? 'font-bold' : 
+                                  dueToday ? 'font-semibold' : 
+                                  'text-gray-500'
+                                }`}
+                                style={{
+                                  color: overdue || dueToday ? category?.color || '#3b82f6' : undefined,
+                                  filter: overdue ? 'brightness(0.7)' : dueToday ? 'brightness(0.8)' : undefined
+                                }}
+                              >
                                 <Calendar className="w-3 h-3 mr-1" />
                                 {overdue ? 'Overdue' : 
                                  dueToday ? 'Due Today' : 
@@ -447,11 +455,14 @@ const GlobalTodos: React.FC<GlobalTodosProps> = ({ items, setItems }) => {
                               </span>
                             )}
                             
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              priority === 'high' ? 'bg-red-100 text-red-700' :
-                              priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                              'bg-green-100 text-green-700'
-                            }`}>
+                            <span 
+                              className="px-2 py-1 rounded-full text-xs font-medium"
+                              style={{
+                                backgroundColor: category?.color ? `${category.color}20` : '#3b82f620',
+                                color: category?.color || '#3b82f6',
+                                opacity: priority === 'high' ? 1 : priority === 'medium' ? 0.8 : 0.6
+                              }}
+                            >
                               {priority.toUpperCase()}
                             </span>
                           </div>
