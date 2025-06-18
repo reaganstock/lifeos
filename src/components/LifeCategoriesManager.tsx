@@ -2,13 +2,27 @@ import React, { useState } from 'react';
 import { FolderOpen, Plus, Edit3, Trash2, Star, ArrowUp, ArrowDown, X } from 'lucide-react';
 import { categories as initialCategories } from '../data/initialData';
 import { Category } from '../types';
+import { useAuthContext } from './AuthProvider';
+import { useSupabaseData } from '../hooks/useSupabaseData';
 
 interface LifeCategoriesManagerProps {
   onNavigateToCategory: (categoryId: string) => void;
 }
 
 const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigateToCategory }) => {
-  const [categories, setCategories] = useState(initialCategories);
+  const { user } = useAuthContext();
+  const {
+    categories: supabaseCategories,
+    loading,
+    error,
+    createCategory,
+    updateCategory,
+    deleteCategory
+  } = useSupabaseData();
+  
+  // Use Supabase categories for authenticated users, localStorage for others
+  const categories = user ? supabaseCategories : initialCategories;
+  
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [newCategory, setNewCategory] = useState({
@@ -18,11 +32,10 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
     priority: 6
   });
 
-  const handleAddCategory = () => {
+  const handleAddCategory = async () => {
     if (!newCategory.name.trim()) return;
 
-    const category: Category = {
-      id: newCategory.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+    const categoryData = {
       name: newCategory.name,
       icon: newCategory.icon,
       color: newCategory.color,
@@ -31,9 +44,28 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
       updatedAt: new Date()
     };
 
-    setCategories([...categories, category]);
-    setNewCategory({ name: '', icon: '📁', color: '#74B9FF', priority: 6 });
-    setShowAddForm(false);
+    if (user) {
+      // Use Supabase for authenticated users
+      const result = await createCategory(categoryData);
+      if (result) {
+        console.log('✅ Category created successfully:', result.name);
+        setNewCategory({ name: '', icon: '📁', color: '#74B9FF', priority: 6 });
+        setShowAddForm(false);
+      } else {
+        console.error('❌ Failed to create category');
+        alert('Failed to create category. Please try again.');
+      }
+    } else {
+      // Legacy localStorage handling for unauthenticated users
+      // For unauthenticated users - this is no longer supported
+      // const category: Category = {
+      //   id: newCategory.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+      //   ...categoryData
+      // };
+      // Note: This won't work because we're not managing localStorage categories anymore
+      console.warn('⚠️ Cannot create categories for unauthenticated users');
+      alert('Please sign in to create categories');
+    }
   };
 
   const handleEditCategory = (category: Category) => {
@@ -47,34 +79,68 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
     setShowAddForm(true);
   };
 
-  const handleUpdateCategory = () => {
+  const handleUpdateCategory = async () => {
     if (!editingCategory || !newCategory.name.trim()) return;
 
-    setCategories(categories.map(cat => 
-      cat.id === editingCategory.id 
-        ? { ...cat, name: newCategory.name, icon: newCategory.icon, color: newCategory.color, priority: newCategory.priority }
-        : cat
-    ));
-    
-    setEditingCategory(null);
-    setNewCategory({ name: '', icon: '📁', color: '#74B9FF', priority: 6 });
-    setShowAddForm(false);
-  };
+    const updates = {
+      name: newCategory.name,
+      icon: newCategory.icon,
+      color: newCategory.color,
+      priority: newCategory.priority,
+      updatedAt: new Date()
+    };
 
-  const handleDeleteCategory = (categoryId: string) => {
-    if (window.confirm('Are you sure you want to delete this category? This action cannot be undone.')) {
-      setCategories(categories.filter(cat => cat.id !== categoryId));
+    if (user) {
+      // Use Supabase for authenticated users
+      const success = await updateCategory(editingCategory.id, updates);
+      if (success) {
+        console.log('✅ Category updated successfully');
+        setEditingCategory(null);
+        setNewCategory({ name: '', icon: '📁', color: '#74B9FF', priority: 6 });
+        setShowAddForm(false);
+      } else {
+        console.error('❌ Failed to update category');
+        alert('Failed to update category. Please try again.');
+      }
+    } else {
+      console.warn('⚠️ Cannot update categories for unauthenticated users');
+      alert('Please sign in to update categories');
     }
   };
 
-  const adjustPriority = (categoryId: string, direction: 'up' | 'down') => {
-    setCategories(categories.map(cat => {
-      if (cat.id === categoryId) {
-        const newPriority = direction === 'up' ? Math.max(0, cat.priority - 1) : cat.priority + 1;
-        return { ...cat, priority: newPriority };
+  const handleDeleteCategory = async (categoryId: string) => {
+    if (user) {
+      // Use Supabase for authenticated users - the warning dialog is already handled in useSupabaseData
+      const success = await deleteCategory(categoryId);
+      if (success) {
+        console.log('✅ Category deleted successfully');
+      } else {
+        console.error('❌ Failed to delete category');
+        alert('Failed to delete category. Please try again.');
       }
-      return cat;
-    }));
+    } else {
+      console.warn('⚠️ Cannot delete categories for unauthenticated users');
+      alert('Please sign in to delete categories');
+    }
+  };
+
+  const adjustPriority = async (categoryId: string, direction: 'up' | 'down') => {
+    if (user) {
+      const category = categories.find(cat => cat.id === categoryId);
+      if (category) {
+        const newPriority = direction === 'up' ? Math.max(0, category.priority - 1) : category.priority + 1;
+        const success = await updateCategory(categoryId, { priority: newPriority });
+        if (success) {
+          console.log('✅ Category priority updated successfully');
+        } else {
+          console.error('❌ Failed to update category priority');
+          alert('Failed to update category priority. Please try again.');
+        }
+      }
+    } else {
+      console.warn('⚠️ Cannot adjust priority for unauthenticated users');
+      alert('Please sign in to adjust category priorities');
+    }
   };
 
   const sortedCategories = [...categories].sort((a, b) => a.priority - b.priority);
@@ -83,25 +149,93 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
   const commonColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#74B9FF', '#FD79A8', '#FDCB6E', '#6C5CE7'];
 
   // Quick add 3 categories functionality
-  const handleQuickAdd3Categories = () => {
+  const handleQuickAdd3Categories = async () => {
+    if (!user) {
+      alert('Please sign in to create categories');
+      return;
+    }
+
     const quickCategories = [
       { name: 'Health & Fitness', icon: '💪', color: '#4ECDC4' },
       { name: 'Career & Business', icon: '💼', color: '#45B7D1' },
       { name: 'Personal Growth', icon: '🌱', color: '#96CEB4' }
     ];
 
-    const newCategories = quickCategories.map((cat, index) => ({
-      id: (cat.name.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Date.now() + index),
-      name: cat.name,
-      icon: cat.icon,
-      color: cat.color,
-      priority: categories.length + index + 1,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    }));
+    let successCount = 0;
+    for (let index = 0; index < quickCategories.length; index++) {
+      const cat = quickCategories[index];
+      const categoryData = {
+        name: cat.name,
+        icon: cat.icon,
+        color: cat.color,
+        priority: categories.length + index + 1,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
 
-    setCategories([...categories, ...newCategories]);
+      const result = await createCategory(categoryData);
+      if (result) {
+        successCount++;
+        console.log('✅ Quick category created:', cat.name);
+      }
+    }
+
+    if (successCount === quickCategories.length) {
+      console.log('✅ All quick categories created successfully');
+    } else {
+      alert(`Created ${successCount} of ${quickCategories.length} categories. Some may have failed.`);
+    }
   };
+
+  // Show loading state while data is being fetched
+  if (user && loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-indigo-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your categories...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state if data loading failed
+  if (user && error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-indigo-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600 mb-4">Failed to load categories: {error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Show authentication prompt for unauthenticated users
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-indigo-50 flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <FolderOpen className="w-16 h-16 text-purple-600 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">Life Categories Manager</h2>
+          <p className="text-gray-600 mb-6">
+            Sign in to create and manage your life categories. Categories help organize all your todos, events, goals, and notes.
+          </p>
+          <button
+            onClick={() => alert('Please use the sign in button in the sidebar')}
+            className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            Sign In Required
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-indigo-50">
