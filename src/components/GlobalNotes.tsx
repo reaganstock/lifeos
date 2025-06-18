@@ -68,9 +68,9 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems }) => {
       label: 'AI Chat',
       description: 'Open AI Assistant for real-time help',
       icon: '🤖',
-      action: () => {
+      action: async () => {
         // Create a new session for this interaction
-        const newSession = chatService.createSession('Note Assistant');
+        const newSession = await chatService.createSession('Note Assistant');
         chatService.switchToSession(newSession.id);
         setShowAIAssistant(true);
       }

@@ -11,46 +11,51 @@ import GlobalNotes from './components/GlobalNotes';
 import Settings from './components/Settings';
 import Notification from './components/Notification';
 import AIAssistant from './components/AIAssistant';
+import { AuthModal } from './components/AuthModal';
+import { MigrationModal } from './components/MigrationModal';
+import { AuthProvider, useAuthContext } from './components/AuthProvider';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { categories as initialCategories, initialItems } from './data/initialData';
+import { useSupabaseData } from './hooks/useSupabaseData';
+import { shouldShowMigration, createMigrationManager, MigrationProgress } from './utils/migration';
 import { Item, Category } from './types';
-import { APIKeyChecker } from './services/apiKeyChecker';
 import './App.css';
 
-function App() {
-  const [currentView, setCurrentView] = useState<string>(() => {
-    // Always start with landing unless explicitly skipped
-    const hasSkipped = localStorage.getItem('skipLanding') === 'true';
-    console.log('🎯 App initialization - skipLanding flag:', hasSkipped);
-    return hasSkipped ? 'dashboard' : 'landing';
-  });
-  
-  const showLanding = currentView === 'landing';
-  const [items, setItems] = useState<Item[]>(() => {
-    // Load from localStorage or use initial data
+function AppContent() {
+  const { user, loading: authLoading, initialized: authInitialized } = useAuthContext();
+  const {
+    categories: supabaseCategories,
+    items: supabaseItems,
+    loading: dataLoading,
+    error: dataError,
+    initialized: dataInitialized,
+    createCategory,
+    updateCategory,
+    deleteCategory,
+    createItem,
+    updateItem,
+    deleteItem,
+    bulkCreateItems,
+    bulkUpdateItems,
+    bulkDeleteItems,
+    refreshData
+  } = useSupabaseData();
+
+  // Legacy localStorage state for unauthenticated users or migration
+  const [localItems, setLocalItems] = useState<Item[]>(() => {
     const savedItems = localStorage.getItem('lifeStructureItems');
     if (savedItems) {
       try {
         const parsedItems = JSON.parse(savedItems);
-        // Convert date strings back to Date objects
         return parsedItems.map((item: any) => ({
           ...item,
           createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
           updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
-          dueDate: item.dueDate ? (() => {
-            const date = new Date(item.dueDate);
-            return isNaN(date.getTime()) ? undefined : date;
-          })() : undefined,
-          dateTime: item.dateTime ? (() => {
-            const date = new Date(item.dateTime);
-            return isNaN(date.getTime()) ? undefined : date;
-          })() : undefined,
+          dueDate: item.dueDate ? new Date(item.dueDate) : undefined,
+          dateTime: item.dateTime ? new Date(item.dateTime) : undefined,
           metadata: {
             ...item.metadata,
-            eventDate: item.metadata?.eventDate ? (() => {
-              const date = new Date(item.metadata.eventDate);
-              return isNaN(date.getTime()) ? undefined : date;
-            })() : undefined
+            eventDate: item.metadata?.eventDate ? new Date(item.metadata.eventDate) : undefined
           }
         }));
       } catch (error) {
@@ -61,6 +66,16 @@ function App() {
     return initialItems;
   });
 
+  const [currentView, setCurrentView] = useState<string>(() => {
+    const hasSkipped = localStorage.getItem('skipLanding') === 'true';
+    console.log('🎯 App initialization - skipLanding flag:', hasSkipped);
+    return hasSkipped ? 'dashboard' : 'landing';
+  });
+  
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showMigrationModal, setShowMigrationModal] = useState(false);
+  
+  const showLanding = currentView === 'landing';
   const [categories] = useState<Category[]>(initialCategories);
   const [notification, setNotification] = useState({
     isVisible: false,
@@ -84,24 +99,56 @@ function App() {
   });
   const [isAiSidebarCollapsed, setIsAiSidebarCollapsed] = useState(false);
 
+  // Current items (either from localStorage or Supabase)
+  const items = user ? supabaseItems : localItems;
+  
+  // Create a setItems function that works with both localStorage and Supabase
+  const setItems = user 
+    ? (updater: React.SetStateAction<Item[]>) => {
+        // For authenticated users, the real-time subscriptions will handle updates
+        // We don't need to manually call setItems since Supabase operations
+        // trigger real-time updates automatically
+        console.log('🔄 setItems called for authenticated user - operations handled by individual CRUD functions');
+        
+        // If this is being called, it means some component is trying to update items directly
+        // Instead, components should use the individual CRUD operations from useSupabaseData
+        console.warn('⚠️ Direct setItems call detected for authenticated user. Consider using CRUD operations instead.');
+      }
+    : setLocalItems; // Use localStorage for unauthenticated users
 
+  // Check for migration on authentication
+  useEffect(() => {
+    if (user && dataInitialized && shouldShowMigration()) {
+      setShowMigrationModal(true);
+    }
+  }, [user, dataInitialized]);
+
+  // Show auth modal if user is not authenticated (except on landing)
+  useEffect(() => {
+    if (authInitialized && !user && !showLanding) {
+      setShowAuthModal(true);
+    }
+  }, [authInitialized, user, showLanding]);
+
+  // Save localStorage items for unauthenticated users
+  useEffect(() => {
+    if (!user) {
+      localStorage.setItem('lifeStructureItems', JSON.stringify(localItems));
+    }
+  }, [localItems, user]);
 
   // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if user is typing in an input, textarea, or contenteditable
       const target = e.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.contentEditable === 'true') {
         return;
       }
 
-      // Press 'i' to toggle AI Assistant globally
       if (e.key === 'i' || e.key === 'I') {
         e.preventDefault();
         setShowAIAssistant(prev => !prev);
       }
-
-
     };
 
     document.addEventListener('keydown', handleKeyDown);
@@ -113,25 +160,13 @@ function App() {
     localStorage.setItem('aiSidebarWidth', aiSidebarWidth.toString());
   }, [aiSidebarWidth]);
 
-  // Save to localStorage whenever items change
+  // Listen for sidebar width changes
   useEffect(() => {
-    localStorage.setItem('lifeStructureItems', JSON.stringify(items));
-  }, [items]);
-
-  // Listen for sidebar width changes and AI item modifications
-  useEffect(() => {
-    const handleStorageChange = (e?: StorageEvent) => {
-      // Handle sidebar changes
+    const handleStorageChange = () => {
       const savedWidth = localStorage.getItem('sidebarWidth');
       const savedCollapsed = localStorage.getItem('sidebarCollapsed');
       if (savedWidth) setMainSidebarWidth(parseInt(savedWidth));
       if (savedCollapsed) setIsMainSidebarCollapsed(savedCollapsed === 'true');
-      
-      // Handle AI item modifications - CRITICAL for real-time updates!
-      if (!e || e.key === 'lifeStructureItems') {
-        console.log('🔄 Storage change detected for lifeStructureItems, refreshing...');
-        handleRefreshItems();
-      }
     };
 
     const handleSidebarEvent = (event: CustomEvent) => {
@@ -140,35 +175,13 @@ function App() {
       setMainSidebarWidth(width);
     };
 
-    const handleItemsModified = () => {
-      console.log('🔔 Received itemsModified event from Gemini service!');
-      handleRefreshItems();
-    };
-
-    // Listen for storage events from other tabs AND same tab modifications
     window.addEventListener('storage', handleStorageChange);
-    
-    // Listen for custom sidebar events for immediate updates
     window.addEventListener('sidebarStateChanged', handleSidebarEvent as EventListener);
-    
-    // Listen for real-time AI modifications - CRITICAL for instant updates!
-    window.addEventListener('itemsModified', handleItemsModified as EventListener);
-    
-    // Check immediately on mount - multiple times to ensure sync
     handleStorageChange();
-    setTimeout(handleStorageChange, 100);
-    setTimeout(handleStorageChange, 500);
-    
-    // Also check less frequently for backup (every 5 seconds) to catch any missed updates
-    const interval = setInterval(() => {
-      handleStorageChange();
-    }, 5000);
-    
+
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('sidebarStateChanged', handleSidebarEvent as EventListener);
-      window.removeEventListener('itemsModified', handleItemsModified as EventListener);
-      clearInterval(interval);
     };
   }, []);
 
@@ -184,104 +197,44 @@ function App() {
     setCurrentView(view);
   };
 
-  const handleAddItem = (item: Item) => {
-    setItems(prevItems => [...prevItems, item]);
-  };
-
-
-  const handleRefreshItems = () => {
-    console.log('🔄 handleRefreshItems called - refreshing from localStorage');
-    
-    // Force re-read from localStorage in case AI modified items directly
-    const savedItems = localStorage.getItem('lifeStructureItems');
-    if (savedItems) {
+  const handleAddItem = async (item: Item) => {
+    if (user) {
       try {
-        const parsedItems = JSON.parse(savedItems);
-        console.log('📦 Parsed items from localStorage:', parsedItems.length, 'items');
-        
-        // Check if items have actually changed to prevent unnecessary re-renders
-        const currentItemsString = JSON.stringify(items);
-        const newItemsString = JSON.stringify(parsedItems);
-        
-        if (currentItemsString === newItemsString) {
-          console.log('⏭️ Items unchanged, skipping re-render');
-          return;
+        console.log('🆕 Creating item via Supabase:', item.title);
+        const newItem = await createItem(item);
+        if (newItem) {
+          showNotification('Item created successfully', 'success');
+          // No need to manually refresh - real-time subscriptions will handle the update
+        } else {
+          showNotification('Failed to create item', 'error');
         }
-        
-        const refreshedItems = parsedItems.map((item: any) => ({
-          ...item,
-          createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
-          updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
-          dueDate: item.dueDate ? (() => {
-            const date = new Date(item.dueDate);
-            return isNaN(date.getTime()) ? undefined : date;
-          })() : undefined,
-          dateTime: item.dateTime ? (() => {
-            const date = new Date(item.dateTime);
-            return isNaN(date.getTime()) ? undefined : date;
-          })() : undefined,
-          metadata: {
-            ...item.metadata,
-            eventDate: item.metadata?.eventDate ? (() => {
-              const date = new Date(item.metadata.eventDate);
-              return isNaN(date.getTime()) ? undefined : date;
-            })() : undefined
-          }
-        }));
-        
-        console.log('✅ Setting refreshed items to state:', refreshedItems.length, 'items');
-        setItems(refreshedItems);
-        
-        // Force re-render by triggering a state change
-        setTimeout(() => {
-          console.log('🔄 Double-checking refresh after 100ms');
-          const doubleCheckItems = localStorage.getItem('lifeStructureItems');
-          if (doubleCheckItems && doubleCheckItems !== savedItems) {
-            console.log('📦 Items changed during refresh, updating again');
-            const newParsedItems = JSON.parse(doubleCheckItems);
-            const newRefreshedItems = newParsedItems.map((item: any) => ({
-              ...item,
-              createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
-              updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
-              dueDate: item.dueDate ? (() => {
-                const date = new Date(item.dueDate);
-                return isNaN(date.getTime()) ? undefined : date;
-              })() : undefined,
-              dateTime: item.dateTime ? (() => {
-                const date = new Date(item.dateTime);
-                return isNaN(date.getTime()) ? undefined : date;
-              })() : undefined,
-              metadata: {
-                ...item.metadata,
-                eventDate: item.metadata?.eventDate ? (() => {
-                  const date = new Date(item.metadata.eventDate);
-                  return isNaN(date.getTime()) ? undefined : date;
-                })() : undefined
-              }
-            }));
-            setItems(newRefreshedItems);
-          }
-        }, 100);
-        
       } catch (error) {
-        console.error('❌ Error refreshing items:', error);
+        console.error('Error creating item:', error);
+        showNotification('Failed to create item', 'error');
       }
     } else {
-      console.log('⚠️ No saved items found in localStorage');
+      // For unauthenticated users, use localStorage
+      setLocalItems(prevItems => [...prevItems, item]);
+      showNotification('Item created', 'success');
     }
   };
 
+  const showNotification = (message: string, type: 'success' | 'error' | 'info') => {
+    setNotification({
+      isVisible: true,
+      message,
+      type
+    });
+  };
 
   const hideNotification = () => {
     setNotification(prev => ({ ...prev, isVisible: false }));
   };
 
-
   // Redirect to the HTML landing page
   useEffect(() => {
     if (showLanding) {
       console.log('🚀 Redirecting to landing.html');
-      // Add a small delay to ensure the component is ready
       const timeout = setTimeout(() => {
         window.location.href = '/landing.html';
       }, 100);
@@ -293,15 +246,54 @@ function App() {
 
   const renderMainContent = () => {
     if (showLanding) {
-      // This should never render since we redirect above
       return null;
+    }
+
+    // Show loading while authentication is initializing
+    if (!authInitialized || authLoading) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center">
+            <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-gray-600 dark:text-gray-400">Initializing...</p>
+          </div>
+        </div>
+      );
+    }
+
+    // Show loading while data is being fetched (for authenticated users)
+    if (user && (!dataInitialized || dataLoading)) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center">
+            <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-gray-600 dark:text-gray-400">Loading your data...</p>
+          </div>
+        </div>
+      );
+    }
+
+    // Show error if data loading failed
+    if (user && dataError) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center">
+            <p className="text-red-600 dark:text-red-400 mb-4">Failed to load data: {dataError}</p>
+            <button
+              onClick={refreshData}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      );
     }
 
     switch (currentView) {
       case 'dashboard':
         return <Dashboard onNavigateToCategory={handleNavigateToCategory} items={items} />;
       
-      // Global Views
       case 'todos':
         return <GlobalTodos items={items} setItems={setItems} />;
       case 'calendar':
@@ -313,16 +305,10 @@ function App() {
       case 'routines':
         return <GlobalRoutines items={items} setItems={setItems} />;
       case 'notes':
-        return <GlobalNotes 
-          items={items} 
-          setItems={setItems} 
-        />;
-      
-      // Settings
+        return <GlobalNotes items={items} setItems={setItems} />;
       case 'settings':
-        return <Settings />;
+        return <Settings onOpenMigrationModal={() => setShowMigrationModal(true)} />;
       
-      // Category views
       default:
         return (
           <CategoryPage 
@@ -363,8 +349,8 @@ function App() {
             marginLeft: isMainSidebarCollapsed ? '60px' : `${mainSidebarWidth}px`,
             marginRight: showAIAssistant && !isAiSidebarCollapsed ? `${aiSidebarWidth}px` : '0px',
             transition: 'margin 0.3s ease-in-out',
-            scrollbarWidth: 'none', /* Firefox */
-            msOverflowStyle: 'none', /* IE and Edge */
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
           }}
         >
           {renderMainContent()}
@@ -383,10 +369,10 @@ function App() {
           <AIAssistant
             isOpen={showAIAssistant}
             onClose={() => setShowAIAssistant(false)}
-            categories={categories}
+            categories={user ? supabaseCategories : categories}
             items={items}
             onAddItem={handleAddItem}
-            onRefreshItems={handleRefreshItems}
+            onRefreshItems={user ? refreshData : () => {}}
             currentView={currentView}
             isSidebarMode={true}
             sidebarWidth={aiSidebarWidth}
@@ -396,10 +382,46 @@ function App() {
           />
         )}
 
+        {/* Authentication Modal */}
+        <AuthModal
+          isOpen={showAuthModal}
+          onClose={() => setShowAuthModal(false)}
+        />
 
+        {/* Migration Modal */}
+        {showMigrationModal && (
+          <MigrationModal
+            isOpen={showMigrationModal}
+            onClose={() => setShowMigrationModal(false)}
+            supabaseActions={{
+              createCategory,
+              updateCategory,
+              deleteCategory,
+              createItem,
+              updateItem,
+              deleteItem,
+              bulkCreateItems,
+              bulkUpdateItems,
+              bulkDeleteItems,
+              refreshData
+            }}
+            onMigrationComplete={() => {
+              showNotification('Migration completed successfully!', 'success');
+              refreshData();
+            }}
+          />
+        )}
       </div>
     </ThemeProvider>
   );
 }
 
-export default App; 
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+}
+
+export default App;

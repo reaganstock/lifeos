@@ -1,6 +1,7 @@
 import React from 'react';
-import { Moon, Sun, Settings as SettingsIcon, Palette, Bell, Shield, User } from 'lucide-react';
+import { Moon, Sun, Settings as SettingsIcon, Palette, Bell, Shield, User, LogOut, Database, RefreshCw, Upload } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../hooks/useAuth';
 
 interface BaseSettingItem {
   id: string;
@@ -19,6 +20,7 @@ interface ToggleSettingItem extends BaseSettingItem {
 interface ButtonSettingItem extends BaseSettingItem {
   type: 'button';
   onClick: () => void;
+  variant?: 'default' | 'danger';
 }
 
 type SettingItem = ToggleSettingItem | ButtonSettingItem;
@@ -29,8 +31,84 @@ interface SettingsSection {
   items: SettingItem[];
 }
 
-const Settings: React.FC = () => {
+interface SettingsProps {
+  onOpenMigrationModal?: () => void;
+}
+
+const Settings: React.FC<SettingsProps> = ({ onOpenMigrationModal }) => {
   const { isDarkMode, toggleDarkMode } = useTheme();
+  const { user, signOut } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      // Clear all localStorage data
+      const keysToRemove = [
+        'lifeStructureItems',
+        'lifeStructureCategories', 
+        'lifeStructure_backup',
+        'lifeOS-items',
+        'lifeOS-categories',
+        'lifeOS-migrated',
+        'lifeOS-migration-backup',
+        'georgetownAI_items',
+        'georgetownAI_voiceModel',
+        'georgetownAI_openaiVoice',
+        'georgetownAI_geminiVoice',
+        'sidebarWidth',
+        'sidebarCollapsed',
+        'aiSidebarWidth',
+        'skipLanding',
+        'lifeStructureLogo',
+        'lifeStructureTitle',
+        'lifeStructureSubtitle',
+        'sidebarAutoHide',
+        'darkMode'
+      ];
+      
+      keysToRemove.forEach(key => {
+        localStorage.removeItem(key);
+      });
+      
+      // Sign out from Supabase
+      await signOut();
+      
+      // Force a page reload to ensure clean state
+      window.location.reload();
+    } catch (error) {
+      console.error('Error during logout:', error);
+    }
+  };
+
+  const handleClearLocalStorage = () => {
+    if (window.confirm('Are you sure you want to clear all local storage? This will remove any unsaved data.')) {
+      localStorage.clear();
+      window.location.reload();
+    }
+  };
+
+  // Check if there's any localStorage data that could be migrated
+  const checkLocalStorageData = () => {
+    const relevantKeys = [
+      'lifeStructureItems',
+      'lifeStructureCategories', 
+      'lifeOS-items',
+      'lifeOS-categories',
+      'georgetownAI_items'
+    ];
+    
+    return relevantKeys.some(key => {
+      const data = localStorage.getItem(key);
+      if (!data) return false;
+      try {
+        const parsed = JSON.parse(data);
+        return Array.isArray(parsed) && parsed.length > 0;
+      } catch {
+        return false;
+      }
+    });
+  };
+
+  const hasLocalStorageData = checkLocalStorageData();
 
   const settingsSections: SettingsSection[] = [
     {
@@ -45,6 +123,31 @@ const Settings: React.FC = () => {
           value: isDarkMode,
           onChange: toggleDarkMode,
           icon: isDarkMode ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />
+        }
+      ]
+    },
+    {
+      title: 'Data Management',
+      icon: <Database className="w-5 h-5" />,
+      items: [
+        // Add migration button if user is authenticated and has localStorage data
+        ...(user && hasLocalStorageData ? [{
+          id: 'migrate-data',
+          label: 'Migrate Local Data',
+          description: 'Move your localStorage data to Supabase for sync across devices',
+          type: 'button' as const,
+          onClick: onOpenMigrationModal || (() => {}),
+          icon: <Upload className="w-5 h-5" />,
+          disabled: !onOpenMigrationModal
+        }] : []),
+        {
+          id: 'clear-local-storage',
+          label: 'Clear Local Storage',
+          description: 'Remove all locally stored data and force sync with Supabase',
+          type: 'button',
+          onClick: handleClearLocalStorage,
+          icon: <RefreshCw className="w-5 h-5" />,
+          variant: 'danger'
         }
       ]
     },
@@ -77,8 +180,12 @@ const Settings: React.FC = () => {
           disabled: true
         }
       ]
-    },
-    {
+    }
+  ];
+
+  // Add account section only if user is authenticated
+  if (user) {
+    settingsSections.push({
       title: 'Account',
       icon: <User className="w-5 h-5" />,
       items: [
@@ -89,10 +196,19 @@ const Settings: React.FC = () => {
           type: 'button',
           onClick: () => {},
           disabled: true
+        },
+        {
+          id: 'logout',
+          label: 'Sign Out',
+          description: 'Sign out and clear all local data',
+          type: 'button',
+          onClick: handleLogout,
+          icon: <LogOut className="w-5 h-5" />,
+          variant: 'danger'
         }
       ]
-    }
-  ];
+    });
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-blue-50 dark:from-gray-900 dark:via-gray-800 dark:to-blue-900 transition-colors duration-300">
@@ -100,16 +216,30 @@ const Settings: React.FC = () => {
         {/* Header */}
         <div className="mb-8">
           <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 dark:border-gray-700/30 p-6">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center">
-                <SettingsIcon className="w-6 h-6 text-white" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center">
+                  <SettingsIcon className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Settings</h1>
+                  <p className="text-gray-600 dark:text-gray-300 mt-1">
+                    Customize your Life Structure experience
+                  </p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Settings</h1>
-                <p className="text-gray-600 dark:text-gray-300 mt-1">
-                  Customize your Life Structure experience
-                </p>
-              </div>
+              
+              {/* User Status */}
+              {user && (
+                <div className="text-right">
+                  <div className="text-sm text-gray-500 dark:text-gray-400">Signed in as</div>
+                  <div className="font-semibold text-gray-800 dark:text-white">{user.email}</div>
+                  <div className="flex items-center mt-1">
+                    <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                    <span className="text-xs text-green-600 dark:text-green-400">Connected to Supabase</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -192,10 +322,14 @@ const Settings: React.FC = () => {
                           className={`px-4 py-2 rounded-xl font-semibold transition-all duration-300 ${
                             item.disabled
                               ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-500 cursor-not-allowed'
+                              : item.variant === 'danger'
+                              ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white transform hover:scale-105 shadow-lg'
                               : 'bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white transform hover:scale-105 shadow-lg'
                           }`}
                         >
-                          Configure
+                          {item.id === 'logout' ? 'Sign Out' : 
+                           item.id === 'clear-local-storage' ? 'Clear Data' :
+                           'Configure'}
                         </button>
                       )}
                     </div>

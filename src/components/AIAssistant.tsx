@@ -386,7 +386,8 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
 
   // Initialize and subscribe to chat service
   useEffect(() => {
-    chatService.initialize();
+    const initializeChat = async () => {
+      await chatService.initialize();
     
     const unsubscribe = chatService.subscribe((state) => {
       setCurrentSession(chatService.getCurrentSession());
@@ -395,6 +396,18 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     });
 
     return unsubscribe;
+    };
+
+    let unsubscribe: (() => void) | undefined;
+    initializeChat().then((unsub) => {
+      unsubscribe = unsub;
+    });
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, []);
 
   // Auto-scroll to bottom
@@ -1245,19 +1258,19 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
       let currentSession = chatService.getCurrentSession();
       if (!currentSession) {
         console.warn('⚠️ No active session found in handleSendMessage, reinitializing...');
-        chatService.initialize();
+        await chatService.initialize();
         currentSession = chatService.getCurrentSession();
         
         // If still no session, force create one
         if (!currentSession) {
           console.error('❌ Still no session after initialize, force creating...');
-          const emergencySession = chatService.createSession('Emergency Chat');
+                  const emergencySession = await chatService.createSession('Emergency Chat');
           chatService.switchToSession(emergencySession.id);
         }
       }
     
       // Add user message
-      chatService.addMessage('user', messageToSend);
+      await chatService.addMessage('user', messageToSend);
 
       // In fullscreen note mode, handle everything as normal chat but with note context
       if (currentNoteContent !== undefined && onUpdateNoteContent) {
@@ -1311,7 +1324,7 @@ User message: ${messageToSend}`;
             aiResponse = `I can see the image${selectedImages.length > 1 ? 's' : ''} you uploaded. ${response.message}`;
           }
           
-          chatService.addMessage('assistant', aiResponse);
+          await chatService.addMessage('assistant', aiResponse);
         } else {
           // In note mode, if AI modified items, check if it was the current note
           if (response.itemsModified) {
@@ -1349,7 +1362,7 @@ User message: ${messageToSend}`;
           }
           
           console.log('🔧 Adding AI response to chat:', aiResponse);
-          chatService.addMessage('assistant', aiResponse);
+          await chatService.addMessage('assistant', aiResponse);
         }
       } else {
         // Regular chat processing (not in note mode)
@@ -1361,12 +1374,20 @@ User message: ${messageToSend}`;
           processMessage = "I've uploaded some images. Can you help me with them?";
         }
         
+        console.log('🔄 AIAssistant: Calling chatService.processGeorgetownCommand with:', {
+          message: processMessage,
+          categoryId: currentCategoryId,
+          itemsCount: items?.length || 0
+        });
+
         const response = await chatService.processGeorgetownCommand(
           processMessage, 
           currentCategoryId,
           items,
           categories
         );
+
+        console.log('📥 AIAssistant: Received response from chatService:', response);
 
         // Check if there's a pending function call
         if (response.pendingFunctionCall) {
@@ -1378,7 +1399,7 @@ User message: ${messageToSend}`;
             aiResponse = `I can see the image${selectedImages.length > 1 ? 's' : ''} you uploaded. ${response.message}`;
           }
           
-          chatService.addMessage('assistant', aiResponse);
+          await chatService.addMessage('assistant', aiResponse);
         } else {
           // Handle item creation (legacy support)
           if (response.itemCreated && !response.itemCreated.item) {
@@ -1400,7 +1421,7 @@ User message: ${messageToSend}`;
             onAddItem(newItem);
             
             // Add system message about item creation
-            chatService.addMessage('system', `✅ Created ${response.itemCreated.type}: "${response.itemCreated.title}"`);
+            await chatService.addMessage('system', `✅ Created ${response.itemCreated.type}: "${response.itemCreated.title}"`);
           }
 
           // Refresh items if AI modified anything
@@ -1414,13 +1435,13 @@ User message: ${messageToSend}`;
             aiResponse = `I can see the image${selectedImages.length > 1 ? 's' : ''} you uploaded. ${response.message}`;
           }
           
-          chatService.addMessage('assistant', aiResponse);
+          await chatService.addMessage('assistant', aiResponse);
         }
       }
       
     } catch (error) {
       console.error('AI processing error:', error);
-      chatService.addMessage('assistant', "I had trouble processing that request. Could you try rephrasing it?");
+      await chatService.addMessage('assistant', "I had trouble processing that request. Could you try rephrasing it?");
     } finally {
       chatService.setProcessing(false);
     }
@@ -1433,8 +1454,8 @@ User message: ${messageToSend}`;
     }
   };
 
-  const createNewSession = () => {
-    const newSession = chatService.createSession('New Chat');
+  const createNewSession = async () => {
+    const newSession = await chatService.createSession('New Chat');
     chatService.switchToSession(newSession.id);
     setShowSessions(false);
   };
@@ -1484,7 +1505,7 @@ User message: ${messageToSend}`;
           };
 
           onAddItem(newItem);
-          chatService.addMessage('system', `✅ Created ${response.itemCreated.type}: "${response.itemCreated.title}"`);
+          await chatService.addMessage('system', `✅ Created ${response.itemCreated.type}: "${response.itemCreated.title}"`);
         }
 
         // Refresh items if AI modified anything
@@ -1492,11 +1513,11 @@ User message: ${messageToSend}`;
           onRefreshItems();
         }
 
-        chatService.addMessage('assistant', response.message);
+        await chatService.addMessage('assistant', response.message);
         
       } catch (error) {
         console.error('Re-processing error:', error);
-        chatService.addMessage('assistant', "I had trouble processing your updated request. Could you try rephrasing it?");
+        await chatService.addMessage('assistant', "I had trouble processing your updated request. Could you try rephrasing it?");
       } finally {
         chatService.setProcessing(false);
       }
@@ -1726,8 +1747,8 @@ User message: ${messageToSend}`;
                     Chat History ({allSessions.length})
                   </h3>
                   <button
-                    onClick={() => {
-                      const newSession = chatService.createSession(`Chat ${allSessions.length + 1}`);
+                    onClick={async () => {
+                      const newSession = await chatService.createSession(`Chat ${allSessions.length + 1}`);
                       chatService.switchToSession(newSession.id);
                     }}
                     className={`text-xs px-2 py-1 rounded transition-all hover:scale-105 ${
@@ -2323,9 +2344,9 @@ User message: ${messageToSend}`;
                         Processing...
                       </span>
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           chatService.setProcessing(false);
-                          chatService.addMessage('system', 'Response cancelled by user');
+                          await chatService.addMessage('system', 'Response cancelled by user');
                         }}
                         className={`ml-3 px-3 py-1 rounded-lg text-xs transition-all hover:scale-105 ${
                           isDarkMode 

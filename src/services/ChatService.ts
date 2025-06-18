@@ -2,6 +2,8 @@ import { ChatMessage, ChatSession, ChatState, AIResponse, MessageVersion } from 
 import { Item, Category } from '../types';
 import { AIActions, getCurrentModel, forceResetToGemini } from '../services/aiActions';
 import { geminiService } from '../services/geminiService';
+import { SupabaseChatService } from './SupabaseChatService';
+import { supabase } from '../lib/supabase';
 
 class ChatService {
   private state: ChatState = {
@@ -15,6 +17,7 @@ class ChatService {
   private readonly STORAGE_KEY = 'georgetownAI_chatSessions';
   private readonly CURRENT_SESSION_KEY = 'georgetownAI_currentSession';
   private messageCounter = 0; // Add counter to prevent duplicate IDs
+  private isInitialized = false; // Add flag to prevent re-initialization
 
   // Generate unique message ID
   private generateMessageId(): string {
@@ -27,72 +30,53 @@ class ChatService {
     return `version_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
   }
 
-  // Load sessions from localStorage
-  private loadFromStorage(): void {
+  // Load sessions from Supabase
+  private async loadFromSupabase(): Promise<void> {
     try {
-      const savedSessions = localStorage.getItem(this.STORAGE_KEY);
-      const savedCurrentSessionId = localStorage.getItem(this.CURRENT_SESSION_KEY);
+      console.log('📂 ChatService: Loading from Supabase...');
       
-      console.log('📂 ChatService: Loading from storage...');
-      console.log('📂 ChatService: Found sessions data:', !!savedSessions);
-      console.log('📂 ChatService: Found current session ID:', savedCurrentSessionId);
+      const dbSessions = await SupabaseChatService.getChatSessions();
+      console.log('📂 ChatService: Found sessions:', dbSessions.length);
       
-      if (savedSessions) {
-        const parsedSessions = JSON.parse(savedSessions);
+      // Convert Supabase sessions to local format
+      this.state.sessions = await Promise.all(
+        dbSessions.map(async (dbSession: any) => {
+          // Get messages for this session
+          const sessionWithMessages = await SupabaseChatService.getChatSession(dbSession.id);
+          
+          const session: ChatSession = {
+            id: dbSession.id,
+            title: dbSession.title || 'Untitled Chat',
+            createdAt: new Date(dbSession.created_at || Date.now()),
+            updatedAt: new Date(dbSession.updated_at || Date.now()),
+            messages: (sessionWithMessages?.messages || []).map((msg: any) => ({
+              id: msg.id,
+              role: msg.role,
+              timestamp: new Date(msg.created_at || Date.now()),
+              currentVersionIndex: 0,
+              versions: [{
+                id: `v_${msg.id}`,
+                content: msg.content,
+                timestamp: new Date(msg.created_at || Date.now())
+              }]
+            }))
+          };
+          
+          return session;
+        })
+      );
         
-        // Validate sessions data structure
-        if (!Array.isArray(parsedSessions)) {
-          console.warn('⚠️ ChatService: Invalid sessions data structure, resetting');
-          this.clearCorruptedStorage();
-          return;
-        }
+      console.log('✅ ChatService: Loaded and converted', this.state.sessions.length, 'sessions');
         
-        // Convert date strings back to Date objects with validation
-        this.state.sessions = parsedSessions
-          .filter((session: any) => {
-            // Validate session structure
-            return session && 
-                   typeof session.id === 'string' && 
-                   typeof session.title === 'string' && 
-                   Array.isArray(session.messages);
-          })
-          .map((session: any) => ({
-          ...session,
-            createdAt: this.parseDate(session.createdAt) || new Date(),
-            updatedAt: this.parseDate(session.updatedAt) || new Date(),
-            messages: Array.isArray(session.messages) ? session.messages
-              .filter((message: any) => {
-                // Validate message structure
-                return message && 
-                       typeof message.id === 'string' && 
-                       Array.isArray(message.versions);
-              })
-              .map((message: any) => ({
-            ...message,
-                timestamp: this.parseDate(message.timestamp) || new Date(),
-                currentVersionIndex: Math.max(0, Math.min(message.currentVersionIndex || 0, (message.versions || []).length - 1)),
-                versions: Array.isArray(message.versions) ? message.versions
-                  .filter((version: any) => version && typeof version.content === 'string')
-                  .map((version: any) => ({
-              ...version,
-                    timestamp: this.parseDate(version.timestamp) || new Date()
-                  })) : []
-              })) : []
-        }));
-        
-        console.log('✅ ChatService: Loaded and validated', this.state.sessions.length, 'sessions');
-        
-        // Restore current session if it exists and is valid
-        if (savedCurrentSessionId && this.state.sessions.find(s => s.id === savedCurrentSessionId)) {
-          this.state.currentSessionId = savedCurrentSessionId;
-          console.log('✅ ChatService: Restored current session:', savedCurrentSessionId);
-        } else if (savedCurrentSessionId) {
-          console.warn('⚠️ ChatService: Current session ID not found in sessions, will create new one');
-        }
+      // Set current session to the most recent one
+      if (this.state.sessions.length > 0) {
+        this.state.currentSessionId = this.state.sessions[0].id;
+        console.log('✅ ChatService: Set current session:', this.state.currentSessionId);
       }
     } catch (error) {
-      console.error('❌ ChatService: Error loading from localStorage:', error);
-      this.clearCorruptedStorage();
+      console.error('❌ ChatService: Error loading from Supabase:', error);
+      this.state.sessions = [];
+      this.state.currentSessionId = null;
     }
   }
 
@@ -120,27 +104,27 @@ class ChatService {
     this.state.currentSessionId = null;
   }
 
-  // Save sessions to localStorage
-  private saveToStorage(): void {
-    try {
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.state.sessions));
-      if (this.state.currentSessionId) {
-        localStorage.setItem(this.CURRENT_SESSION_KEY, this.state.currentSessionId);
-      }
-    } catch (error) {
-      console.error('Error saving chat sessions to localStorage:', error);
-    }
+  // Save to Supabase (individual operations are handled by specific methods)
+  private async saveToSupabase(): Promise<void> {
+    // Individual session and message saves are handled by createSession, addMessage, etc.
+    // This method is kept for interface compatibility but doesn't need to do bulk saves
+    console.log('💾 ChatService: Supabase saves handled by individual operations');
   }
 
   // Initialize with a default session
-  initialize(): void {
+  async initialize(): Promise<void> {
+    if (this.isInitialized) {
+      console.log('⚠️ ChatService: Already initialized, skipping...');
+      return;
+    }
+
     console.log('🔄 ChatService: Initializing...');
     
     // Force reset to Gemini model to ensure we're using direct API
     forceResetToGemini();
     
     // Load existing sessions first
-    this.loadFromStorage();
+    await this.loadFromSupabase();
     
     console.log('📊 ChatService: Loaded', this.state.sessions.length, 'sessions');
     console.log('📊 ChatService: Current session ID:', this.state.currentSessionId);
@@ -154,19 +138,39 @@ class ChatService {
     // Create default session if no sessions exist OR current session is invalid
     if (this.state.sessions.length === 0 || !currentSession) {
       console.log('🆕 ChatService: Creating default session');
-      const defaultSession = this.createSession('Georgetown AI Assistant');
+      const defaultSession = await this.createSession('Georgetown AI Assistant');
       this.state.currentSessionId = defaultSession.id;
-      this.saveToStorage();
     }
     
     console.log('✅ ChatService: Initialized with', this.state.sessions.length, 'sessions');
     console.log('✅ ChatService: Active session:', this.state.currentSessionId);
     
+    this.isInitialized = true;
     this.notifyListeners();
   }
 
   // Create a new chat session
-  createSession(title: string = 'New Chat'): ChatSession {
+  async createSession(title: string = 'New Chat'): Promise<ChatSession> {
+    try {
+      const dbSession = await SupabaseChatService.createChatSession(title);
+      if (!dbSession) {
+        throw new Error('Failed to create session in Supabase');
+      }
+
+      const session: ChatSession = {
+        id: dbSession.id,
+        title: dbSession.title || title,
+        messages: [],
+        createdAt: new Date(dbSession.created_at || Date.now()),
+        updatedAt: new Date(dbSession.updated_at || Date.now())
+      };
+
+      this.state.sessions.unshift(session);
+      this.notifyListeners();
+      return session;
+    } catch (error) {
+      console.error('Error creating session:', error);
+      // Fallback to local session
     const session: ChatSession = {
       id: `session_${Date.now()}`,
       title,
@@ -174,11 +178,10 @@ class ChatService {
       createdAt: new Date(),
       updatedAt: new Date()
     };
-
     this.state.sessions.unshift(session);
-    this.saveToStorage();
     this.notifyListeners();
     return session;
+    }
   }
 
   // Switch to a session
@@ -186,7 +189,6 @@ class ChatService {
     const session = this.state.sessions.find(s => s.id === sessionId);
     if (session) {
       this.state.currentSessionId = sessionId;
-      this.saveToStorage();
       this.notifyListeners();
       return true;
     }
@@ -200,18 +202,45 @@ class ChatService {
   }
 
   // Add message to current session
-  addMessage(role: 'user' | 'assistant' | 'system', content: string): ChatMessage {
+  async addMessage(role: 'user' | 'assistant' | 'system', content: string): Promise<ChatMessage> {
     let session = this.getCurrentSession();
     
     // Emergency session recovery - create session if none exists
     if (!session) {
       console.warn('⚠️ No active session found, creating emergency session');
-      const emergencySession = this.createSession('Recovery Chat');
+      const emergencySession = await this.createSession('Recovery Chat');
       this.state.currentSessionId = emergencySession.id;
       session = emergencySession;
-      this.saveToStorage();
     }
 
+    // Save message to Supabase
+    try {
+      const dbMessage = await SupabaseChatService.addMessage(session.id, role, content);
+      if (dbMessage) {
+        const messageVersion: MessageVersion = {
+          id: this.generateVersionId(),
+          content,
+          timestamp: new Date(dbMessage.created_at || Date.now())
+        };
+
+        const message: ChatMessage = {
+          id: dbMessage.id,
+          role,
+          versions: [messageVersion],
+          currentVersionIndex: 0,
+          timestamp: new Date(dbMessage.created_at || Date.now())
+        };
+
+        session.messages.push(message);
+        session.updatedAt = new Date();
+        this.notifyListeners();
+        return message;
+      }
+    } catch (error) {
+      console.error('Error saving message to Supabase:', error);
+    }
+
+    // Fallback to local message if Supabase fails
     const messageVersion: MessageVersion = {
       id: this.generateVersionId(),
       content,
@@ -228,7 +257,6 @@ class ChatService {
 
     session.messages.push(message);
     session.updatedAt = new Date();
-    this.saveToStorage();
     this.notifyListeners();
     return message;
   }
@@ -259,7 +287,6 @@ class ChatService {
       session.messages = session.messages.slice(0, messageIndex + 1);
     }
 
-    this.saveToStorage();
     this.notifyListeners();
     return true;
   }
@@ -344,7 +371,14 @@ class ChatService {
   }
 
   // Delete a session
-  deleteSession(sessionId: string): boolean {
+  async deleteSession(sessionId: string): Promise<boolean> {
+    try {
+      // Delete from Supabase first
+      await SupabaseChatService.deleteChatSession(sessionId);
+    } catch (error) {
+      console.error('Error deleting session from Supabase:', error);
+    }
+
     const index = this.state.sessions.findIndex(s => s.id === sessionId);
     if (index === -1) return false;
 
@@ -355,7 +389,6 @@ class ChatService {
       this.state.currentSessionId = this.state.sessions.length > 0 ? this.state.sessions[0].id : null;
     }
 
-    this.saveToStorage();
     this.notifyListeners();
     return true;
   }
@@ -417,32 +450,51 @@ class ChatService {
       
       let result: any;
       
-      if (isGeminiModel) {
-        console.log('🧠 ChatService: ✅ ROUTING TO GEMINI DIRECT API for model:', currentModel);
-        result = await geminiService.processMessage(
-          message, 
-          allItems || [], 
-          conversationHistory
-        );
-        console.log('✅ ChatService: Gemini Direct API result:', result);
-      } else {
-        console.log('🧠 ChatService: ❌ ROUTING TO OPENROUTER/AIActions for model:', currentModel);
-        result = await this.aiActions.processMessage(
-        message, 
-        allItems || [], 
-        conversationHistory
-      );
-        console.log('✅ ChatService: AIActions result:', result);
+      // Add error handling and authentication check
+      try {
+        if (isGeminiModel) {
+          console.log('🧠 ChatService: ✅ ROUTING TO GEMINI DIRECT API for model:', currentModel);
+          result = await geminiService.processMessage(
+            message, 
+            allItems || [], 
+            conversationHistory
+          );
+          console.log('✅ ChatService: Gemini Direct API result:', result);
+        } else {
+          console.log('🧠 ChatService: ❌ ROUTING TO OPENROUTER/AIActions for model:', currentModel);
+          result = await this.aiActions.processMessage(
+            message, 
+            allItems || [], 
+            conversationHistory
+          );
+          console.log('✅ ChatService: AIActions result:', result);
+        }
+
+        // If result is null or undefined, create error response
+        if (!result) {
+          throw new Error('AI service returned null/undefined result');
+        }
+
+      } catch (error) {
+        console.error('🔥 ChatService: AI Processing Error:', error);
+        result = {
+          success: false,
+          response: `Error processing message: ${error instanceof Error ? error.message : 'Unknown error'}. Please check your API keys and authentication.`,
+          functionResults: [],
+          itemsModified: false
+        };
       }
 
       // Convert AI response to legacy format for compatibility
       const response: AIResponse = {
-        success: true,
-        message: result.response,
-        functionResults: result.functionResults,
-        itemsModified: result.itemsModified,
+        success: result.success !== false, // Use result's success if available
+        message: result.response || result.message || 'No response from AI',
+        functionResults: result.functionResults || [],
+        itemsModified: result.itemsModified || false,
         pendingFunctionCall: result.pendingFunctionCall // Pass through pending function call
       };
+
+      console.log('📤 ChatService: Final response being returned:', response);
 
       // If items were modified, we need to handle the item creation for UI updates
       if (result.itemsModified && result.functionResults) {
@@ -526,6 +578,11 @@ class ChatService {
   // Get current state
   getState(): ChatState {
     return { ...this.state };
+  }
+
+  // Reset initialization flag (for testing or force re-initialization)
+  resetInitialization(): void {
+    this.isInitialized = false;
   }
 
   // Notify listeners
