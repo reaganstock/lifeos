@@ -1,4 +1,4 @@
-import { Item, Category } from '../types';
+import { Item } from '../types';
 import { categories } from '../data/initialData';
 
 // Gemini API Configuration
