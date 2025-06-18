@@ -232,7 +232,7 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
                 return acc;
               }, {});
               const breakdown = Object.entries(itemsByType).map(([type, count]) => `${count} ${type}${count === 1 ? '' : 's'}`).join(', ');
-              const categories = [...new Set(items.map((item: any) => item.categoryId))];
+              const categories = Array.from(new Set(items.map((item: any) => item.categoryId)));
               return `Created ${createdCount} items: ${breakdown} across ${categories.length} categories (${categories.join(', ')})`;
             } else if (funcName === 'updateItem' && items.length > 0) {
               const item = items[0];
