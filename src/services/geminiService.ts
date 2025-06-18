@@ -3524,22 +3524,65 @@ Please specify your preference or say "create anyway" to override.`,
         }
       }
       
-      // Save all events
-      items.push(...createdEvents);
-      this.saveStoredItems(items);
-      
-      return {
-        success: true,
-        function: 'createRecurringEvent',
-        result: {
-          message: `✅ Created ${createdEvents.length} recurring events: "${args.title}" (${args.recurrencePattern})`,
-          eventsCreated: createdEvents.length,
-          recurrencePattern: args.recurrencePattern,
-          recurrenceInterval: args.recurrenceInterval || 1,
-          firstEvent: createdEvents[0]?.dateTime,
-          lastEvent: createdEvents[createdEvents.length - 1]?.dateTime
+      // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
+      if (this.supabaseCallbacks.bulkCreateItems) {
+        console.log('🔄 GEMINI SERVICE: Creating recurring events via Supabase for authenticated user');
+        try {
+          const supabaseEvents = await this.supabaseCallbacks.bulkCreateItems(createdEvents);
+          if (this.supabaseCallbacks.refreshData) {
+            await this.supabaseCallbacks.refreshData();
+          }
+          
+          return {
+            success: true,
+            function: 'createRecurringEvent',
+            result: {
+              message: `✅ Created ${createdEvents.length} recurring events: "${args.title}" (${args.recurrencePattern})`,
+              eventsCreated: createdEvents.length,
+              recurrencePattern: args.recurrencePattern,
+              recurrenceInterval: args.recurrenceInterval || 1,
+              firstEvent: createdEvents[0]?.dateTime,
+              items: supabaseEvents || createdEvents
+            }
+          };
+        } catch (error) {
+          console.error('❌ GEMINI SERVICE: Supabase createRecurringEvent failed:', error);
+          // Fall back to localStorage
+          items.push(...createdEvents);
+          this.saveStoredItems(items);
+          
+          return {
+            success: true,
+            function: 'createRecurringEvent',
+            result: {
+              message: `✅ Created ${createdEvents.length} recurring events: "${args.title}" (${args.recurrencePattern}) (saved locally due to sync error)`,
+              eventsCreated: createdEvents.length,
+              recurrencePattern: args.recurrencePattern,
+              recurrenceInterval: args.recurrenceInterval || 1,
+              firstEvent: createdEvents[0]?.dateTime,
+              items: createdEvents
+            }
+          };
         }
-      };
+      } else {
+        console.log('🔄 GEMINI SERVICE: Creating recurring events via localStorage for unauthenticated user');
+        items.push(...createdEvents);
+        this.saveStoredItems(items);
+        
+        return {
+          success: true,
+          function: 'createRecurringEvent',
+          result: {
+            message: `✅ Created ${createdEvents.length} recurring events: "${args.title}" (${args.recurrencePattern})`,
+            eventsCreated: createdEvents.length,
+            recurrencePattern: args.recurrencePattern,
+            recurrenceInterval: args.recurrenceInterval || 1,
+            firstEvent: createdEvents[0]?.dateTime,
+            lastEvent: createdEvents[createdEvents.length - 1]?.dateTime,
+            items: createdEvents
+          }
+        };
+      }
     } catch (error) {
       console.error('Error creating recurring event:', error);
       return {
