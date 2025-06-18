@@ -3502,10 +3502,12 @@ Please specify your preference or say "create anyway" to override.`,
         function: 'createCalendarFromNotes',
         result: {
           message: `Created ${createdEvents.length} learning sessions from ${notes.length} notes`,
-        eventsCreated: createdEvents.length,
-        topicsFound: learningTopics.length
-      }
-    };
+          eventsCreated: createdEvents.length,
+          topicsFound: learningTopics.length,
+          events: createdEvents
+        }
+      };
+    }
   }
 
   private extractLearningTopics(notes: Item[], focusAreas?: string): any[] {
