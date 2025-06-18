@@ -216,31 +216,45 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
         const successfulResults = functionResults.filter(r => !r.error);
         
         if (successfulResults.length > 0) {
-          // Create a concise summary for the AI to respond to naturally
-          const actionSummary = successfulResults.map(r => {
+          // Create detailed context for the AI to respond intelligently
+          const detailedContext = successfulResults.map(r => {
             const funcName = r.function || 'unknown';
-            const message = r.result?.message || 'completed successfully';
             const items = r.result?.items || [];
+            const createdCount = r.result?.created || items.length;
             
-            // Extract key info without being verbose
+            // Provide specific details about what was actually done
             if (funcName === 'createItem' && items.length > 0) {
-              return `Created: "${items[0].title}"`;
+              const item = items[0];
+              return `Created ${item.type}: "${item.title}" in ${item.categoryId} category${item.dateTime ? ' for ' + new Date(item.dateTime).toLocaleDateString() : ''}`;
+            } else if (funcName === 'bulkCreateItems' && items.length > 0) {
+              const itemsByType = items.reduce((acc: any, item: any) => {
+                acc[item.type] = (acc[item.type] || 0) + 1;
+                return acc;
+              }, {});
+              const breakdown = Object.entries(itemsByType).map(([type, count]) => `${count} ${type}${count === 1 ? '' : 's'}`).join(', ');
+              const categories = [...new Set(items.map((item: any) => item.categoryId))];
+              return `Created ${createdCount} items: ${breakdown} across ${categories.length} categories (${categories.join(', ')})`;
             } else if (funcName === 'updateItem' && items.length > 0) {
-              return `Updated: "${items[0].title}"`;
+              const item = items[0];
+              return `Updated ${item.type}: "${item.title}"`;
             } else if (funcName === 'deleteItem' && r.result?.item) {
-              return `Deleted: "${r.result.item.title}"`;
-            } else if (funcName.includes('bulk') && items.length > 0) {
-              return `${funcName}: ${items.length} items affected`;
+              const item = r.result.item;
+              return `Deleted ${item.type}: "${item.title}"`;
             }
-            return message.replace(/✅|❌/g, '').trim();
-          }).join(', ');
+            return r.result?.message || 'Action completed successfully';
+          }).join('\n- ');
           
-          console.log('🔄 Action summary for natural response:', actionSummary);
+          console.log('🔄 Detailed context for intelligent response:', detailedContext);
           
+          // Include system context and original message for intelligent response
           const followUpMessages = [
             { 
+              role: 'system', 
+              content: `You are an AI assistant that just completed actions for a user. Respond naturally and conversationally about what was accomplished. Be specific about what was created and where it was placed. Don't be robotic - be friendly and helpful.` 
+            },
+            { 
               role: 'user', 
-              content: `I just completed these actions: ${actionSummary}. Please provide a natural, conversational response about what was accomplished. Be friendly and specific about what was created/done. Tell me exactly what was created and where it was placed. Don't just say "Done!" - give me details about what happened.` 
+              content: `Original request: "${message}"\n\nActions completed:\n- ${detailedContext}\n\nPlease provide a natural, conversational response about what was accomplished. Be specific about what was created, how many items, and where they were placed. Reference the original request to show you understand what was asked for.` 
             }
           ];
           
@@ -263,14 +277,31 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
             };
           } catch (error) {
             console.error('❌ Follow-up response error:', error);
-            // Fallback to a natural confirmation if follow-up fails
-            const naturalFallback = successfulResults.length === 1 
-              ? 'Done! I took care of that for you.'
-              : `Perfect! I completed ${successfulResults.length} actions for you.`;
+            // Create intelligent fallback based on actual function results
+            let intelligentFallback = '';
+            
+            if (successfulResults.length === 1) {
+              const result = successfulResults[0];
+              const funcName = result.function;
+              const items = result.result?.items || [];
+              
+              if (funcName === 'createItem' && items.length > 0) {
+                const item = items[0];
+                intelligentFallback = `Perfect! I created "${item.title}" as a ${item.type} in your ${item.categoryId} category.`;
+              } else if (funcName === 'bulkCreateItems' && items.length > 0) {
+                const count = result.result?.created || items.length;
+                intelligentFallback = `Great! I created ${count} new items for you. They're organized across your categories and ready to use.`;
+              } else {
+                intelligentFallback = 'Done! I took care of that for you.';
+              }
+            } else {
+              const totalItems = successfulResults.reduce((sum, r) => sum + (r.result?.created || r.result?.items?.length || 1), 0);
+              intelligentFallback = `Perfect! I completed ${successfulResults.length} actions and created ${totalItems} items for you.`;
+            }
             
             return {
               success: true,
-              response: naturalFallback,
+              response: intelligentFallback,
               functionResults,
               itemsModified: this.itemsModified,
               thinkingContent

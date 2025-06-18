@@ -1731,8 +1731,26 @@ END OF NATURAL LANGUAGE REVOLUTION PROMPT - UNDERSTAND EVERYTHING! 🧠💪`;
             this.itemsModified = true;
           }
 
+          // Generate intelligent response based on function result
+          let intelligentResponse = '';
+          
+          if (functionCall.name === 'createItem' && result.item) {
+            intelligentResponse = `Perfect! I created "${result.item.title}" as a ${result.item.type} in your ${result.item.categoryId} category.`;
+          } else if (functionCall.name === 'bulkCreateItems' && result.created) {
+            intelligentResponse = `Great! I created ${result.created} new items for you. They're organized across your categories and ready to use.`;
+          } else if (functionCall.name === 'updateItem' && result.item) {
+            intelligentResponse = `Done! I updated "${result.item.title}" for you.`;
+          } else if (functionCall.name === 'deleteItem' && result.item) {
+            intelligentResponse = `Removed "${result.item.title}" from your ${result.item.type}s.`;
+          } else if (result.message) {
+            // Use the function's own message if available
+            intelligentResponse = result.message.replace(/✅|❌/g, '').trim();
+          } else {
+            intelligentResponse = `Done! I took care of that for you.`;
+          }
+          
           return {
-            response: `✅ Successfully executed ${functionCall.name}`,
+            response: intelligentResponse,
             functionCall: functionCall.name,
             result: result,
             itemsModified: this.itemsModified
