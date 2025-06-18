@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuthContext } from '../components/AuthProvider'
 import { Category, Item } from '../lib/database.types'
@@ -104,6 +104,10 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
   const [initialized, setInitialized] = useState(false)
   const [categoryMapping, setCategoryMapping] = useState<Map<string, string>>(new Map())
   const [reverseMapping, setReverseMapping] = useState<Map<string, string>>(new Map())
+  
+  // Use refs to track subscription state and prevent multiple subscriptions
+  const subscriptionsActive = useRef(false)
+  const currentUserId = useRef<string | null>(null)
 
   const fetchCategories = useCallback(async () => {
     if (!user) return []
@@ -297,85 +301,118 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
     }
   }, [authInitialized, initialized]) // Remove refreshData from dependencies
 
-  // Real-time subscriptions
+  // Real-time subscriptions - prevent multiple subscriptions
   useEffect(() => {
+    // Don't set up subscriptions if user not available or not initialized
     if (!user || !initialized) {
       console.log('⏳ Skipping realtime setup - user:', !!user, 'initialized:', initialized)
       return
     }
 
+    // Don't set up subscriptions if already active for this user
+    if (subscriptionsActive.current && currentUserId.current === user.id) {
+      console.log('⏳ Skipping realtime setup - subscriptions already active for user:', user.id)
+      return
+    }
+
+    // Clean up any existing subscriptions before creating new ones
+    if (subscriptionsActive.current) {
+      console.log('🧹 Cleaning up existing subscriptions before creating new ones')
+      supabase.removeAllChannels()
+      subscriptionsActive.current = false
+    }
+
     console.log('🔄 Setting up realtime subscriptions for user:', user.id)
+    
+    let categoriesSubscription: any = null
+    let itemsSubscription: any = null
 
-    const categoriesSubscription = supabase
-      .channel(`categories-changes-${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'categories',
-          filter: `user_id=eq.${user.id}`,
-        },
-        (payload) => {
-          console.log('📁 Categories change detected:', payload.eventType, payload.new)
-          // Refresh categories data
-          supabase
-            .from('categories')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('priority', { ascending: true })
-            .then(({ data, error }) => {
-              if (error) {
-                console.error('❌ Error refreshing categories:', error)
-              } else if (data) {
-                console.log('✅ Categories updated via realtime:', data.length, 'categories')
-                setCategories(data.map(dbCategoryToLocal))
-              }
-            })
-        }
-      )
-      .subscribe((status) => {
-        console.log('📁 Categories subscription status:', status)
-      })
+    try {
+      categoriesSubscription = supabase
+        .channel(`categories-changes-${user.id}-${Date.now()}`) // Add timestamp to ensure uniqueness
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'categories',
+            filter: `user_id=eq.${user.id}`,
+          },
+          (payload) => {
+            console.log('📁 Categories change detected:', payload.eventType, payload.new)
+            // Refresh categories data with current reverseMapping
+            supabase
+              .from('categories')
+              .select('*')
+              .eq('user_id', user.id)
+              .order('priority', { ascending: true })
+              .then(({ data, error }) => {
+                if (error) {
+                  console.error('❌ Error refreshing categories:', error)
+                } else if (data) {
+                  console.log('✅ Categories updated via realtime:', data.length, 'categories')
+                  setCategories(data.map(dbCategoryToLocal))
+                }
+              })
+          }
+        )
+        .subscribe((status) => {
+          console.log('📁 Categories subscription status:', status)
+        })
 
-    const itemsSubscription = supabase
-      .channel(`items-changes-${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'items',
-          filter: `user_id=eq.${user.id}`,
-        },
-        (payload) => {
-          console.log('📝 Items change detected:', payload.eventType, payload.new)
-          // Refresh items data
-          supabase
-            .from('items')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .then(({ data, error }) => {
-              if (error) {
-                console.error('❌ Error refreshing items:', error)
-              } else if (data) {
-                console.log('✅ Items updated via realtime:', data.length, 'items')
-                setItems(data.map(item => dbItemToLocal(item, reverseMapping)))
-              }
-            })
-        }
-      )
-      .subscribe((status) => {
-        console.log('📝 Items subscription status:', status)
-      })
+      itemsSubscription = supabase
+        .channel(`items-changes-${user.id}-${Date.now()}`) // Add timestamp to ensure uniqueness
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'items',
+            filter: `user_id=eq.${user.id}`,
+          },
+          (payload) => {
+            console.log('📝 Items change detected:', payload.eventType, payload.new)
+            // Refresh items data - get current reverseMapping at time of update
+            const currentReverseMapping = reverseMapping
+            supabase
+              .from('items')
+              .select('*')
+              .eq('user_id', user.id)
+              .order('created_at', { ascending: false })
+              .then(({ data, error }) => {
+                if (error) {
+                  console.error('❌ Error refreshing items:', error)
+                } else if (data) {
+                  console.log('✅ Items updated via realtime:', data.length, 'items')
+                  setItems(data.map(item => dbItemToLocal(item, currentReverseMapping)))
+                }
+              })
+          }
+        )
+        .subscribe((status) => {
+          console.log('📝 Items subscription status:', status)
+        })
+
+      // Mark subscriptions as active
+      subscriptionsActive.current = true
+      currentUserId.current = user.id
+
+    } catch (error) {
+      console.error('❌ Error setting up subscriptions:', error)
+    }
 
     return () => {
-      console.log('🔄 Unsubscribing from realtime channels')
-      categoriesSubscription.unsubscribe()
-      itemsSubscription.unsubscribe()
+      console.log('🔄 Unsubscribing from realtime channels for user:', currentUserId.current)
+      if (categoriesSubscription) {
+        categoriesSubscription.unsubscribe()
+      }
+      if (itemsSubscription) {
+        itemsSubscription.unsubscribe()
+      }
+      subscriptionsActive.current = false
+      currentUserId.current = null
     }
-  }, [user?.id, initialized, reverseMapping])
+  }, [user?.id, initialized]) // Removed reverseMapping dependency to prevent re-subscriptions
 
   // Category operations
   const createCategory = async (category: Omit<LocalCategory, 'id'>): Promise<LocalCategory | null> => {
