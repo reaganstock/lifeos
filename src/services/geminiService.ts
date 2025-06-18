@@ -3220,14 +3220,15 @@ Please specify your preference or say "create anyway" to override.`,
         success: true,
         function: 'copyRoutineFromPerson',
         result: {
-        message: `✅ Created ${createdEvents.length} events based on ${personName}'s routine for ${duration} days`,
-        eventsCreated: createdEvents.length,
-        person: personName,
-        duration: duration,
-        categoriesUsed: Array.from(new Set(createdEvents.map(e => e.categoryId))),
-        dailyActivities: routine.length
-      }
-    };
+          message: `✅ Created ${createdEvents.length} events based on ${personName}'s routine for ${duration} days`,
+          eventsCreated: createdEvents.length,
+          person: personName,
+          duration: duration,
+          categoriesUsed: Array.from(new Set(createdEvents.map((e: any) => e.categoryId))),
+          dailyActivities: routine.length
+        }
+      };
+    }
   }
 
   private async generateFullDaySchedule(args: any): Promise<any> {
@@ -3998,7 +3999,7 @@ Please specify your preference or say "create anyway" to override.`,
                 message,
                 eventsCreated: createdEvents.length,
                 errors: errors.slice(0, 3),
-                createdEvents: (supabaseEvents || createdEvents).map(e => ({
+                createdEvents: (supabaseEvents || createdEvents).map((e: any) => ({
                   id: e.id,
                   title: e.title,
                   dateTime: e.dateTime
@@ -4344,7 +4345,7 @@ Please specify "delete this one" or "delete all" to proceed.`,
                 message,
                 eventsCreated: createdEvents.length,
                 errors: errors.slice(0, 3),
-                createdEvents: (supabaseEvents || createdEvents).map(e => ({
+                createdEvents: (supabaseEvents || createdEvents).map((e: any) => ({
                   id: e.id,
                   title: e.title,
                   dateTime: e.dateTime,
