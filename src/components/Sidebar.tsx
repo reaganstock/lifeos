@@ -50,7 +50,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   const globalTabs = [
     { id: 'todos', label: 'Todos', icon: <CheckSquare className="w-5 h-5" />, color: 'text-green-600 dark:text-green-400' },
     { id: 'calendar', label: 'Calendar', icon: <Calendar className="w-5 h-5" />, color: 'text-blue-600 dark:text-blue-400' },
-    { id: 'life-categories', label: 'Life Categories', icon: <FolderOpen className="w-5 h-5" />, color: 'text-purple-600 dark:text-purple-400' },
     { id: 'goals', label: 'Goals', icon: <BowArrow className="w-5 h-5" />, color: 'text-black dark:text-gray-300' },
     { id: 'routines', label: 'Routines', icon: <RotateCcw className="w-5 h-5" />, color: 'text-orange-600 dark:text-orange-400' },
     { id: 'notes', label: 'Notes', icon: <FileText className="w-5 h-5" />, color: 'text-yellow-600 dark:text-yellow-400' }
@@ -212,7 +211,21 @@ const Sidebar: React.FC<SidebarProps> = ({
               <Home className="w-5 h-5 text-gray-600 dark:text-gray-300" />
             </button>
             
-            {/* Global Tabs - ALL of them */}
+            {/* Life Categories Manager */}
+            <button
+              onClick={() => {
+                onNavigateToGlobal('life-categories');
+                if (autoHide) setIsCollapsed(true);
+              }}
+              className={`w-full p-3 flex justify-center hover:bg-gradient-to-r hover:from-slate-100 hover:to-slate-50 dark:hover:from-slate-700 dark:hover:to-slate-800 rounded-xl mt-2 transition-all duration-300 ease-out transform hover:scale-105 hover:shadow-lg hover:shadow-slate-300/30 dark:hover:shadow-slate-900/40 ${
+                currentView === 'life-categories' ? 'bg-gradient-to-r from-purple-50 to-violet-50 dark:from-purple-900/30 dark:to-violet-900/30 shadow-md shadow-purple-200/40 dark:shadow-purple-900/20' : ''
+              }`}
+              title="Life Categories"
+            >
+              <FolderOpen className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+            </button>
+
+            {/* Global Tabs */}
             {globalTabs.map((tab) => (
               <button
                 key={tab.id}
@@ -229,7 +242,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               </button>
             ))}
 
-            {/* Top Categories */}
+            {/* User Categories */}
             {topPriorityCategories.map((category) => (
               <button
                 key={category.id}
@@ -394,7 +407,20 @@ const Sidebar: React.FC<SidebarProps> = ({
                 Dashboard
               </button>
 
-              {/* Global Tabs */}
+              {/* Life Categories Manager Button */}
+              <button
+                onClick={() => onNavigateToGlobal('life-categories')}
+                className={`w-full flex items-center px-4 py-3 rounded-xl mb-4 transition-all duration-300 ease-out transform hover:scale-[1.02] hover:shadow-lg hover:shadow-slate-300/30 dark:hover:shadow-slate-900/40 ${
+                  currentView === 'life-categories' 
+                    ? 'bg-gradient-to-r from-purple-50 to-violet-50 dark:from-purple-900/30 dark:to-violet-900/30 text-purple-700 dark:text-purple-300 border-l-4 border-purple-500 shadow-md shadow-purple-200/40 dark:shadow-purple-900/20' 
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-gradient-to-r hover:from-slate-100 hover:to-slate-50 dark:hover:from-slate-700 dark:hover:to-slate-800'
+                }`}
+              >
+                <FolderOpen className="w-5 h-5 mr-3" />
+                Life Categories
+              </button>
+
+              {/* Global Views */}
               <div className="mb-6">
                 {sidebarWidth > 200 && (
                   <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
@@ -409,7 +435,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                       currentView === tab.id
                         ? `${tab.id === 'todos' ? 'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 text-green-900 dark:text-green-300 border-l-4 border-green-500 shadow-md shadow-green-200/40 dark:shadow-green-900/20' : 
                             tab.id === 'calendar' ? 'bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/30 dark:to-cyan-900/30 text-blue-900 dark:text-blue-300 border-l-4 border-blue-500 shadow-md shadow-blue-200/40 dark:shadow-blue-900/20' :
-                            tab.id === 'life-categories' ? 'bg-gradient-to-r from-purple-50 to-violet-50 dark:from-purple-900/30 dark:to-violet-900/30 text-purple-900 dark:text-purple-300 border-l-4 border-purple-500 shadow-md shadow-purple-200/40 dark:shadow-purple-900/20' :
                             tab.id === 'goals' ? 'bg-gradient-to-r from-slate-100 to-gray-100 dark:from-slate-800/50 dark:to-gray-800/50 text-slate-800 dark:text-slate-300 border-l-4 border-slate-700 shadow-md shadow-slate-200/40 dark:shadow-slate-900/20' :
                             tab.id === 'routines' ? 'bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-900/30 dark:to-amber-900/30 text-orange-900 dark:text-orange-300 border-l-4 border-orange-500 shadow-md shadow-orange-200/40 dark:shadow-orange-900/20' :
                             tab.id === 'notes' ? 'bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/30 dark:to-amber-900/30 text-yellow-900 dark:text-yellow-300 border-l-4 border-yellow-500 shadow-md shadow-yellow-200/40 dark:shadow-yellow-900/20' :
@@ -425,61 +450,53 @@ const Sidebar: React.FC<SidebarProps> = ({
                 ))}
               </div>
 
-              {/* Life Categories Quick Access - Top 3 Priority */}
-              <div className="mb-6">
-                {sidebarWidth > 200 && (
-                  <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
-                    Top Priority Categories
-                  </h3>
-                )}
-                {topPriorityCategories.map((category) => (
-                  <button
-                    key={category.id}
-                    onClick={() => onNavigateToCategory(category.id)}
-                    className={`w-full flex items-center px-3 py-2 rounded-lg mb-1 transition-colors ${
-                      currentView === category.id
-                        ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 border-l-4 border-blue-500'
-                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                    }`}
-                    style={{
-                      borderLeftColor: currentView === category.id ? category.color : 'transparent',
-                      borderLeftWidth: currentView === category.id ? '4px' : '0px'
-                    }}
-                  >
-                    <span className="text-lg mr-3 flex-shrink-0">{category.icon}</span>
-                    <div className="flex-1 text-left min-w-0">
-                      <p className="text-sm font-medium truncate">{category.name}</p>
-                      <div className="flex items-center mt-1">
-                        <span className="inline-block w-2 h-2 bg-red-400 rounded-full mr-1 flex-shrink-0"></span>
-                        <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                          Priority {category.priority === 0 ? 'Foundation' : category.priority}
-                        </span>
-                        {category.priority <= 1 && (
-                          <Star className="w-3 h-3 text-yellow-500 fill-current ml-1 flex-shrink-0" />
-                        )}
-                      </div>
+              {/* User's Life Categories */}
+              {topPriorityCategories.length > 0 && (
+                <div className="mb-6">
+                  {sidebarWidth > 200 && (
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Life Categories
+                      </h3>
+                      <button
+                        onClick={() => onNavigateToGlobal('life-categories')}
+                        className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium transition-colors"
+                      >
+                        View All
+                      </button>
                     </div>
-                  </button>
-                ))}
-                
-                {/* View All Categories Button */}
-                {sidebarWidth > 200 ? (
-                  <button
-                    onClick={() => onNavigateToGlobal('life-categories')}
-                    className="w-full text-center px-3 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg mt-2 transition-colors"
-                  >
-                    View All Categories
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => onNavigateToGlobal('life-categories')}
-                    className="w-full flex justify-center px-3 py-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg mt-2 transition-colors"
-                    title="View All Categories"
-                  >
-                    <FolderOpen className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
+                  )}
+                  {topPriorityCategories.map((category) => (
+                    <button
+                      key={category.id}
+                      onClick={() => onNavigateToCategory(category.id)}
+                      className={`w-full flex items-center px-3 py-2 rounded-lg mb-1 transition-colors ${
+                        currentView === category.id
+                          ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 border-l-4 border-blue-500'
+                          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      }`}
+                      style={{
+                        borderLeftColor: currentView === category.id ? category.color : 'transparent',
+                        borderLeftWidth: currentView === category.id ? '4px' : '0px'
+                      }}
+                    >
+                      <span className="text-lg mr-3 flex-shrink-0">{category.icon}</span>
+                      <div className="flex-1 text-left min-w-0">
+                        <p className="text-sm font-medium truncate">{category.name}</p>
+                        <div className="flex items-center mt-1">
+                          <span className="inline-block w-2 h-2 bg-red-400 rounded-full mr-1 flex-shrink-0"></span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                            Priority {category.priority === 0 ? 'Foundation' : category.priority}
+                          </span>
+                          {category.priority <= 1 && (
+                            <Star className="w-3 h-3 text-yellow-500 fill-current ml-1 flex-shrink-0" />
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Settings */}
               <div className="pt-4 border-t border-gray-200 dark:border-gray-700">

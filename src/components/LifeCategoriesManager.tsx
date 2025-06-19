@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { FolderOpen, Plus, Edit3, Trash2, Star, ArrowUp, ArrowDown, X } from 'lucide-react';
-import { categories as initialCategories } from '../data/initialData';
+// Removed initialCategories import - users create their own categories
 import { Category } from '../types';
 import { useAuthContext } from './AuthProvider';
 import { useSupabaseData } from '../hooks/useSupabaseData';
@@ -21,7 +21,7 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
   } = useSupabaseData();
   
   // Use Supabase categories for authenticated users, localStorage for others
-  const categories = user ? supabaseCategories : initialCategories;
+  const categories = user ? supabaseCategories : [];
   
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -29,8 +29,45 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
     name: '',
     icon: '📁',
     color: '#74B9FF',
-    priority: 6
+    priority: 0
   });
+
+  // Function to get the next available priority
+  const getNextAvailablePriority = () => {
+    const existingPriorities = categories.map(cat => cat.priority).sort((a, b) => a - b);
+    for (let i = 0; i <= 10; i++) {
+      if (!existingPriorities.includes(i)) {
+        return i;
+      }
+    }
+    // If all priorities 0-10 are taken, return the highest + 1
+    return Math.max(...existingPriorities, 0) + 1;
+  };
+
+  // Function to validate priority input
+  const validatePriority = (value: string, currentCategoryId?: string) => {
+    const numValue = parseInt(value);
+    
+    // Handle invalid inputs
+    if (isNaN(numValue) || value === '') {
+      return getNextAvailablePriority();
+    }
+    
+    // Clamp to valid range
+    const clampedValue = Math.max(0, Math.min(10, numValue));
+    
+    // Check for duplicates (excluding current category if editing)
+    const isDuplicate = categories.some(cat => 
+      cat.priority === clampedValue && 
+      (!currentCategoryId || cat.id !== currentCategoryId)
+    );
+    
+    if (isDuplicate) {
+      return getNextAvailablePriority();
+    }
+    
+    return clampedValue;
+  };
 
   const handleAddCategory = async () => {
     if (!newCategory.name.trim()) return;
@@ -49,7 +86,7 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
       const result = await createCategory(categoryData);
       if (result) {
         console.log('✅ Category created successfully:', result.name);
-        setNewCategory({ name: '', icon: '📁', color: '#74B9FF', priority: 6 });
+        setNewCategory({ name: '', icon: '📁', color: '#74B9FF', priority: getNextAvailablePriority() });
         setShowAddForm(false);
       } else {
         console.error('❌ Failed to create category');
@@ -96,7 +133,7 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
       if (success) {
         console.log('✅ Category updated successfully');
         setEditingCategory(null);
-        setNewCategory({ name: '', icon: '📁', color: '#74B9FF', priority: 6 });
+        setNewCategory({ name: '', icon: '📁', color: '#74B9FF', priority: getNextAvailablePriority() });
         setShowAddForm(false);
       } else {
         console.error('❌ Failed to update category');
@@ -125,21 +162,52 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
   };
 
   const adjustPriority = async (categoryId: string, direction: 'up' | 'down') => {
-    if (user) {
-      const category = categories.find(cat => cat.id === categoryId);
-      if (category) {
-        const newPriority = direction === 'up' ? Math.max(0, category.priority - 1) : category.priority + 1;
-        const success = await updateCategory(categoryId, { priority: newPriority });
-        if (success) {
-          console.log('✅ Category priority updated successfully');
-        } else {
-          console.error('❌ Failed to update category priority');
-          alert('Failed to update category priority. Please try again.');
-        }
-      }
-    } else {
+    if (!user) {
       console.warn('⚠️ Cannot adjust priority for unauthenticated users');
       alert('Please sign in to adjust category priorities');
+      return;
+    }
+
+    const category = categories.find(cat => cat.id === categoryId);
+    if (!category) return;
+
+    const sortedCategories = [...categories].sort((a, b) => a.priority - b.priority);
+    const currentIndex = sortedCategories.findIndex(cat => cat.id === categoryId);
+    
+    if (direction === 'up' && currentIndex === 0) {
+      // Already at the top
+      return;
+    }
+    
+    if (direction === 'down' && currentIndex === sortedCategories.length - 1) {
+      // Already at the bottom
+      return;
+    }
+
+    // Calculate new positions to swap with adjacent category
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    const targetCategory = sortedCategories[targetIndex];
+    
+    // Swap priorities between the two categories
+    const newPriority = targetCategory.priority;
+    const targetNewPriority = category.priority;
+    
+    try {
+      // Update both categories to swap their priorities
+      const [success1, success2] = await Promise.all([
+        updateCategory(categoryId, { priority: newPriority }),
+        updateCategory(targetCategory.id, { priority: targetNewPriority })
+      ]);
+      
+      if (success1 && success2) {
+        console.log('✅ Category priorities swapped successfully');
+      } else {
+        console.error('❌ Failed to swap category priorities');
+        alert('Failed to update category priorities. Please try again.');
+      }
+    } catch (error) {
+      console.error('❌ Error swapping priorities:', error);
+      alert('Failed to update category priorities. Please try again.');
     }
   };
 
@@ -148,44 +216,6 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
   const commonIcons = ['📱', '💪', '🏋️', '✝️', '📝', '🗣️', '⚖️', '🎯', '💼', '🎨', '🏠', '💰', '🌱', '🧠', '❤️'];
   const commonColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#74B9FF', '#FD79A8', '#FDCB6E', '#6C5CE7'];
 
-  // Quick add 3 categories functionality
-  const handleQuickAdd3Categories = async () => {
-    if (!user) {
-      alert('Please sign in to create categories');
-      return;
-    }
-
-    const quickCategories = [
-      { name: 'Health & Fitness', icon: '💪', color: '#4ECDC4' },
-      { name: 'Career & Business', icon: '💼', color: '#45B7D1' },
-      { name: 'Personal Growth', icon: '🌱', color: '#96CEB4' }
-    ];
-
-    let successCount = 0;
-    for (let index = 0; index < quickCategories.length; index++) {
-      const cat = quickCategories[index];
-      const categoryData = {
-        name: cat.name,
-        icon: cat.icon,
-        color: cat.color,
-        priority: categories.length + index + 1,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-
-      const result = await createCategory(categoryData);
-      if (result) {
-        successCount++;
-        console.log('✅ Quick category created:', cat.name);
-      }
-    }
-
-    if (successCount === quickCategories.length) {
-      console.log('✅ All quick categories created successfully');
-    } else {
-      alert(`Created ${successCount} of ${quickCategories.length} categories. Some may have failed.`);
-    }
-  };
 
   // Show loading state while data is being fetched
   if (user && loading) {
@@ -255,16 +285,15 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
               </div>
               <div className="flex items-center space-x-3">
                 <button
-                  onClick={handleQuickAdd3Categories}
-                  className="group relative overflow-hidden bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white px-6 py-4 rounded-2xl flex items-center transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
-                >
-                  <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
-                  <span className="text-xl mr-2 relative z-10">⚡</span>
-                  <span className="font-semibold relative z-10 text-sm">Quick +3</span>
-                </button>
-
-                <button
-                  onClick={() => setShowAddForm(true)}
+                  onClick={() => {
+                    setNewCategory({ 
+                      name: '', 
+                      icon: '📁', 
+                      color: '#74B9FF', 
+                      priority: getNextAvailablePriority() 
+                    });
+                    setShowAddForm(true);
+                  }}
                   className="group relative overflow-hidden bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white px-8 py-4 rounded-2xl flex items-center transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
                 >
                   <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
@@ -290,7 +319,7 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
                     onClick={() => {
                       setShowAddForm(false);
                       setEditingCategory(null);
-                      setNewCategory({ name: '', icon: '📁', color: '#74B9FF', priority: 6 });
+                      setNewCategory({ name: '', icon: '📁', color: '#74B9FF', priority: getNextAvailablePriority() });
                     }}
                     className="p-2 hover:bg-white/20 rounded-xl transition-colors"
                   >
@@ -319,9 +348,12 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
                       min="0"
                       max="10"
                       value={newCategory.priority}
-                      onChange={(e) => setNewCategory({ ...newCategory, priority: parseInt(e.target.value) })}
+                      onChange={(e) => setNewCategory({ ...newCategory, priority: validatePriority(e.target.value, editingCategory?.id) })}
                       className="w-full px-4 py-4 bg-gray-50/50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all duration-300"
                     />
+                    <p className="text-xs text-gray-500 mt-2">
+                      Lower numbers = higher priority. Duplicates are automatically adjusted to next available slot.
+                    </p>
                   </div>
                 </div>
                 
@@ -377,7 +409,7 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
                   onClick={() => {
                     setShowAddForm(false);
                     setEditingCategory(null);
-                    setNewCategory({ name: '', icon: '📁', color: '#74B9FF', priority: 6 });
+                    setNewCategory({ name: '', icon: '📁', color: '#74B9FF', priority: getNextAvailablePriority() });
                   }}
                   className="flex-1 px-6 py-4 bg-gray-100 text-gray-700 rounded-2xl hover:bg-gray-200 transition-all duration-300 font-semibold"
                 >

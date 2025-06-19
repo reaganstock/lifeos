@@ -5,20 +5,11 @@
       "args": [
         "-y",
         "@supabase/mcp-server-supabase@latest",
-        "--access-token",
-        "sbp_8c0e14362e66ff2fa97a9673714c1dd548ad83df"
-      ]
-    },
-    "browsermcp": {
-      "command": "npx",
-      "args": ["@browsermcp/mcp@latest"]
-    },
-    "n8n": {
-      "command": "n8n-mcp-server",
+        "--project-ref=upkyravoehbslbywitar"
+      ],
       "env": {
-        "N8N_API_URL": "http://localhost:5678/api/v1",
-        "N8N_API_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0MDJmYmU2ZS0xMTNhLTQ1MjgtODA2Zi01MTliMzllNDM2MzgiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzUwMTg0NTE1LCJleHAiOjE3NTI3MjQ4MDB9.Hme0R76jzfiUBzrDk50pSM9gXdtthSGeK4OcbQDolBs"
+        "SUPABASE_ACCESS_TOKEN": "sbp_cc095cfc8b322299a309f7b8514baf368927bea2"
       }
     }
   }
-}
+} 

@@ -15,6 +15,16 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* @mentions styling */
+.context-aware-input {
+  font-family: inherit;
+}
+
+/* Style @mentions to be bold and highlighted */
+.context-aware-input::placeholder {
+  font-weight: normal;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;

@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CheckSquare, Filter, Plus, Calendar, Clock, Flag, X, Edit3, Save, Check, Copy } from 'lucide-react';
-import { categories } from '../data/initialData';
-import { Item } from '../types';
+import { CheckSquare, Filter, Plus, Calendar, Clock, Flag, X, Edit3, Save, Check, Copy, Trash2 } from 'lucide-react';
+import { Item, Category } from '../types';
 import { copyToClipboard, showCopyFeedback } from '../utils/clipboard';
 
 interface GlobalTodosProps {
   items: Item[];
   setItems: React.Dispatch<React.SetStateAction<Item[]>>;
+  categories: Category[];
 }
 
-const GlobalTodos: React.FC<GlobalTodosProps> = ({ items, setItems }) => {
+const GlobalTodos: React.FC<GlobalTodosProps> = ({ items, setItems, categories }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingTodo, setEditingTodo] = useState<string | null>(null);
@@ -19,7 +19,7 @@ const GlobalTodos: React.FC<GlobalTodosProps> = ({ items, setItems }) => {
   const [newTodo, setNewTodo] = useState({
     title: '',
     text: '',
-    categoryId: 'self-regulation',
+    categoryId: categories[0]?.id || '',
     dueDate: '',
     priority: 'medium' as 'low' | 'medium' | 'high'
   });
@@ -121,7 +121,7 @@ const GlobalTodos: React.FC<GlobalTodosProps> = ({ items, setItems }) => {
     setNewTodo({
       title: '',
       text: '',
-      categoryId: 'self-regulation',
+      categoryId: categories[0]?.id || '',
       dueDate: '',
       priority: 'medium'
     });
@@ -499,9 +499,9 @@ const GlobalTodos: React.FC<GlobalTodosProps> = ({ items, setItems }) => {
                               e.stopPropagation();
                               startEditingTodo(todo);
                             }}
-                            className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                            className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
                           >
-                            <Edit3 className="w-4 h-4 text-gray-600" />
+                            <Edit3 className="w-4 h-4 text-yellow-600" />
                           </button>
                         )}
                         <button
@@ -511,7 +511,7 @@ const GlobalTodos: React.FC<GlobalTodosProps> = ({ items, setItems }) => {
                           }}
                           className="p-2 hover:bg-red-100 rounded-lg transition-colors"
                         >
-                          <X className="w-4 h-4 text-red-500" />
+                          <Trash2 className="w-4 h-4 text-red-500" />
                         </button>
                       </div>
                     </div>

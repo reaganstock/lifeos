@@ -1,5 +1,5 @@
 import { Item } from '../types';
-import { categories } from '../data/initialData';
+// Removed categories import - using dynamic categories from context
 
 // Gemini API Configuration
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta';
@@ -232,8 +232,8 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
                 return acc;
               }, {});
               const breakdown = Object.entries(itemsByType).map(([type, count]) => `${count} ${type}${count === 1 ? '' : 's'}`).join(', ');
-              const categories = Array.from(new Set(items.map((item: any) => item.categoryId)));
-              return `Created ${createdCount} items: ${breakdown} across ${categories.length} categories (${categories.join(', ')})`;
+              const itemCategories = Array.from(new Set(items.map((item: any) => item.categoryId)));
+              return `Created ${createdCount} items: ${breakdown} across ${itemCategories.length} categories (${itemCategories.join(', ')})`;
             } else if (funcName === 'updateItem' && items.length > 0) {
               const item = items[0];
               return `Updated ${item.type}: "${item.title}"`;
@@ -341,6 +341,11 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
     const upcomingEvents = existingEvents.filter(event => 
       event.dateTime && new Date(event.dateTime) >= today
     ).slice(0, 10); // Show next 10 events for context
+
+    // Get unique categories from current items (since users create their own categories)
+    const uniqueCategories = Array.from(new Set(items.map(item => item.categoryId)))
+      .filter(categoryId => categoryId) // Remove empty/null category IDs
+      .map(categoryId => ({ id: categoryId, name: categoryId })); // Simple mapping since we don't have category details here
 
     return `You are an AI assistant for lifeOS, a comprehensive life management system. 
 
@@ -703,7 +708,7 @@ Remember: Execute actions immediately via function calls. Be intelligent, specif
 
 CURRENT ITEMS CONTEXT (${items.length} total):
 ${items.length > 0 ? items.slice(0, 20).map(item => {
-  const category = categories.find(c => c.id === item.categoryId);
+  const category = uniqueCategories.find(c => c.id === item.categoryId);
   const dueInfo = item.dueDate ? ` (due: ${item.dueDate.toLocaleDateString()})` : '';
   const completedInfo = item.completed ? ' ✓' : '';
   const progressInfo = item.metadata?.progress ? ` (${item.metadata.progress}%)` : '';
@@ -715,7 +720,7 @@ ${items.length > 0 ? items.slice(0, 20).map(item => {
     contentPreview = ` | Content: "${preview}"`;
   }
   
-  return `• ID: ${item.id} | ${item.type.toUpperCase()}: "${item.title}"${dueInfo}${completedInfo}${progressInfo} [${category?.name || 'Unknown'}]${contentPreview}`;
+  return `• ID: ${item.id} | ${item.type.toUpperCase()}: "${item.title}"${dueInfo}${completedInfo}${progressInfo} [${category?.name || item.categoryId || 'Unknown'}]${contentPreview}`;
 }).join('\n') : 'No items yet'}${items.length > 20 ? `\n... and ${items.length - 20} more items` : ''}
 
 CRITICAL ID-TO-ITEM MAPPING:

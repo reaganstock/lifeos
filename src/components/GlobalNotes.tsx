@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { StickyNote, Plus, Search, Mic, MicOff, Play, Pause, Camera, X, Edit3, Save, Maximize2, Trash2, Loader2 } from 'lucide-react';
-import { categories } from '../data/initialData';
-import { Item } from '../types';
+import { FileText, Plus, Search, Mic, MicOff, Play, Pause, Camera, X, Edit3, Save, Maximize2, Trash2, Loader2 } from 'lucide-react';
+import { Item, Category } from '../types';
 import { voiceService, VoiceRecording } from '../services/voiceService';
 import { AIService } from '../services/aiService';
 import { chatService } from '../services/ChatService';
@@ -11,9 +10,10 @@ import { copyToClipboard, showCopyFeedback } from '../utils/clipboard';
 interface GlobalNotesProps {
   items: Item[];
   setItems: React.Dispatch<React.SetStateAction<Item[]>>;
+  categories: Category[];
 }
 
-const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems }) => {
+const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
@@ -39,7 +39,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems }) => {
   const [newNote, setNewNote] = useState({
     title: '',
     text: '',
-    categoryId: 'self-regulation',
+    categoryId: categories[0]?.id || '',
     voice: null as Blob | null,
     voiceRecordings: [] as Array<{ id: string; blob: Blob; transcription?: string; isTranscribing?: boolean; customTitle?: string }>,
     transcription: '',
@@ -353,7 +353,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems }) => {
     setNewNote({
       title: '',
       text: '',
-      categoryId: 'self-regulation',
+      categoryId: categories[0]?.id || '',
       voice: null,
       voiceRecordings: [],
       transcription: '',
@@ -701,8 +701,8 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems }) => {
           <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-4xl font-bold bg-gradient-to-r from-yellow-600 to-orange-500 bg-clip-text text-transparent flex items-center">
-                  <StickyNote className="w-10 h-10 text-yellow-600 mr-4" />
+                <h1 className="text-4xl font-bold bg-gradient-to-r from-orange-600 to-yellow-500 bg-clip-text text-transparent flex items-center">
+                  <FileText className="w-10 h-10 text-yellow-600 mr-4" />
                   Notes
                 </h1>
                 <p className="text-gray-600 mt-2 text-lg">
@@ -712,7 +712,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems }) => {
               <div className="flex space-x-3">
                 <button
                   onClick={() => setShowAddForm(true)}
-                  className="group relative overflow-hidden bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white px-8 py-4 rounded-2xl flex items-center transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
+                  className="group relative overflow-hidden bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white px-8 py-4 rounded-2xl flex items-center transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
                 >
                   <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
                   <Plus className="w-5 h-5 mr-3 relative z-10" />
@@ -918,7 +918,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems }) => {
                             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                             title="Copy ID for AI chat"
                           >
-                            <StickyNote className="w-4 h-4 text-gray-500" />
+                            <FileText className="w-4 h-4 text-gray-500" />
                           </button>
                           <button
                             onClick={(e) => {
@@ -986,9 +986,9 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems }) => {
                               e.stopPropagation();
                               startEditing(note);
                             }}
-                            className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
+                            className="p-2 hover:bg-orange-100 rounded-lg transition-colors"
                           >
-                            <Edit3 className="w-4 h-4 text-yellow-600" />
+                            <Edit3 className="w-4 h-4 text-orange-600" />
                           </button>
                         </>
                       )}
@@ -1138,7 +1138,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems }) => {
                                     }}
                                     className="w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"
                                   >
-                                    <X className="w-4 h-4" />
+                                    <Trash2 className="w-4 h-4" />
                                   </button>
                                 </div>
                                 
@@ -1267,7 +1267,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems }) => {
           <div className="text-center py-20">
             <div className="bg-white/60 backdrop-blur-xl rounded-3xl shadow-xl border border-white/30 p-12 max-w-md mx-auto">
               <div className="w-20 h-20 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                <StickyNote className="w-10 h-10 text-white" />
+                <FileText className="w-10 h-10 text-white" />
               </div>
               <h3 className="text-2xl font-bold text-gray-800 mb-4">No notes yet</h3>
               <p className="text-gray-600 mb-8 leading-relaxed">
@@ -1278,7 +1278,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems }) => {
               </p>
               <button
                 onClick={() => setShowAddForm(true)}
-                className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white px-8 py-4 rounded-2xl transition-all duration-300 transform hover:scale-105 shadow-lg"
+                className="bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white px-8 py-4 rounded-2xl transition-all duration-300 transform hover:scale-105 shadow-lg"
               >
                 <Plus className="w-5 h-5 mr-3 inline" />
                 Create Your First Note
@@ -1293,7 +1293,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems }) => {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/30 max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
             {/* Header */}
-            <div className="bg-gradient-to-r from-yellow-500 to-orange-500 p-6 text-white flex-shrink-0">
+            <div className="bg-gradient-to-r from-orange-500 to-yellow-500 p-6 text-white flex-shrink-0">
               <div className="flex items-center justify-between">
                 <h3 className="text-2xl font-bold">New Note</h3>
                 <div className="flex items-center space-x-2">
@@ -1597,7 +1597,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems }) => {
                                 }}
                                 className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-600 transform hover:scale-110"
                           >
-                            <X className="w-3 h-3" />
+                            <Trash2 className="w-3 h-3" />
                           </button>
                               
                           <div className="absolute bottom-1 left-1 bg-black/50 text-white text-xs px-1 rounded">
@@ -1645,7 +1645,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems }) => {
               <button
                 onClick={handleAddNote}
                 disabled={!newNote.text.trim() && !newNote.voice && !newNote.images.length}
-                className="flex-1 px-6 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-2xl hover:from-yellow-600 hover:to-orange-600 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 shadow-lg font-semibold"
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-orange-500 to-yellow-500 text-white rounded-2xl hover:from-orange-600 hover:to-yellow-600 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 shadow-lg font-semibold"
               >
                 Save Note
               </button>
@@ -1757,10 +1757,10 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems }) => {
                               startEditing(editingNote);
                             }
                           }}
-                          className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
+                          className="p-2 hover:bg-orange-100 rounded-lg transition-colors"
                           title="Edit in card view"
                         >
-                          <Edit3 className="w-5 h-5 text-yellow-600" />
+                          <Edit3 className="w-5 h-5 text-orange-600" />
                 </button>
                       </>
                     );
@@ -1781,7 +1781,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems }) => {
               <button
                 onClick={handleAddNote}
                 disabled={!newNote.text.trim() && !newNote.voice && !newNote.images.length}
-                className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 disabled:from-gray-300 disabled:to-gray-400 text-white rounded-lg disabled:cursor-not-allowed transition-all"
+                className="px-4 py-2 bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 disabled:from-gray-300 disabled:to-gray-400 text-white rounded-lg disabled:cursor-not-allowed transition-all"
               >
                   {editingNoteId ? 'Update' : 'Save'}
               </button>
@@ -1887,7 +1887,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems }) => {
                               }}
                             className="w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"
                           >
-                            <X className="w-4 h-4" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                           

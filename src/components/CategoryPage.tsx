@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Plus, Search, CalendarDays, MapPin, Clock, Target, Repeat, ChevronDown, ChevronUp, Calendar, Mic, MicOff, Play, Pause, Camera, Edit3, Save, X, MoreHorizontal, Maximize2, Trash2, CheckCircle, CheckCircle2, Circle, Star, Users, MessageSquare, Bookmark, Heart, Share, Eye, Loader2, FileText, RotateCcw, BowArrow, Link, ExternalLink, FolderOpen, Globe } from 'lucide-react';
-import { categories } from '../data/initialData';
 import { Item, Category } from '../types';
 import { voiceService, VoiceRecording, TranscriptionResult } from '../services/voiceService';
 import LocalCategoryNotes from './LocalCategoryNotes';
@@ -10,9 +9,11 @@ interface CategoryPageProps {
   onBack: () => void;
   items: Item[];
   setItems: React.Dispatch<React.SetStateAction<Item[]>>;
+  categories: Category[];
+  isGlobalAIAssistantOpen?: boolean;
 }
 
-const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, setItems }) => {
+const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, setItems, categories, isGlobalAIAssistantOpen }) => {
   const [activeTab, setActiveTab] = useState<Item['type']>('todo');
   const [showAddModal, setShowAddModal] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -129,6 +130,32 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
 
   const category = categories.find(c => c.id === categoryId);
   const categoryItems = items.filter(item => item.categoryId === categoryId);
+
+  // Handle category not found
+  if (!category) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-blue-900 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-8">
+          <div className="w-20 h-20 bg-gradient-to-br from-red-500 to-pink-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl">
+            <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.864-.833-2.634 0L4.18 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+          </div>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Category Not Found</h2>
+          <p className="text-gray-600 dark:text-gray-300 mb-6 text-lg">
+            The category you're looking for doesn't exist or may have been deleted.
+          </p>
+          <button
+            onClick={onBack}
+            className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+          >
+            <ArrowLeft className="w-5 h-5 mr-2" />
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const tabs: { type: Item['type']; label: string; icon: React.ReactNode; gradient: string }[] = [
     { type: 'todo', label: 'Todos', icon: <CheckCircle className="w-5 h-5" />, gradient: 'from-green-500 to-emerald-500' },
@@ -1234,9 +1261,9 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
                                 e.stopPropagation();
                                 startEditingItem(item);
                               }}
-                              className="p-2 hover:bg-amber-100 rounded-lg transition-colors"
+                              className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
                             >
-                              <Edit3 className="w-4 h-4 text-amber-600" />
+                              <Edit3 className="w-4 h-4 text-yellow-600" />
                             </button>
                           )}
                           <button
@@ -1489,7 +1516,9 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
             categoryId={categoryId} 
             items={items} 
             setItems={setItems} 
+            categories={categories}
             onAIAssistantToggle={setIsAIAssistantOpen}
+            isGlobalAIAssistantOpen={isGlobalAIAssistantOpen}
           />
         );
 
@@ -1714,9 +1743,9 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
                                 e.stopPropagation();
                                 handleEditFromFullscreen(item.id, item);
                               }}
-                              className="p-2 hover:bg-amber-100 rounded-lg transition-colors"
+                              className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
                             >
-                              <Edit3 className="w-4 h-4 text-amber-600" />
+                              <Edit3 className="w-4 h-4 text-yellow-600" />
                             </button>
                           </>
                         )}
@@ -2026,7 +2055,7 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
                                   onClick={() => deleteLink(link.id)}
                                   className="p-1 hover:bg-red-100 rounded opacity-0 group-hover:opacity-100 transition-opacity"
                                 >
-                                  <X className="w-3 h-3 text-red-600" />
+                                  <Trash2 className="w-3 h-3 text-red-600" />
                                 </button>
                               </div>
                             ))}

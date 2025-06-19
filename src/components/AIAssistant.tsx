@@ -13,6 +13,7 @@ import FunctionConfirmationCard from './FunctionConfirmationCard';
 import { GeminiLiveService } from '../services/geminiLiveService';
 import { openaiRealtimeService } from '../services/openaiRealtimeService';
 import { geminiService } from '../services/geminiService';
+import ContextAwareInput, { ContextAwareInputRef } from './ContextAwareInput';
 
 // Helper function to clean markdown formatting from messages
 const cleanMarkdownFormatting = (text: string): string => {
@@ -188,6 +189,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [isAgenticMode, setIsAgenticMode] = useState(false);
   
   // Function calling states
   const [isProcessingFunction, setIsProcessingFunction] = useState(false);
@@ -381,7 +383,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   const [dragCounter, setDragCounter] = useState(0);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<ContextAwareInputRef>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resizeHandleRef = useRef<HTMLDivElement>(null);
@@ -452,6 +454,18 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
       disconnectVoiceService();
     };
   }, []);
+
+  // Persist agentic mode state
+  useEffect(() => {
+    const savedAgenticMode = localStorage.getItem('aiAssistantAgenticMode');
+    if (savedAgenticMode === 'true') {
+      setIsAgenticMode(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('aiAssistantAgenticMode', isAgenticMode.toString());
+  }, [isAgenticMode]);
 
   // Voice mode canvas animation
   const drawVoiceOrb = useCallback(() => {
@@ -1128,34 +1142,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     }
   }, [selectedGeminiVoice]);
 
-  // Handle textarea resize when input message changes (e.g., from voice transcription)
-  useEffect(() => {
-    if (inputRef.current) {
-      const target = inputRef.current;
-      
-      // Always reset height and overflow first
-      target.style.height = '48px';
-      target.style.overflowY = 'hidden';
-      
-      // If empty, keep minimum height
-      if (!inputMessage) {
-        return;
-      }
-      
-      // Calculate max height
-      const maxHeight = Math.min(window.innerHeight * 0.24 - 100, 280);
-      
-      // Calculate new height based on scroll height
-      const newHeight = Math.min(Math.max(target.scrollHeight, 48), maxHeight);
-      target.style.height = newHeight + 'px';
-      
-      // Enable scrolling if needed and scroll to bottom
-      if (target.scrollHeight > maxHeight) {
-        target.style.overflowY = 'auto';
-        target.scrollTop = target.scrollHeight;
-      }
-    }
-  }, [inputMessage]);
+  // Note: Textarea resize handling is now handled internally by ContextAwareInput component
 
   // Sidebar resize handlers
   const handleResizeMouseDown = (e: React.MouseEvent) => {
@@ -1248,9 +1235,27 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     
     if (!messageToSend && !hasImages) return;
 
+    // Process @mentions: enhance @ItemName with ID lookup for AI precision
+    const processedMessage = messageToSend.replace(/@([^\s]+)/g, (match, itemName) => {
+      // Find the item by name to get the ID
+      const foundItem = items.find(item => 
+        item.title.toLowerCase() === itemName.toLowerCase() ||
+        item.title.toLowerCase().replace(/[^a-z0-9]/g, '') === itemName.toLowerCase().replace(/[^a-z0-9]/g, '')
+      );
+      
+      if (foundItem) {
+        // For AI, provide both name and ID for precision
+        return `@${foundItem.title} (ID: ${foundItem.id})`;
+      }
+      
+      // If no item found, keep original mention
+      return match;
+    });
+
     // COMPREHENSIVE DEBUG - Let's see what's actually happening
     console.log('🐛 COMPREHENSIVE DEBUG - handleSendMessage');
-    console.log('🐛 messageToSend:', messageToSend);
+    console.log('🐛 original messageToSend:', messageToSend);
+    console.log('🐛 processed messageToSend:', processedMessage);
     console.log('🐛 currentNoteContent:', currentNoteContent);
     console.log('🐛 currentNoteContent type:', typeof currentNoteContent);
     console.log('🐛 currentNoteContent !== undefined?', currentNoteContent !== undefined);
@@ -1306,7 +1311,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
         }
       }
     
-      // Add user message
+      // Add user message (store original with @mentions for display, send processed to AI)
       await chatService.addMessage('user', messageToSend);
 
       // In fullscreen note mode, handle everything as normal chat but with note context
@@ -1336,7 +1341,7 @@ You can:
 4. Help brainstorm ideas related to the current note content
 5. ONLY modify THIS note if explicitly requested (using updateItem)
 
-User message: ${messageToSend}`;
+User message: ${processedMessage}`;
 
         console.log('🔧 Fullscreen note mode - processing message:', processMessage);
 
@@ -1353,15 +1358,71 @@ User message: ${messageToSend}`;
 
         // Check if there's a pending function call
         if (response.pendingFunctionCall) {
-          setPendingFunctionCall(response.pendingFunctionCall);
-          
-          // Add AI response with function call preview
-          let aiResponse = response.message;
-          if (hasImages) {
-            aiResponse = `I can see the image${selectedImages.length > 1 ? 's' : ''} you uploaded. ${response.message}`;
+          if (isAgenticMode) {
+            // In agentic mode, automatically execute function calls
+            console.log('🤖 Agentic mode (note): Auto-executing function call:', response.pendingFunctionCall);
+            
+            try {
+              const autoResult = await geminiService.executeFunctionWithContext(
+                response.pendingFunctionCall.name,
+                response.pendingFunctionCall.args,
+                items,
+                categories
+              );
+              
+              // Add AI response indicating autonomous action
+              let aiResponse = `🤖 **Agentic Mode**: ${response.message}`;
+              if (hasImages) {
+                aiResponse = `I can see the image${selectedImages.length > 1 ? 's' : ''} you uploaded. ${aiResponse}`;
+              }
+              
+              await chatService.addMessage('assistant', aiResponse);
+              
+              // Add system message about auto-execution
+              if (autoResult.success) {
+                await chatService.addMessage('system', `✅ **Auto-executed**: ${autoResult.message || 'Action completed successfully'}`);
+                if (autoResult.itemsModified) {
+                  // Handle note content updates in fullscreen mode
+                  setTimeout(() => {
+                    try {
+                      const storedItems = JSON.parse(localStorage.getItem('georgetownAI_items') || '[]');
+                      const currentNote = storedItems.find((item: any) => 
+                        item.type === 'note' && 
+                        ((currentNoteTitle && item.title === currentNoteTitle) ||
+                         (currentNoteContent && item.text && item.text.includes(currentNoteContent.substring(0, 50))))
+                      );
+                      
+                      if (currentNote && currentNote.text !== currentNoteContent) {
+                        console.log('🤖 Agentic mode: Refreshing note content after auto-execution');
+                        onUpdateNoteContent?.(currentNote.text);
+                        if (currentNote.title !== currentNoteTitle) {
+                          onUpdateNoteTitle?.(currentNote.title);
+                        }
+                      }
+                    } catch (error) {
+                      console.error('🤖 Agentic mode note update error:', error);
+                    }
+                  }, 200);
+                }
+              } else {
+                await chatService.addMessage('system', `❌ **Auto-execution failed**: ${autoResult.message || 'Unknown error'}`);
+              }
+            } catch (error) {
+              console.error('❌ Agentic mode auto-execution error (note):', error);
+              await chatService.addMessage('system', `❌ **Auto-execution error**: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
+          } else {
+            // Normal mode: show confirmation dialog
+            setPendingFunctionCall(response.pendingFunctionCall);
+            
+            // Add AI response with function call preview
+            let aiResponse = response.message;
+            if (hasImages) {
+              aiResponse = `I can see the image${selectedImages.length > 1 ? 's' : ''} you uploaded. ${response.message}`;
+            }
+            
+            await chatService.addMessage('assistant', aiResponse);
           }
-          
-          await chatService.addMessage('assistant', aiResponse);
         } else {
           // In note mode, if AI modified items, check if it was the current note
           if (response.itemsModified) {
@@ -1406,7 +1467,7 @@ User message: ${messageToSend}`;
         const currentCategoryId = categories.find(cat => cat.id === currentView)?.id;
         
         // For now, we'll process text normally. In a real app, you'd send images to your AI service
-        let processMessage = messageToSend;
+        let processMessage = processedMessage;
         if (hasImages && !messageToSend) {
           processMessage = "I've uploaded some images. Can you help me with them?";
         }
@@ -1448,15 +1509,51 @@ User message: ${messageToSend}`;
 
         // Check if there's a pending function call
         if (response.pendingFunctionCall) {
-          setPendingFunctionCall(response.pendingFunctionCall);
-          
-          // Add AI response with function call preview
-          let aiResponse = response.message;
-          if (hasImages) {
-            aiResponse = `I can see the image${selectedImages.length > 1 ? 's' : ''} you uploaded. ${response.message}`;
+          if (isAgenticMode) {
+            // In agentic mode, automatically execute function calls
+            console.log('🤖 Agentic mode (regular): Auto-executing function call:', response.pendingFunctionCall);
+            
+            try {
+              const autoResult = await geminiService.executeFunctionWithContext(
+                response.pendingFunctionCall.name,
+                response.pendingFunctionCall.args,
+                items,
+                categories
+              );
+              
+              // Add AI response indicating autonomous action
+              let aiResponse = `🤖 **Agentic Mode**: ${response.message}`;
+              if (hasImages) {
+                aiResponse = `I can see the image${selectedImages.length > 1 ? 's' : ''} you uploaded. ${aiResponse}`;
+              }
+              
+              await chatService.addMessage('assistant', aiResponse);
+              
+              // Add system message about auto-execution
+              if (autoResult.success) {
+                await chatService.addMessage('system', `✅ **Auto-executed**: ${autoResult.message || 'Action completed successfully'}`);
+                if (autoResult.itemsModified) {
+                  onRefreshItems();
+                }
+              } else {
+                await chatService.addMessage('system', `❌ **Auto-execution failed**: ${autoResult.message || 'Unknown error'}`);
+              }
+            } catch (error) {
+              console.error('❌ Agentic mode auto-execution error (regular):', error);
+              await chatService.addMessage('system', `❌ **Auto-execution error**: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
+          } else {
+            // Normal mode: show confirmation dialog
+            setPendingFunctionCall(response.pendingFunctionCall);
+            
+            // Add AI response with function call preview
+            let aiResponse = response.message;
+            if (hasImages) {
+              aiResponse = `I can see the image${selectedImages.length > 1 ? 's' : ''} you uploaded. ${response.message}`;
+            }
+            
+            await chatService.addMessage('assistant', aiResponse);
           }
-          
-          await chatService.addMessage('assistant', aiResponse);
         } else {
           // Handle item creation (legacy support)
           if (response.itemCreated && !response.itemCreated.item) {
@@ -1734,6 +1831,22 @@ User message: ${messageToSend}`;
               </button>
               
               <button
+                onClick={() => setIsAgenticMode(!isAgenticMode)}
+                className={`p-2 rounded-lg transition-all hover:scale-110 ${
+                  isAgenticMode 
+                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600' 
+                    : (isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100')
+                }`}
+                title={`${isAgenticMode ? 'Disable' : 'Enable'} Agentic Mode - AI takes autonomous actions`}
+              >
+                <Zap className={`w-4 h-4 ${
+                  isAgenticMode 
+                    ? 'text-white' 
+                    : (isDarkMode ? 'text-gray-300' : 'text-gray-600')
+                }`} />
+              </button>
+              
+              <button
                 onClick={createNewSession}
                 className={`p-2 rounded-lg transition-all hover:scale-110 ${
                   isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
@@ -1785,7 +1898,36 @@ User message: ${messageToSend}`;
             <div className="flex items-center justify-between relative z-10">
               <div className="flex items-center space-x-2">
                 <Zap className="w-4 h-4 text-indigo-500" />
-                <span>Current: <span className="font-semibold text-indigo-600">{currentView}</span></span>
+                <span>Current: <span className="font-semibold text-indigo-600">
+                  {(() => {
+                    // Find category name from ID, or use view name directly
+                    const category = categories.find(cat => cat.id === currentView);
+                    if (category) return category.name;
+                    
+                    // Handle special views
+                    switch (currentView) {
+                      case 'dashboard': return 'Dashboard';
+                      case 'todos': return 'Global Todos';
+                      case 'calendar': return 'Calendar';
+                      case 'goals': return 'Global Goals';
+                      case 'routines': return 'Global Routines';
+                      case 'notes': return 'Global Notes';
+                      case 'settings': return 'Settings';
+                      case 'life-categories': return 'Life Categories';
+                      default: return currentView;
+                    }
+                  })()}
+                </span></span>
+                
+                {/* Agentic Mode Indicator */}
+                {isAgenticMode && (
+                  <div className="flex items-center space-x-1">
+                    <div className="w-1 h-1 bg-purple-500 rounded-full animate-pulse"></div>
+                    <span className="text-xs font-medium text-purple-600 bg-purple-100/50 px-2 py-0.5 rounded-full">
+                      🤖 Agentic
+                    </span>
+                  </div>
+                )}
               </div>
               
               {/* AI Model Selector */}
@@ -2532,14 +2674,14 @@ User message: ${messageToSend}`;
 
             <div className="flex items-end space-x-2">
               <div className="flex-1 relative">
-                <textarea
+                <ContextAwareInput
                   ref={inputRef}
                   value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
+                  onChange={setInputMessage}
                   onKeyPress={handleKeyPress}
                   placeholder={currentNoteContent !== undefined 
-                    ? "Ask about your note or say 'write to my note about...' to add content"
-                    : "Ask me anything or tell me what to add..."
+                    ? "Ask about your note or say 'write to my note about...' to add content. Use @ to mention items."
+                    : "Ask me anything or tell me what to add. Use @ to mention items..."
                   }
                   rows={1}
                   className={`w-full px-5 py-4 pr-24 rounded-2xl border-2 transition-all duration-300 focus:ring-4 text-sm backdrop-blur-xl resize-none ${
@@ -2557,50 +2699,8 @@ User message: ${messageToSend}`;
                       ? '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
                       : '0 8px 32px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8)'
                   }}
-                  disabled={isProcessing}
-                  onInput={(e) => {
-                    const target = e.target as HTMLTextAreaElement;
-                    
-                    // Reset height and overflow first
-                    target.style.height = '48px';
-                    target.style.overflowY = 'hidden';
-                    
-                    // Calculate max height dynamically (24% of viewport - overhead)
-                    const maxHeight = Math.min(window.innerHeight * 0.24 - 100, 280);
-                    
-                    // Calculate new height based on scroll height
-                    const newHeight = Math.min(Math.max(target.scrollHeight, 48), maxHeight);
-                    target.style.height = newHeight + 'px';
-                    
-                    // Enable scrolling if content exceeds max height
-                    if (target.scrollHeight > maxHeight) {
-                      target.style.overflowY = 'auto';
-                      // Scroll to bottom to show the cursor/latest content
-                      target.scrollTop = target.scrollHeight;
-                    }
-                  }}
-                  onFocus={(e) => {
-                    // Ensure proper height and scrolling on focus
-                    const target = e.target as HTMLTextAreaElement;
-                    
-                    // Reset and recalculate
-                    target.style.height = '48px';
-                    target.style.overflowY = 'hidden';
-                    
-                    const maxHeight = Math.min(window.innerHeight * 0.24 - 100, 280);
-                    const newHeight = Math.min(Math.max(target.scrollHeight, 48), maxHeight);
-                    target.style.height = newHeight + 'px';
-                    
-                    if (target.scrollHeight > maxHeight) {
-                      target.style.overflowY = 'auto';
-                      // Scroll to cursor position or end
-                      setTimeout(() => {
-                        if (target.selectionStart === target.value.length) {
-                          target.scrollTop = target.scrollHeight;
-                        }
-                      }, 0);
-                    }
-                  }}
+                  items={items}
+                  isDarkMode={isDarkMode}
                 />
                 
                 {/* Input Icons */}

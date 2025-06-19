@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
-import { RotateCcw, Plus, CheckCircle, X, Save, Filter, Calendar, Flame, Printer, Copy } from 'lucide-react';
-import { categories } from '../data/initialData';
-import { Item } from '../types';
+import { RotateCcw, Plus, CheckCircle, X, Save, Filter, Calendar, Flame, Printer, Copy, Edit3, Trash2 } from 'lucide-react';
+import { Item, Category } from '../types';
 import { copyToClipboard, showCopyFeedback } from '../utils/clipboard';
 
 interface GlobalRoutinesProps {
   items: Item[];
   setItems: React.Dispatch<React.SetStateAction<Item[]>>;
+  categories: Category[];
 }
 
 type FrequencyType = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
-const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems }) => {
+const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, categories }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedFrequency, setSelectedFrequency] = useState<string>('all');
   const [showAddForm, setShowAddForm] = useState(false);
@@ -20,7 +20,7 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems }) => {
   const [newRoutine, setNewRoutine] = useState({
     title: '',
     text: '',
-    categoryId: 'self-regulation',
+    categoryId: categories[0]?.id || '',
     frequency: 'daily' as FrequencyType,
     duration: 30
   });
@@ -76,7 +76,7 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems }) => {
     setNewRoutine({
       title: '',
       text: '',
-      categoryId: 'self-regulation',
+      categoryId: categories[0]?.id || '',
       frequency: 'daily' as FrequencyType,
       duration: 30
     });
@@ -168,8 +168,308 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems }) => {
   };
 
   const printRoutine = () => {
-    window.print();
+    const viewingRoutineData = routines.find(r => r.id === viewingRoutine);
+    if (!viewingRoutineData) {
+      console.error('No routine found for printing');
+      return;
+    }
+
+    const category = categories.find(c => c.id === viewingRoutineData.categoryId);
+    const isCompleted = viewingRoutineData.metadata?.completedToday || false;
+    const duration = viewingRoutineData.metadata?.duration || 0;
+    const currentStreak = viewingRoutineData.metadata?.currentStreak || 0;
+    const frequency = viewingRoutineData.metadata?.frequency || 'daily';
+
+    // Create print-friendly content that matches the displayed view
+    const printContent = `
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>${viewingRoutineData.title} - Life Structure Routine</title>
+          <style>
+            @page { 
+              margin: 0.75in; 
+              size: letter; 
+            }
+            
+            * { 
+              margin: 0; 
+              padding: 0; 
+              box-sizing: border-box; 
+            }
+            
+            body { 
+              font-family: 'Georgia', 'Times New Roman', serif; 
+              color: #1a202c; 
+              line-height: 1.6; 
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              min-height: 100vh;
+              padding: 0;
+            }
+            
+            .routine-card {
+              background: white;
+              border-radius: 20px;
+              box-shadow: 0 25px 50px rgba(0,0,0,0.15);
+              overflow: visible;
+              max-width: 6.5in;
+              margin: 0.5in auto;
+              position: relative;
+            }
+            
+            .routine-card::before {
+              content: '';
+              position: absolute;
+              top: 0;
+              left: 0;
+              right: 0;
+              height: 6px;
+              background: linear-gradient(90deg, #667eea, #764ba2, #f093fb, #f5576c);
+            }
+            
+            .header-section {
+              background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+              padding: 0.75rem;
+              text-align: center;
+              position: relative;
+            }
+            
+            .routine-icon {
+              width: 30px;
+              height: 30px;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              margin: 0 auto 0.5rem;
+              font-size: 1rem;
+              color: white;
+              box-shadow: 0 4px 8px rgba(102, 126, 234, 0.2);
+            }
+            
+            .routine-title {
+              font-size: 1.5rem;
+              font-weight: 700;
+              color: #1a202c;
+              margin-bottom: 0.25rem;
+              letter-spacing: -0.02em;
+            }
+            
+            .routine-subtitle {
+              font-size: 0.9rem;
+              color: #4a5568;
+              font-style: italic;
+              margin-bottom: 0.5rem;
+            }
+            
+            .meta-badges {
+              display: flex;
+              justify-content: center;
+              gap: 1rem;
+              flex-wrap: wrap;
+            }
+            
+            .meta-badge {
+              background: white;
+              padding: 0.5rem 1rem;
+              border-radius: 20px;
+              font-weight: 600;
+              font-size: 0.8rem;
+              box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+              border: 1px solid #e2e8f0;
+              color: #2d3748;
+            }
+            
+            .frequency-badge {
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+              border: none;
+            }
+            
+            .content-section {
+              padding: 1rem;
+            }
+            
+            .status-banner {
+              background: ${isCompleted ? 
+                'linear-gradient(135deg, #48bb78 0%, #38a169 100%)' : 
+                'linear-gradient(135deg, #ed8936 0%, #dd6b20 100%)'
+              };
+              color: white;
+              padding: 0.5rem;
+              text-align: center;
+              font-weight: 600;
+              font-size: 0.9rem;
+              margin-bottom: 1rem;
+              border-radius: 8px;
+              box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            }
+            
+            .description-card {
+              background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+              padding: 1.5rem;
+              border-radius: 12px;
+              border-left: 4px solid #667eea;
+              margin-bottom: 1rem;
+              position: relative;
+              page-break-inside: avoid;
+            }
+            
+            .description-title {
+              font-size: 1.1rem;
+              font-weight: 600;
+              color: #2d3748;
+              margin-bottom: 0.5rem;
+              display: flex;
+              align-items: center;
+              gap: 0.5rem;
+            }
+            
+            .description-text {
+              font-size: 0.95rem;
+              line-height: 1.5;
+              color: #4a5568;
+              white-space: pre-line;
+            }
+            
+            
+            .footer-section {
+              background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%);
+              color: white;
+              padding: 0.75rem;
+              text-align: center;
+              font-size: 0.8rem;
+            }
+            
+            .footer-logo {
+              font-weight: 700;
+              font-size: 0.9rem;
+              margin-bottom: 0.25rem;
+            }
+            
+            .decorative-line {
+              width: 40px;
+              height: 2px;
+              background: linear-gradient(90deg, #667eea, #764ba2);
+              margin: 0.5rem auto;
+              border-radius: 2px;
+            }
+            
+            @media print {
+              body {
+                background: white !important;
+              }
+              .routine-card {
+                box-shadow: none;
+                border: 1px solid #e2e8f0;
+                page-break-inside: auto;
+              }
+              .header-section {
+                page-break-after: avoid;
+              }
+              .content-section {
+                page-break-before: avoid;
+              }
+              .description-card {
+                page-break-inside: avoid;
+                break-inside: avoid;
+              }
+              .checkbox-section {
+                page-break-inside: avoid;
+                break-inside: avoid;
+              }
+              .footer-section {
+                page-break-before: avoid;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="routine-card">
+            <div class="header-section">
+              <div class="routine-icon">
+                ${category?.icon || '🔄'}
+              </div>
+              <h1 class="routine-title">${viewingRoutineData.title}</h1>
+              <p class="routine-subtitle">${category?.name || 'Personal Routine'}</p>
+              <div class="decorative-line"></div>
+              <div class="meta-badges">
+                <div class="meta-badge frequency-badge">
+                  ${frequency.charAt(0).toUpperCase() + frequency.slice(1)}
+                </div>
+                <div class="meta-badge">
+                  ⏱️ ${duration} minutes
+                </div>
+              </div>
+            </div>
+            
+            <div class="content-section">
+              <div class="status-banner">
+                ${isCompleted ? 
+                  '✅ Completed Today - Great Job!' : 
+                  '⏳ Ready for Today\'s Session'
+                }
+              </div>
+              
+              ${viewingRoutineData.text ? `
+                <div class="description-card">
+                  <h2 class="description-title">
+                    📋 Routine Instructions
+                  </h2>
+                  <div class="description-text">${viewingRoutineData.text}</div>
+                </div>
+              ` : `
+                <div class="description-card">
+                  <h2 class="description-title">
+                    📋 Routine Instructions
+                  </h2>
+                  <div class="description-text">Follow your ${frequency} routine for ${duration} minutes. Focus on consistency and building positive habits.</div>
+                </div>
+              `}
+              
+            </div>
+            
+            <div class="footer-section">
+              <div class="footer-logo">Life Structure</div>
+              <div>Generated on ${new Date().toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                month: 'long', 
+                day: 'numeric',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}</div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    // Open print window
+    console.log('📄 Opening print window for routine:', viewingRoutineData.title);
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      console.log('📄 Writing content to print window');
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      
+      // Wait for content to load before printing
+      printWindow.onload = () => {
+        console.log('📄 Print window loaded, triggering print');
+        setTimeout(() => {
+          printWindow.print();
+          printWindow.close();
+        }, 100);
+      };
+    } else {
+      console.error('❌ Failed to open print window - popup may be blocked');
+      alert('Print failed: Please allow popups for this site to enable printing.');
+    }
   };
+
 
   const getFrequencyIcon = (frequency: string) => {
     switch (frequency) {
@@ -333,7 +633,7 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems }) => {
                         return (
                           <div
                             key={routine.id}
-                            className={`p-4 rounded-xl border transition-all duration-300 ${
+                            className={`group p-4 rounded-xl border transition-all duration-300 ${
                               isCompleted 
                                 ? 'bg-green-50 border-green-200' 
                                 : 'bg-gray-50 border-gray-200 hover:bg-white hover:shadow-md'
@@ -440,6 +740,41 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems }) => {
                                       )}
                                     </div>
                                   </div>
+                                </div>
+                                
+                                {/* Action buttons */}
+                                <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      const success = await copyToClipboard(routine.id);
+                                      if (success) {
+                                        showCopyFeedback(e.target as HTMLElement);
+                                      }
+                                    }}
+                                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                    title="Copy ID for AI chat"
+                                  >
+                                    <Copy className="w-4 h-4 text-gray-500" />
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      startEditingRoutine(routine);
+                                    }}
+                                    className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
+                                  >
+                                    <Edit3 className="w-4 h-4 text-yellow-600" />
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      deleteRoutine(routine.id);
+                                    }}
+                                    className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                                  >
+                                    <Trash2 className="w-4 h-4 text-red-500" />
+                                  </button>
                                 </div>
                               </div>
                             )}
@@ -603,9 +938,9 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems }) => {
                                 e.stopPropagation();
                                 startEditingRoutine(routine);
                               }}
-                              className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                              className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
                             >
-                              <Save className="w-4 h-4 text-blue-500" />
+                              <Edit3 className="w-4 h-4 text-yellow-600" />
                             </button>
                             <button
                               onClick={(e) => {
@@ -614,7 +949,7 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems }) => {
                               }}
                               className="p-2 hover:bg-red-100 rounded-lg transition-colors"
                             >
-                              <X className="w-4 h-4 text-red-500" />
+                              <Trash2 className="w-4 h-4 text-red-500" />
                             </button>
                           </div>
                         </div>
@@ -738,85 +1073,6 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems }) => {
                     >
                       Edit Routine
                     </button>
-                  </div>
-                  
-                  {/* Print-only content */}
-                  <div className="hidden print:block print-routine-guide mt-8">
-                    <div className="border-t-4 border-gray-800 pt-8">
-                      <div className="text-center mb-8">
-                        <h1 className="text-4xl font-bold text-gray-900 mb-2">{routine.title}</h1>
-                        <div className="text-xl text-gray-700 mb-4">{routine.text}</div>
-                        <div className="flex justify-center space-x-8 text-lg">
-                          <span><strong>Frequency:</strong> {routine.metadata?.frequency?.charAt(0).toUpperCase()}{routine.metadata?.frequency?.slice(1)}</span>
-                          <span><strong>Duration:</strong> {duration} minutes</span>
-                          <span><strong>Category:</strong> {category?.name}</span>
-                        </div>
-                      </div>
-                      
-                      {/* Step-by-step guide */}
-                      <div className="mb-8">
-                        <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center border-b-2 border-gray-300 pb-2">ROUTINE STEPS</h2>
-                        <div className="space-y-4">
-                          {routine.text.split('\n').filter(step => step.trim()).map((step, index) => (
-                            <div key={index} className="print-step flex items-start space-x-4 p-3 border border-gray-300 rounded">
-                              <div className="w-8 h-8 bg-gray-800 text-white rounded-full flex items-center justify-center font-bold text-lg">
-                                {index + 1}
-                              </div>
-                              <div className="text-lg text-gray-800 flex-1 whitespace-pre-line">{step.trim()}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      
-                      {/* Weekly tracking grid */}
-                      <div className="mb-8">
-                        <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center border-b-2 border-gray-300 pb-2">WEEKLY TRACKER</h2>
-                        <div className="grid grid-cols-7 gap-2 mb-4">
-                          {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(day => (
-                            <div key={day} className="text-center font-bold text-gray-800 p-2 bg-gray-200 border border-gray-400">
-                              {day}
-                            </div>
-                          ))}
-                        </div>
-                        {Array.from({ length: 4 }, (_, week) => (
-                          <div key={week} className="grid grid-cols-7 gap-2 mb-2">
-                            {Array.from({ length: 7 }, (_, day) => (
-                              <div key={day} className="print-tracker-cell w-full h-12 border-2 border-gray-400 rounded flex items-center justify-center">
-                                <span className="text-xs text-gray-500">Week {week + 1}</span>
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                      
-                      {/* Tips and notes */}
-                      <div className="border-t-2 border-gray-300 pt-6">
-                        <h2 className="text-xl font-bold text-gray-900 mb-4">TIPS FOR SUCCESS</h2>
-                        <div className="grid grid-cols-2 gap-6 text-sm">
-                          <div>
-                            <h3 className="font-bold mb-2">⏰ TIMING</h3>
-                            <ul className="space-y-1 text-gray-700">
-                              <li>• Set a consistent time each day</li>
-                              <li>• Use a timer for {duration} minutes</li>
-                              <li>• Start with shorter sessions if needed</li>
-                            </ul>
-                          </div>
-                          <div>
-                            <h3 className="font-bold mb-2">📈 PROGRESS</h3>
-                            <ul className="space-y-1 text-gray-700">
-                              <li>• Mark completion immediately</li>
-                              <li>• Track your streak</li>
-                              <li>• Celebrate small wins</li>
-                            </ul>
-                          </div>
-                        </div>
-                        
-                        <div className="mt-6 text-center text-xs text-gray-600 border-t border-gray-300 pt-4">
-                          <p>Current Streak: {currentStreak} days | Best Streak: {routine.metadata?.bestStreak || 0} days</p>
-                          <p>Generated on {new Date().toLocaleDateString()}</p>
-                        </div>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>

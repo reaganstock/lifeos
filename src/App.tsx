@@ -14,7 +14,7 @@ import AIAssistant from './components/AIAssistant';
 import { AuthModal } from './components/AuthModal';
 import { AuthProvider, useAuthContext } from './components/AuthProvider';
 import { ThemeProvider } from './contexts/ThemeContext';
-import { categories as initialCategories, initialItems } from './data/initialData';
+// Removed initialData import - users create their own categories
 import { useSupabaseData } from './hooks/useSupabaseData';
 import { shouldShowMigration, createMigrationManager, MigrationProgress } from './utils/migration';
 import { Item, Category } from './types';
@@ -59,10 +59,10 @@ function AppContent() {
         }));
       } catch (error) {
         console.error('Error parsing saved items:', error);
-        return initialItems;
+        return [];
       }
     }
-    return initialItems;
+    return [];
   });
 
   const [currentView, setCurrentView] = useState<string>(() => {
@@ -76,7 +76,7 @@ function AppContent() {
   const [migrationProgress, setMigrationProgress] = useState<MigrationProgress | null>(null);
   
   const showLanding = currentView === 'landing';
-  const [categories] = useState<Category[]>(initialCategories);
+  const [categories] = useState<Category[]>([]);
   const [notification, setNotification] = useState({
     isVisible: false,
     message: '',
@@ -160,9 +160,9 @@ function AppContent() {
               await bulkDeleteItems(itemsToDelete.map(item => item.id));
             }
             
-            // Real-time subscriptions will handle the update automatically
-            // No need for manual refresh - prevents UI disruption
-            console.log('✅ Items will be updated via real-time subscription');
+            // Items are now updated optimistically by the Supabase operations
+            // Real-time subscriptions provide backup consistency
+            console.log('✅ Items updated optimistically with real-time backup');
             showNotification('Items updated successfully', 'success');
           } catch (error) {
             console.error('❌ Error updating items via Supabase:', error);
@@ -381,22 +381,47 @@ function AppContent() {
       );
     }
 
+    // CRITICAL: Block access if user is not authenticated
+    if (!user) {
+      return (
+        <div className="flex items-center justify-center h-full bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
+          <div className="text-center max-w-md mx-auto p-8">
+            <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl">
+              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </div>
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Authentication Required</h2>
+            <p className="text-gray-600 dark:text-gray-300 mb-6 text-lg">
+              Please sign in to access Life Structure and manage your goals, tasks, and routines.
+            </p>
+            <button
+              onClick={() => setShowAuthModal(true)}
+              className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+            >
+              Sign In to Continue
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     switch (currentView) {
       case 'dashboard':
-        return <Dashboard onNavigateToCategory={handleNavigateToCategory} items={items} />;
+        return <Dashboard onNavigateToCategory={handleNavigateToCategory} items={items} categories={user ? supabaseCategories : categories} />;
       
       case 'todos':
-        return <GlobalTodos items={items} setItems={setItems} />;
+        return <GlobalTodos items={items} setItems={setItems} categories={user ? supabaseCategories : categories} />;
       case 'calendar':
-        return <GlobalCalendar items={items} setItems={setItems} />;
+        return <GlobalCalendar items={items} setItems={setItems} categories={user ? supabaseCategories : categories} />;
       case 'life-categories':
         return <LifeCategoriesManager onNavigateToCategory={handleNavigateToCategory} />;
       case 'goals':
-        return <GlobalGoals items={items} setItems={setItems} />;
+        return <GlobalGoals items={items} setItems={setItems} categories={user ? supabaseCategories : categories} />;
       case 'routines':
-        return <GlobalRoutines items={items} setItems={setItems} />;
+        return <GlobalRoutines items={items} setItems={setItems} categories={user ? supabaseCategories : categories} />;
       case 'notes':
-        return <GlobalNotes items={items} setItems={setItems} />;
+        return <GlobalNotes items={items} setItems={setItems} categories={user ? supabaseCategories : categories} />;
       case 'settings':
         return <Settings />;
       
@@ -407,6 +432,8 @@ function AppContent() {
             onBack={handleBackToDashboard}
             items={items}
             setItems={setItems}
+            categories={user ? supabaseCategories : categories}
+            isGlobalAIAssistantOpen={showAIAssistant}
           />
         );
     }

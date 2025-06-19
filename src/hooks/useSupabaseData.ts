@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuthContext } from '../components/AuthProvider'
 import { Category, Item } from '../lib/database.types'
 import { Item as LocalItem, Category as LocalCategory } from '../types'
-import { categories as initialCategories } from '../data/initialData'
+// Removed initialCategories import - users create their own categories
 
 export interface SupabaseDataState {
   categories: LocalCategory[]
@@ -109,6 +109,56 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
   const subscriptionsActive = useRef(false)
   const currentUserId = useRef<string | null>(null)
 
+  // Helper function to build category mappings from data
+  const buildCategoryMappings = useCallback((data: any[]) => {
+    const mapping = new Map<string, string>()
+    const reverse = new Map<string, string>()
+    
+    // Create legacy mappings based on ACTUAL user categories (not hardcoded assumptions)
+    data?.forEach(dbCategory => {
+      // Create a legacy-style ID from the category name (for backwards compatibility)
+      const legacyId = dbCategory.name.toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '') // Remove special characters
+        .replace(/\s+/g, '-') // Replace spaces with hyphens
+        .substring(0, 20) // Limit length
+      
+      mapping.set(legacyId, dbCategory.id)
+      reverse.set(dbCategory.id, legacyId)
+      
+      // Also map by exact name (case insensitive)
+      mapping.set(dbCategory.name.toLowerCase(), dbCategory.id)
+      
+      // Create common aliases for typical category types
+      const categoryName = dbCategory.name.toLowerCase()
+      if (categoryName.includes('regulation') || categoryName.includes('personal') || categoryName.includes('self')) {
+        mapping.set('personal', dbCategory.id)
+        mapping.set('self-regulation', dbCategory.id)
+      }
+      if (categoryName.includes('gym') || categoryName.includes('fitness') || categoryName.includes('workout') || categoryName.includes('exercise')) {
+        mapping.set('fitness', dbCategory.id)
+        mapping.set('gym', dbCategory.id)
+        mapping.set('workout', dbCategory.id)
+      }
+      if (categoryName.includes('app') || categoryName.includes('business') || categoryName.includes('work') || categoryName.includes('career')) {
+        mapping.set('work', dbCategory.id)
+        mapping.set('business', dbCategory.id)
+      }
+      if (categoryName.includes('social') || categoryName.includes('dating') || categoryName.includes('relationship')) {
+        mapping.set('social', dbCategory.id)
+        mapping.set('dating', dbCategory.id)
+      }
+      if (categoryName.includes('content') || categoryName.includes('creation') || categoryName.includes('study') || categoryName.includes('learning')) {
+        mapping.set('content', dbCategory.id)
+        mapping.set('study', dbCategory.id)
+      }
+    })
+    
+    console.log('🗂️ Category mapping built:', Object.fromEntries(mapping))
+    setCategoryMapping(mapping)
+    setReverseMapping(reverse)
+    return { mapping, reverse }
+  }, [])
+
   const fetchCategories = useCallback(async () => {
     if (!user) return []
 
@@ -123,59 +173,16 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
       
       const localCategories = (data || []).map(dbCategoryToLocal)
       
-      // Build FLEXIBLE category mapping - works for any user's categories, not just hardcoded ones
-      const mapping = new Map<string, string>()
-      const reverse = new Map<string, string>()
+      // Build category mappings
+      buildCategoryMappings(data || [])
       
-      // Create legacy mappings based on ACTUAL user categories (not hardcoded assumptions)
-      data?.forEach(dbCategory => {
-        // Create a legacy-style ID from the category name (for backwards compatibility)
-        const legacyId = dbCategory.name.toLowerCase()
-          .replace(/[^a-z0-9\s]/g, '') // Remove special characters
-          .replace(/\s+/g, '-') // Replace spaces with hyphens
-          .substring(0, 20) // Limit length
-        
-        mapping.set(legacyId, dbCategory.id)
-        reverse.set(dbCategory.id, legacyId)
-        
-        // Also map by exact name (case insensitive)
-        mapping.set(dbCategory.name.toLowerCase(), dbCategory.id)
-        
-        // Create common aliases for typical category types
-        const categoryName = dbCategory.name.toLowerCase()
-        if (categoryName.includes('regulation') || categoryName.includes('personal') || categoryName.includes('self')) {
-          mapping.set('personal', dbCategory.id)
-          mapping.set('self-regulation', dbCategory.id)
-        }
-        if (categoryName.includes('gym') || categoryName.includes('fitness') || categoryName.includes('workout') || categoryName.includes('exercise')) {
-          mapping.set('fitness', dbCategory.id)
-          mapping.set('gym', dbCategory.id)
-          mapping.set('workout', dbCategory.id)
-        }
-        if (categoryName.includes('app') || categoryName.includes('business') || categoryName.includes('work') || categoryName.includes('career')) {
-          mapping.set('work', dbCategory.id)
-          mapping.set('business', dbCategory.id)
-        }
-        if (categoryName.includes('social') || categoryName.includes('dating') || categoryName.includes('relationship')) {
-          mapping.set('social', dbCategory.id)
-          mapping.set('dating', dbCategory.id)
-        }
-        if (categoryName.includes('content') || categoryName.includes('creation') || categoryName.includes('study') || categoryName.includes('learning')) {
-          mapping.set('content', dbCategory.id)
-          mapping.set('study', dbCategory.id)
-        }
-      })
-      
-      console.log('🗂️ Category mapping built:', Object.fromEntries(mapping))
-      setCategoryMapping(mapping)
-      setReverseMapping(reverse)
       return localCategories
     } catch (err) {
       console.error('Error fetching categories:', err)
       setError('Failed to fetch categories')
       return []
     }
-  }, [user])
+  }, [user, buildCategoryMappings])
 
   const fetchItems = useCallback(async () => {
     if (!user) return []
@@ -234,28 +241,9 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
       return []
     }
 
-    const createdCategories = []
-    for (const category of initialCategories) {
-      try {
-        const { data, error } = await supabase
-          .from('categories')
-          .insert([localCategoryToDb({
-            name: category.name,
-            icon: category.icon,
-            color: category.color,
-            priority: category.priority,
-            createdAt: new Date(),
-            updatedAt: new Date()
-          }, user.id)])
-          .select()
-          .single()
-
-        if (error) throw error
-        createdCategories.push(dbCategoryToLocal(data))
-      } catch (err) {
-        console.error('Error creating initial category:', err)
-      }
-    }
+    const createdCategories: LocalCategory[] = []
+    // No initial categories - users will create their own
+    console.log('New user profile created, ready to create categories');
     return createdCategories
   }, [user])
 
@@ -271,19 +259,22 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
     setError(null)
 
     try {
-      const [fetchedCategories, fetchedItems] = await Promise.all([
-        fetchCategories(),
-        fetchItems(),
-      ])
-
-      // Initialize default categories for new users
+      let fetchedCategories = await fetchCategories()
+      
+      // 🆕 AUTO-CREATE INITIAL CATEGORIES for new users
       if (fetchedCategories.length === 0) {
+        console.log('📂 New user detected - creating initial categories automatically')
         const createdCategories = await createInitialCategories()
-        setCategories(createdCategories)
-      } else {
-        setCategories(fetchedCategories)
+        if (createdCategories.length > 0) {
+          // Refresh to get proper mappings built
+          fetchedCategories = await fetchCategories()
+        }
       }
       
+      const fetchedItems = await fetchItems()
+
+      // Set categories and items
+      setCategories(fetchedCategories)
       setItems(fetchedItems)
     } catch (err) {
       console.error('Error refreshing data:', err)
@@ -340,7 +331,7 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
           },
           (payload) => {
             console.log('📁 Categories change detected:', payload.eventType, payload.new)
-            // Refresh categories data with current reverseMapping
+            // Refresh categories data AND rebuild mappings for real-time consistency
             supabase
               .from('categories')
               .select('*')
@@ -351,7 +342,11 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
                   console.error('❌ Error refreshing categories:', error)
                 } else if (data) {
                   console.log('✅ Categories updated via realtime:', data.length, 'categories')
-                  setCategories(data.map(dbCategoryToLocal))
+                  const localCategories = data.map(dbCategoryToLocal)
+                  setCategories(localCategories)
+                  
+                  // 🔄 CRITICAL: Rebuild category mappings for real-time consistency
+                  buildCategoryMappings(data)
                 }
               })
           }
@@ -419,17 +414,69 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
     if (!user) return null
 
     try {
+      console.log('🎯 Creating category with data:', category)
+      console.log('🎯 User ID:', user.id)
+      
+      // Check if a category with this name already exists for this user
+      const { data: existingCategories, error: checkError } = await supabase
+        .from('categories')
+        .select('name')
+        .eq('user_id', user.id)
+        .eq('name', category.name)
+      
+      if (checkError) {
+        console.error('🚨 Error checking existing categories:', checkError)
+      } else if (existingCategories && existingCategories.length > 0) {
+        console.warn('⚠️ Category with this name already exists:', category.name)
+        setError(`A category named "${category.name}" already exists`)
+        return null
+      }
+      
+      const dbCategory = localCategoryToDb(category, user.id)
+      console.log('🎯 Database category object:', dbCategory)
+      
       const { data, error } = await supabase
         .from('categories')
-        .insert([localCategoryToDb(category, user.id)])
+        .insert([dbCategory])
         .select()
         .single()
 
-      if (error) throw error
-      return dbCategoryToLocal(data)
+      if (error) {
+        console.error('🚨 Supabase error details:', error)
+        console.error('🚨 Error code:', error.code)
+        console.error('🚨 Error message:', error.message)
+        console.error('🚨 Error details:', error.details)
+        
+        // Provide more user-friendly error messages
+        if (error.code === '23505') {  // Unique constraint violation
+          setError('A category with this name or details already exists')
+        } else if (error.code === '23514') {  // Check constraint violation
+          setError('Invalid category data provided')
+        } else {
+          setError(`Database error: ${error.message}`)
+        }
+        return null
+      }
+      
+      console.log('✅ Category created successfully in DB:', data)
+      const newCategory = dbCategoryToLocal(data)
+      
+      // Optimistically update local state immediately
+      setCategories(prev => [...prev, newCategory].sort((a, b) => a.priority - b.priority))
+      
+      // Also rebuild mappings immediately
+      const { data: allCategoriesData } = await supabase
+        .from('categories')
+        .select('*')
+        .eq('user_id', user.id)
+      if (allCategoriesData) {
+        buildCategoryMappings(allCategoriesData)
+      }
+      
+      return newCategory
     } catch (err) {
       console.error('Error creating category:', err)
-      setError('Failed to create category')
+      setError(`Failed to create category: ${err instanceof Error ? err.message : 'Unknown error'}`)
       return null
     }
   }
@@ -448,6 +495,12 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
         .eq('user_id', user.id)
 
       if (error) throw error
+      
+      // Optimistically update local state immediately
+      setCategories(prev => prev.map(cat => 
+        cat.id === id ? { ...cat, ...updates, updatedAt: new Date() } : cat
+      ).sort((a, b) => a.priority - b.priority))
+      
       return true
     } catch (err) {
       console.error('Error updating category:', err)
@@ -495,6 +548,11 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
         .eq('user_id', user.id)
 
       if (error) throw error
+      
+      // Optimistically update local state immediately
+      setCategories(prev => prev.filter(cat => cat.id !== id))
+      setItems(prev => prev.filter(item => item.categoryId !== id))
+      
       return true
     } catch (err) {
       console.error('Error deleting category:', err)
@@ -530,7 +588,12 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
       }
       
       console.log('✅ Item created successfully:', data)
-      return dbItemToLocal(data, reverseMapping)
+      const newItem = dbItemToLocal(data, reverseMapping)
+      
+      // Optimistically update local state immediately
+      setItems(prev => [newItem, ...prev])
+      
+      return newItem
     } catch (err: any) {
       console.error('❌ Error creating item:', err)
       const errorMessage = err?.message || err?.details || 'Failed to create item'
@@ -560,6 +623,12 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
         .eq('user_id', user.id)
 
       if (error) throw error
+      
+      // Optimistically update local state immediately
+      setItems(prev => prev.map(item => 
+        item.id === id ? { ...item, ...updates, updatedAt: new Date() } : item
+      ))
+      
       return true
     } catch (err) {
       console.error('Error updating item:', err)
@@ -579,6 +648,10 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
         .eq('user_id', user.id)
 
       if (error) throw error
+      
+      // Optimistically update local state immediately
+      setItems(prev => prev.filter(item => item.id !== id))
+      
       return true
     } catch (err) {
       console.error('Error deleting item:', err)
@@ -607,7 +680,12 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
       }
       
       console.log('✅ Bulk created', data?.length || 0, 'items successfully')
-      return (data || []).map(item => dbItemToLocal(item, reverseMapping))
+      const newItems = (data || []).map(item => dbItemToLocal(item, reverseMapping))
+      
+      // Optimistically update local state immediately
+      setItems(prev => [...newItems, ...prev])
+      
+      return newItems
     } catch (err: any) {
       console.error('❌ Error bulk creating items:', err)
       const errorMessage = err?.message || err?.details || 'Failed to create items'
@@ -641,6 +719,10 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
         .eq('user_id', user.id)
 
       if (error) throw error
+      
+      // Optimistically update local state immediately
+      setItems(prev => prev.filter(item => !ids.includes(item.id)))
+      
       return true
     } catch (err) {
       console.error('Error bulk deleting items:', err)

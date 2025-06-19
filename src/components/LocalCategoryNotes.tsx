@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { StickyNote, Plus, Search, Mic, MicOff, Play, Pause, Camera, X, Edit3, Save, Maximize2, Trash2, FileText } from 'lucide-react';
-import { categories } from '../data/initialData';
-import { Item } from '../types';
+import { Item, Category } from '../types';
 import { voiceService, VoiceRecording } from '../services/voiceService';
 import { AIService } from '../services/aiService';
 import { chatService } from '../services/ChatService';
@@ -11,10 +10,12 @@ interface LocalCategoryNotesProps {
   categoryId: string;
   items: Item[];
   setItems: React.Dispatch<React.SetStateAction<Item[]>>;
+  categories: Category[];
   onAIAssistantToggle?: (isOpen: boolean) => void;
+  isGlobalAIAssistantOpen?: boolean;
 }
 
-const LocalCategoryNotes: React.FC<LocalCategoryNotesProps> = ({ categoryId, items, setItems, onAIAssistantToggle }) => {
+const LocalCategoryNotes: React.FC<LocalCategoryNotesProps> = ({ categoryId, items, setItems, categories, onAIAssistantToggle, isGlobalAIAssistantOpen }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [sortBy, setSortBy] = useState<'recent' | 'title'>('recent');
@@ -871,20 +872,20 @@ const LocalCategoryNotes: React.FC<LocalCategoryNotesProps> = ({ categoryId, ite
                               e.stopPropagation();
                               openNoteForEditing(note);
                             }}
-                            className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
+                            className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
                             title="Edit note"
                           >
-                            <Edit3 className="w-4 h-4 text-yellow-600" />
+                            <Edit3 className="w-4 h-4 text-blue-600" />
                           </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               openNoteForEditing(note);
                             }}
-                            className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                            className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
                             title="View fullscreen"
                           >
-                            <Maximize2 className="w-4 h-4 text-blue-600" />
+                            <Maximize2 className="w-4 h-4 text-yellow-600" />
                           </button>
                           <button
                             onClick={(e) => {
@@ -1275,7 +1276,7 @@ const LocalCategoryNotes: React.FC<LocalCategoryNotesProps> = ({ categoryId, ite
                                   }}
                                   className="w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"
                                 >
-                                  <X className="w-4 h-4" />
+                                  <Trash2 className="w-4 h-4" />
                                 </button>
                               </div>
                             </div>
@@ -1426,10 +1427,10 @@ const LocalCategoryNotes: React.FC<LocalCategoryNotesProps> = ({ categoryId, ite
                               startEditing(editingNote);
                             }
                           }}
-                          className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
+                          className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
                           title="Edit in card view"
                         >
-                          <Edit3 className="w-5 h-5 text-yellow-600" />
+                          <Edit3 className="w-5 h-5 text-blue-600" />
                         </button>
                       </>
                     );
@@ -1551,7 +1552,7 @@ const LocalCategoryNotes: React.FC<LocalCategoryNotesProps> = ({ categoryId, ite
                               }}
                               className="w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"
                             >
-                              <X className="w-4 h-4" />
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </div>
@@ -1761,7 +1762,7 @@ const LocalCategoryNotes: React.FC<LocalCategoryNotesProps> = ({ categoryId, ite
       )}
 
       {/* Floating Action Button */}
-      {!fullscreenCreate && !showAddForm && (
+      {!fullscreenCreate && !showAddForm && !isGlobalAIAssistantOpen && (
         <button
           onClick={() => {
             // Reset form state to ensure it's always a new note
@@ -1787,7 +1788,16 @@ const LocalCategoryNotes: React.FC<LocalCategoryNotesProps> = ({ categoryId, ite
             setUploadedImages([]);
             setShowAddForm(true);
           }}
-          className="fixed bottom-8 right-8 w-16 h-16 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white rounded-full shadow-2xl hover:shadow-3xl transition-all duration-300 transform hover:scale-110 z-50 flex items-center justify-center"
+          className={`fixed bottom-8 w-16 h-16 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white rounded-full shadow-2xl hover:shadow-3xl transition-all duration-300 transform hover:scale-110 z-50 flex items-center justify-center ${
+            showAIAssistant && !isAiSidebarCollapsed 
+              ? `right-8 translate-x-[-${aiSidebarWidth + 16}px]` 
+              : 'right-8'
+          }`}
+          style={{
+            transform: showAIAssistant && !isAiSidebarCollapsed 
+              ? `translateX(-${aiSidebarWidth + 16}px)` 
+              : 'translateX(0)'
+          }}
           title="Create new note (Press 'N')"
         >
           <Plus className="w-8 h-8" />

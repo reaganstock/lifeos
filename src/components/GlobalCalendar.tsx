@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Calendar as CalendarIcon, Plus, Clock, MapPin, X, Edit3, Save, ChevronLeft, ChevronRight, MoreHorizontal, Calendar, CalendarDays, CalendarCheck, CheckCircle, Flame, Copy } from 'lucide-react';
-import { categories } from '../data/initialData';
-import { Item } from '../types';
+import { Item, Category } from '../types';
 import { copyToClipboard, showCopyFeedback } from '../utils/clipboard';
 
 interface GlobalCalendarProps {
   items: Item[];
   setItems: React.Dispatch<React.SetStateAction<Item[]>>;
+  categories: Category[];
 }
 
-const GlobalCalendar: React.FC<GlobalCalendarProps> = ({ items, setItems }) => {
+const GlobalCalendar: React.FC<GlobalCalendarProps> = ({ items, setItems, categories }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -596,9 +596,9 @@ const GlobalCalendar: React.FC<GlobalCalendarProps> = ({ items, setItems }) => {
                         <div className="flex space-x-2 ml-4">
                           <button
                             onClick={() => startEditingEvent(event)}
-                            className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                            className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
                           >
-                            <Edit3 className="w-4 h-4 text-blue-500" />
+                            <Edit3 className="w-4 h-4 text-yellow-600" />
                           </button>
                           <button
                             onClick={() => deleteEvent(event.id)}
@@ -798,9 +798,9 @@ const GlobalCalendar: React.FC<GlobalCalendarProps> = ({ items, setItems }) => {
                         <div className="flex space-x-2">
                           <button
                             onClick={() => startEditingEvent(event)}
-                            className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
+                            className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
                           >
-                            <Edit3 className="w-4 h-4 text-blue-500" />
+                            <Edit3 className="w-4 h-4 text-yellow-600" />
                           </button>
                           <button
                             onClick={() => deleteEvent(event.id)}

@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { Clock, BowArrow, CheckCircle, Circle, Flame, TrendingUp, Star, Calendar, Zap, Award, BookOpen, Dumbbell, Edit3, Heart, Sparkles, ArrowRight, Trophy, Sun, Moon, Coffee, Sunrise, Sunset } from 'lucide-react';
-import { categories, initialItems, dailySchedule } from '../data/initialData';
+// Removed initialData import - using props from parent
 import { Item } from '../types';
 
 interface DashboardProps {
   onNavigateToCategory: (categoryId: string) => void;
   items: Item[];
+  categories: any[];
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items }) => {
+const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items, categories }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [completedScheduleItems, setCompletedScheduleItems] = useState<string[]>([]);
   const [personalMantra, setPersonalMantra] = useState("Excellence is a daily practice, not a destination");
@@ -18,6 +19,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items }) =>
   
   const today = new Date();
   const todayString = format(today, 'EEEE, MMMM do, yyyy');
+
+  // Default daily schedule - users can customize this later
+  const dailySchedule = [
+    { time: '6:00 AM', activity: 'Morning Routine', categoryId: categories[0]?.id || 'general' },
+    { time: '8:00 AM', activity: 'Work/Study', categoryId: categories[1]?.id || 'general' },
+    { time: '12:00 PM', activity: 'Lunch Break', categoryId: categories[0]?.id || 'general' },
+    { time: '6:00 PM', activity: 'Evening Activities', categoryId: categories[2]?.id || 'general' },
+  ];
 
   // Enhanced mouse tracking for premium effects
   useEffect(() => {

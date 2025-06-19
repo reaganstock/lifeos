@@ -29,15 +29,14 @@ export const copyToClipboard = async (text: string): Promise<boolean> => {
 };
 
 export const showCopyFeedback = (element?: HTMLElement) => {
-  // Simple visual feedback for copy operations
+  // Minimal feedback - just a quick visual hint without text change
   if (element) {
-    const originalText = element.textContent;
-    element.textContent = '✓ Copied!';
-    element.style.color = '#10b981';
+    element.style.transform = 'scale(0.95)';
+    element.style.opacity = '0.7';
     
     setTimeout(() => {
-      element.textContent = originalText;
-      element.style.color = '';
-    }, 1000);
+      element.style.transform = '';
+      element.style.opacity = '';
+    }, 150);
   }
 }; 

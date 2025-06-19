@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { BowArrow, Filter, Plus, TrendingUp, Award, Calendar, X, Edit3, Save, ChevronRight, Trash2, Maximize2, Copy } from 'lucide-react';
-import { categories, initialItems } from '../data/initialData';
-import { Item } from '../types';
+import { Item, Category } from '../types';
 import { copyToClipboard, showCopyFeedback } from '../utils/clipboard';
 
 interface GlobalGoalsProps {
   items: Item[];
   setItems: React.Dispatch<React.SetStateAction<Item[]>>;
+  categories: Category[];
 }
 
-const GlobalGoals: React.FC<GlobalGoalsProps> = ({ items, setItems }) => {
+const GlobalGoals: React.FC<GlobalGoalsProps> = ({ items, setItems, categories }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingGoal, setEditingGoal] = useState<string | null>(null);
@@ -19,7 +19,7 @@ const GlobalGoals: React.FC<GlobalGoalsProps> = ({ items, setItems }) => {
   const [newGoal, setNewGoal] = useState({
     title: '',
     text: '',
-    categoryId: 'self-regulation',
+    categoryId: categories[0]?.id || '',
     target: '',
     progress: 0
   });
@@ -82,7 +82,7 @@ const GlobalGoals: React.FC<GlobalGoalsProps> = ({ items, setItems }) => {
     setNewGoal({
       title: '',
       text: '',
-      categoryId: 'self-regulation',
+      categoryId: categories[0]?.id || '',
       target: '',
       progress: 0
     });
@@ -365,9 +365,9 @@ const GlobalGoals: React.FC<GlobalGoalsProps> = ({ items, setItems }) => {
                               e.stopPropagation();
                               handleEditFromFullscreen(goal.id, goal);
                             }}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
                           >
-                            <Edit3 className="w-4 h-4 text-gray-600" />
+                            <Edit3 className="w-4 h-4 text-yellow-600" />
                           </button>
                         </>
                       )}
