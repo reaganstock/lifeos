@@ -211,7 +211,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   const [showModeDropdown, setShowModeDropdown] = useState(false);
   const [autoApprove, setAutoApprove] = useState(false);
   const [originalUserIntent, setOriginalUserIntent] = useState<string | null>(null);
-  const [agenticRequestType, setAgenticRequestType] = useState<'deletion' | 'creation' | 'planning' | 'research' | 'optimization' | null>(null);
+  const [agenticRequestType, setAgenticRequestType] = useState<'deletion' | 'creation' | 'planning' | 'research' | 'optimization' | 'lifestyle_change' | 'goal_setting' | 'organization' | null>(null);
   
   // Clear pending function calls when component mounts (new conversation)
   useEffect(() => {
@@ -621,53 +621,6 @@ Execute the next logical action that directly serves the original user intent.`;
     return actionVerbs.some(verb => lowerTranscript.includes(verb));
   };
 
-  // Determine if agentic mode should continue based on AI response (Claude Code methodology)
-  const needsAgenticContinuation = (response: string): boolean => {
-    const lowerResponse = response.toLowerCase();
-    
-    // Simple greetings and conversational responses should not continue
-    const simpleResponses = [
-      'hello', 'hi', 'how can i help', 'what can i do', 'how are you',
-      'nice to meet you', 'good morning', 'good afternoon', 'good evening'
-    ];
-    
-    // If response is too short or just a greeting, don't continue
-    if (response.length < 20 || simpleResponses.some(phrase => lowerResponse.includes(phrase))) {
-      return false;
-    }
-    
-    // CLARIFICATION-FIRST INDICATORS (should continue to get more info)
-    const clarificationIndicators = [
-      'could you tell me', 'what is your', 'do you want', 'would you prefer',
-      'a few questions', 'to help you better', 'what timeline', 'what budget',
-      'which areas', 'what type of', 'how would you like', 'what are your priorities'
-    ];
-    
-    // EXECUTION INDICATORS (actively working on multi-step tasks)
-    const executionIndicators = [
-      'created', 'added', 'set up', 'scheduled', 'planned', 'building',
-      'next step', 'continuing with', 'working on', 'now creating',
-      'step 1', 'step 2', 'first', 'then', 'proceeding to'
-    ];
-    
-    // PLANNING INDICATORS (outlining approach before execution)
-    const planningIndicators = [
-      "here's my plan", "i'll start by", "my approach", "the strategy",
-      "first i'll", "then i'll", "here's how", "let me outline"
-    ];
-    
-    // In agentic mode, continue more aggressively - look for any signs of multi-step work
-    const agenticContinueIndicators = [
-      ...clarificationIndicators,
-      ...executionIndicators, 
-      ...planningIndicators,
-      // Additional aggressive continuation patterns
-      'created', 'added', 'i can', 'i will', 'let me', 'next', 'also', 'then',
-      'would you like', 'should i', 'furthermore', 'additionally', 'moreover'
-    ];
-    
-    return agenticContinueIndicators.some(indicator => lowerResponse.includes(indicator));
-  };
   
   // Get short confirmation message instead of verbose response
   const getShortConfirmation = (result: any): string => {
