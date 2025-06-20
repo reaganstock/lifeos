@@ -2,18 +2,18 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   User, Send, Image, Plus, X, Minimize2, 
   Sun, Moon, ChevronLeft, ChevronRight, Edit3, 
-  Zap, MessagesSquare, Mic, MicOff, ChevronDown, Sparkles
+  Zap, MessagesSquare, Mic, MicOff, ChevronDown, Sparkles, Square
 } from 'lucide-react';
 import { chatService } from '../services/ChatService';
 import { voiceService } from '../services/voiceService';
 import { ChatMessage, ChatSession } from '../types/chat';
 import { Item, Category } from '../types';
 import ModelSelector from './ModelSelector';
-import FunctionConfirmationCard from './FunctionConfirmationCard';
 import { GeminiLiveService } from '../services/geminiLiveService';
 import { openaiRealtimeService } from '../services/openaiRealtimeService';
 import { geminiService } from '../services/geminiService';
 import ContextAwareInput, { ContextAwareInputRef } from './ContextAwareInput';
+import FunctionCallUI from './FunctionCallUI';
 
 // Helper function to clean markdown formatting from messages
 const cleanMarkdownFormatting = (text: string): string => {
@@ -194,12 +194,406 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   // Function calling states
   const [isProcessingFunction, setIsProcessingFunction] = useState(false);
   const [functionResult, setFunctionResult] = useState<string | null>(null);
+  const [pendingFunctionCalls, setPendingFunctionCalls] = useState<Array<{
+    id: string;
+    name: string;
+    args: any;
+    completed?: boolean;
+    result?: any;
+  }>>([]);
   
   // AI processing states
   const [isAIThinking, setIsAIThinking] = useState(false);
   const [isCallingFunction, setIsCallingFunction] = useState(false);
   const [currentFunctionName, setCurrentFunctionName] = useState<string | null>(null);
+  const [agenticLoopCount, setAgenticLoopCount] = useState(0);
+  const [maxAgenticLoops] = useState(15); // Allow more cycles for comprehensive life setup
+  const [showModeDropdown, setShowModeDropdown] = useState(false);
+  const [autoApprove, setAutoApprove] = useState(false);
+  const [originalUserIntent, setOriginalUserIntent] = useState<string | null>(null);
+  const [agenticRequestType, setAgenticRequestType] = useState<'deletion' | 'creation' | 'planning' | 'research' | 'optimization' | null>(null);
   
+  // Clear pending function calls when component mounts (new conversation)
+  useEffect(() => {
+    setPendingFunctionCalls([]);
+    setAgenticLoopCount(0);
+    setIsAIThinking(false);
+    setIsCallingFunction(false);
+    setCurrentFunctionName(null);
+    
+    // Load auto-approve preference
+    const savedAutoApprove = localStorage.getItem('aiAssistantAutoApprove');
+    if (savedAutoApprove === 'true') {
+      setAutoApprove(true);
+    }
+  }, []);
+  
+  // Save auto-approve preference
+  useEffect(() => {
+    localStorage.setItem('aiAssistantAutoApprove', autoApprove.toString());
+  }, [autoApprove]);
+  
+  // Function call approval/rejection handlers
+  const handleApproveFunctionCall = async (functionCallId: string) => {
+    const functionCall = pendingFunctionCalls.find(fc => fc.id === functionCallId);
+    if (!functionCall) return;
+
+    try {
+      setIsCallingFunction(true);
+      setCurrentFunctionName(functionCall.name);
+      
+      const result = await geminiService.executeFunctionWithContext(
+        functionCall.name,
+        functionCall.args,
+        items,
+        categories
+      );
+
+      if (result.success) {
+        // Add visual feedback about what was actually changed
+        if (result.functionResults && result.functionResults.length > 0) {
+          const funcResult = result.functionResults[0];
+          let feedback = '';
+          
+          if (funcResult.function === 'deleteItem' && funcResult.result?.item) {
+            feedback = `✅ Deleted ${funcResult.result.item.type}: "${funcResult.result.item.title}"`;
+          } else if (funcResult.function === 'createItem' && funcResult.result?.items?.length > 0) {
+            const item = funcResult.result.items[0];
+            feedback = `✅ Created ${item.type}: "${item.title}" in ${item.categoryId}`;
+          } else if (funcResult.function === 'bulkCreateItems' && funcResult.result?.items?.length > 0) {
+            const items = funcResult.result.items;
+            feedback = `✅ Created ${items.length} items: ${items.map((item: any) => `${item.type}: "${item.title}"`).slice(0, 3).join(', ')}${items.length > 3 ? '...' : ''}`;
+          } else {
+            feedback = `✅ ${result.message || 'Action completed successfully'}`;
+          }
+          
+          await chatService.addMessage('system', feedback);
+        }
+        
+        // Trigger data refresh
+        if (result.itemsModified) {
+          onRefreshItems();
+        }
+        
+        // Intelligent agentic mode continuation after function execution
+        if (isAgenticMode) {
+          console.log('🤖 Agentic mode: Evaluating continuation after function execution');
+          
+          // Check if this was a delete operation
+          const wasDeleteOperation = result.functionResults?.some((fr: any) => 
+            fr.function === 'deleteItem' || fr.function === 'bulkDeleteItems'
+          );
+          
+          const currentIntent = agenticRequestType || 'creation';
+          const shouldContinue = shouldContinueAgentic(currentIntent, items.length, result.message || '');
+          
+          if (shouldContinue) {
+            setTimeout(() => {
+              continueAgenticMode(result.message || 'Function executed successfully', wasDeleteOperation);
+            }, 500);
+          } else {
+            console.log('🎯 Function execution completed the agentic goal');
+            setIsAgenticMode(false);
+            setOriginalUserIntent(null);
+            setAgenticRequestType(null);
+          }
+        }
+      } else {
+        await chatService.addMessage('system', `❌ **Function failed**: ${result.message || 'Unknown error'}`);
+      }
+
+      // Keep the function call visible but mark as completed
+      setPendingFunctionCalls(prev => prev.map(fc => 
+        fc.id === functionCallId 
+          ? { ...fc, completed: true, result: result } 
+          : fc
+      ));
+    } catch (error) {
+      console.error('Function execution error:', error);
+      await chatService.addMessage('system', `❌ **Function error**: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsCallingFunction(false);
+      setCurrentFunctionName(null);
+    }
+  };
+
+  const handleRejectFunctionCall = async (functionCallId: string) => {
+    setPendingFunctionCalls(prev => prev.filter(fc => fc.id !== functionCallId));
+    await chatService.addMessage('system', '❌ **Function cancelled** by user');
+  };
+  
+  // Stop agentic mode and clear all pending operations with proper cleanup
+  const stopAgenticMode = () => {
+    setIsAgenticMode(false);
+    setPendingFunctionCalls([]);
+    setAgenticLoopCount(0);
+    setIsAIThinking(false);
+    setIsCallingFunction(false);
+    setCurrentFunctionName(null);
+    setOriginalUserIntent(null);
+    setAgenticRequestType(null);
+    console.log('🛑 Agentic mode stopped and all pending operations cleared');
+    
+    // Provide user feedback about completion
+    setTimeout(() => {
+      chatService.addMessage('system', '✨ Agentic mode completed. Switched back to Ask mode.');
+    }, 100);
+  };
+
+  // Intelligent user intent classification system for robust agentic behavior
+  const classifyUserIntent = (message: string): 'deletion' | 'creation' | 'planning' | 'research' | 'optimization' | 'lifestyle_change' | 'goal_setting' | 'organization' => {
+    const lowerMessage = message.toLowerCase();
+    
+    // Deletion patterns (comprehensive)
+    if (lowerMessage.includes('delete') || lowerMessage.includes('clear') || lowerMessage.includes('remove') ||
+        lowerMessage.includes('clean up') || lowerMessage.includes('get rid of') || lowerMessage.includes('eliminate')) {
+      return 'deletion';
+    }
+    
+    // Lifestyle change patterns (major life events)
+    if (lowerMessage.includes('getting married') || lowerMessage.includes('preparing to get married') ||
+        lowerMessage.includes('move to') || lowerMessage.includes('moving to') || lowerMessage.includes('relocating') ||
+        lowerMessage.includes('new job') || lowerMessage.includes('starting a new') || lowerMessage.includes('becoming a')) {
+      return 'lifestyle_change';
+    }
+    
+    // Planning patterns (comprehensive)
+    if (lowerMessage.includes('plan') || lowerMessage.includes('organize') || lowerMessage.includes('prepare') || 
+        lowerMessage.includes('wedding') || lowerMessage.includes('trip') || lowerMessage.includes('project') ||
+        lowerMessage.includes('schedule') || lowerMessage.includes('setup') || lowerMessage.includes('set up')) {
+      return 'planning';
+    }
+    
+    // Goal setting patterns
+    if (lowerMessage.includes('goal') || lowerMessage.includes('achieve') || lowerMessage.includes('accomplish') ||
+        lowerMessage.includes('succeed') || lowerMessage.includes('target') || lowerMessage.includes('milestone')) {
+      return 'goal_setting';
+    }
+    
+    // Research patterns
+    if (lowerMessage.includes('research') || lowerMessage.includes('learn') || lowerMessage.includes('study') || 
+        lowerMessage.includes('find out') || lowerMessage.includes('investigate') || lowerMessage.includes('explore')) {
+      return 'research';
+    }
+    
+    // Organization patterns
+    if (lowerMessage.includes('organize') || lowerMessage.includes('structure') || lowerMessage.includes('categorize') ||
+        lowerMessage.includes('sort') || lowerMessage.includes('arrange') || lowerMessage.includes('manage')) {
+      return 'organization';
+    }
+    
+    // Optimization patterns  
+    if (lowerMessage.includes('improve') || lowerMessage.includes('optimize') || lowerMessage.includes('better') || 
+        lowerMessage.includes('enhance') || lowerMessage.includes('upgrade') || lowerMessage.includes('refine')) {
+      return 'optimization';
+    }
+    
+    // Default to creation for most requests
+    return 'creation';
+  };
+  
+  // Advanced context tracking for agentic persistence
+  const trackAgenticContext = (userMessage: string, intent: string) => {
+    if (!originalUserIntent) {
+      setOriginalUserIntent(userMessage);
+      setAgenticRequestType(intent as any);
+      console.log('🧠 Agentic context initialized:', { intent, message: userMessage.substring(0, 50) + '...' });
+    }
+  };
+  
+  // Intelligent continuation logic based on request type and dashboard state
+  const shouldContinueAgentic = (intent: string, totalItems: number, response: string): boolean => {
+    const lowerResponse = response.toLowerCase();
+    
+    // Stop conditions based on intent
+    switch (intent) {
+      case 'deletion':
+        return totalItems > 0; // Continue until all deleted
+      case 'lifestyle_change':
+      case 'planning':
+        return totalItems < 50 && !lowerResponse.includes('complete'); // Build comprehensive system
+      case 'goal_setting':
+        return totalItems < 20 && !lowerResponse.includes('goals set'); // Create goal framework
+      case 'organization':
+        return !lowerResponse.includes('organized') && !lowerResponse.includes('structured');
+      case 'research':
+        return !lowerResponse.includes('research complete') && totalItems < 15;
+      case 'optimization':
+        return !lowerResponse.includes('optimized') && !lowerResponse.includes('improved');
+      default: // creation
+        return totalItems < 30; // Build solid foundation
+    }
+  };
+  
+  // Enhanced agentic mode continuation with intelligent context awareness
+  const continueAgenticMode = async (previousResponse: string, wasDeleteOperation: boolean = false) => {
+    if (!isAgenticMode || agenticLoopCount >= maxAgenticLoops) {
+      console.log('🛑 Agentic mode stopping: max loops reached or disabled');
+      setAgenticLoopCount(0);
+      setOriginalUserIntent(null);
+      setAgenticRequestType(null);
+      return;
+    }
+    
+    // Use original intent for smarter continuation logic
+    const currentIntent = agenticRequestType || 'creation';
+    const totalItems = items.length;
+    
+    // Intelligent stopping based on intent and context
+    if (!shouldContinueAgentic(currentIntent, totalItems, previousResponse)) {
+      console.log('🎯 Agentic mode completing: intent fulfilled', { intent: currentIntent, totalItems });
+      await chatService.addMessage('assistant', 'Task completed! I\'ve finished setting up your comprehensive life management system.');
+      setIsAgenticMode(false);
+      setAgenticLoopCount(0);
+      setOriginalUserIntent(null);
+      setAgenticRequestType(null);
+      return;
+    }
+    
+    // Special handling for delete operations
+    if (wasDeleteOperation && currentIntent === 'deletion') {
+      if (totalItems === 0) {
+        console.log('🛑 Deletion complete: dashboard is empty');
+        setAgenticLoopCount(0);
+        setOriginalUserIntent(null);
+        setAgenticRequestType(null);
+        return;
+      }
+    }
+
+    try {
+      setAgenticLoopCount(prev => prev + 1);
+      setIsAIThinking(true);
+
+      // Get current item distribution for smarter continuation
+      const itemsByCategory = items.reduce((acc: any, item) => {
+        acc[item.categoryId] = (acc[item.categoryId] || 0) + 1;
+        return acc;
+      }, {});
+      
+      const totalItems = items.length;
+      const categoriesWithItems = Object.keys(itemsByCategory).length;
+      
+      // Check if user wants deletion or creation based on dashboard state
+      if (totalItems === 0) {
+        // If dashboard is empty, user likely wanted deletion and got it - STOP
+        console.log('🛑 Dashboard is empty - stopping agentic mode');
+        setAgenticLoopCount(0);
+        return;
+      }
+      
+      // Generate contextually intelligent prompt based on original user intent
+      const originalRequest = originalUserIntent || 'comprehensive life setup';
+      const agenticPrompt = `AGENTIC CONTINUATION - MAINTAINING ORIGINAL INTENT
+
+ORIGINAL USER REQUEST: "${originalRequest}"
+REQUEST TYPE: ${currentIntent}
+Previous action: "${previousResponse}"
+
+CURRENT DASHBOARD STATE:
+- Total items: ${totalItems}
+- Active categories: ${categoriesWithItems}/${categories.length}
+- Items by category: ${JSON.stringify(itemsByCategory)}
+
+INTELLIGENT CONTINUATION BASED ON INTENT:
+${currentIntent === 'deletion' ? 
+  '- DELETION MODE: Continue removing items until dashboard is clean'
+  : currentIntent === 'lifestyle_change' ?
+  '- LIFESTYLE CHANGE: Build comprehensive system for major life transition'
+  : currentIntent === 'planning' ?
+  '- PLANNING MODE: Create detailed plans and organizational structures'
+  : currentIntent === 'goal_setting' ?
+  '- GOAL SETTING: Establish clear objectives and tracking systems'
+  : currentIntent === 'research' ?
+  '- RESEARCH MODE: Gather information and create knowledge systems'
+  : currentIntent === 'optimization' ?
+  '- OPTIMIZATION MODE: Improve and refine existing systems'
+  : '- CREATION MODE: Build foundational life management system'}
+
+CONTEXT-AWARE EXECUTION:
+1. Stay true to the original user intent: "${originalRequest}"
+2. Build systematically toward that specific goal
+3. Create diverse, practical items that serve the original purpose
+4. Use appropriate function calls for the request type
+5. Focus on underrepresented categories that align with the intent
+
+COMPLETION CRITERIA FOR ${currentIntent.toUpperCase()}:
+${currentIntent === 'deletion' ? 
+  '- Say "AGENTIC_COMPLETE" when all unwanted items are removed'
+  : currentIntent === 'lifestyle_change' ?
+  '- Complete when comprehensive system is built for the life transition (40+ relevant items)'
+  : currentIntent === 'planning' ?
+  '- Complete when detailed plans and structures are in place (25+ organized items)'
+  : '- Complete when dashboard comprehensively supports the original goal'}
+
+Execute the next logical action that directly serves the original user intent.`;
+
+      // Process the agentic prompt
+      const response = await chatService.processGeorgetownCommand(
+        agenticPrompt,
+        categories.find(cat => cat.id === currentView)?.id,
+        items,
+        categories,
+        true // Always agentic mode for continuation
+      );
+
+      // Handle function calls from agentic mode
+      if (response.pendingFunctionCall) {
+        console.log('🤖 Agentic mode: Function call received:', response.pendingFunctionCall);
+        
+        // Add AI response first (without agentic mode prefix)
+        await chatService.addMessage('assistant', response.message);
+        
+        // Show the visual UI for user approval
+        const functionCallId = Date.now().toString();
+        const newFunctionCall = {
+          id: functionCallId,
+          name: response.pendingFunctionCall.name,
+          args: response.pendingFunctionCall.args
+        };
+        
+        console.log('🔍 DEBUG: Adding agentic function call to pending state:', newFunctionCall);
+        setPendingFunctionCalls(prev => {
+          const updated = [...prev, newFunctionCall];
+          console.log('🔍 DEBUG: Updated pending function calls:', updated);
+          return updated;
+        });
+        
+        // Auto-approve if enabled
+        if (autoApprove) {
+          console.log('🔄 Auto-approving function call:', newFunctionCall.name);
+          setTimeout(() => {
+            handleApproveFunctionCall(functionCallId);
+          }, 1000); // Brief delay to show the UI
+        }
+        
+      } else if (!response.success || response.message.includes('Error processing message')) {
+        console.log('🤖 Agentic mode stopping due to error:', response.message);
+        await chatService.addMessage('assistant', 'Encountered an issue. Switching back to default mode.');
+        setIsAgenticMode(false);
+        setAgenticLoopCount(0);
+      } else if (response.message.includes('AGENTIC_COMPLETE')) {
+        await chatService.addMessage('assistant', 'Task finished! Switching back to default mode.');
+        setIsAgenticMode(false);
+        setAgenticLoopCount(0);
+      } else {
+        // No function call and no completion - continue the loop
+        await chatService.addMessage('assistant', response.message);
+        
+        setTimeout(() => {
+          continueAgenticMode(response.message);
+        }, 2000);
+      }
+    } catch (error) {
+      console.error('Agentic mode error:', error);
+      await chatService.addMessage('assistant', 'Encountered an issue. Switching back to default mode.');
+      setIsAgenticMode(false);
+      setAgenticLoopCount(0);
+    } finally {
+      setIsAIThinking(false);
+    }
+  };
+
   // Smart intent detection - only use function calling when necessary
   const needsFunctionCalling = (transcript: string): boolean => {
     const lowerTranscript = transcript.toLowerCase();
@@ -225,6 +619,54 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     
     // Check for action verbs - simplified to just check for the verb
     return actionVerbs.some(verb => lowerTranscript.includes(verb));
+  };
+
+  // Determine if agentic mode should continue based on AI response (Claude Code methodology)
+  const needsAgenticContinuation = (response: string): boolean => {
+    const lowerResponse = response.toLowerCase();
+    
+    // Simple greetings and conversational responses should not continue
+    const simpleResponses = [
+      'hello', 'hi', 'how can i help', 'what can i do', 'how are you',
+      'nice to meet you', 'good morning', 'good afternoon', 'good evening'
+    ];
+    
+    // If response is too short or just a greeting, don't continue
+    if (response.length < 20 || simpleResponses.some(phrase => lowerResponse.includes(phrase))) {
+      return false;
+    }
+    
+    // CLARIFICATION-FIRST INDICATORS (should continue to get more info)
+    const clarificationIndicators = [
+      'could you tell me', 'what is your', 'do you want', 'would you prefer',
+      'a few questions', 'to help you better', 'what timeline', 'what budget',
+      'which areas', 'what type of', 'how would you like', 'what are your priorities'
+    ];
+    
+    // EXECUTION INDICATORS (actively working on multi-step tasks)
+    const executionIndicators = [
+      'created', 'added', 'set up', 'scheduled', 'planned', 'building',
+      'next step', 'continuing with', 'working on', 'now creating',
+      'step 1', 'step 2', 'first', 'then', 'proceeding to'
+    ];
+    
+    // PLANNING INDICATORS (outlining approach before execution)
+    const planningIndicators = [
+      "here's my plan", "i'll start by", "my approach", "the strategy",
+      "first i'll", "then i'll", "here's how", "let me outline"
+    ];
+    
+    // In agentic mode, continue more aggressively - look for any signs of multi-step work
+    const agenticContinueIndicators = [
+      ...clarificationIndicators,
+      ...executionIndicators, 
+      ...planningIndicators,
+      // Additional aggressive continuation patterns
+      'created', 'added', 'i can', 'i will', 'let me', 'next', 'also', 'then',
+      'would you like', 'should i', 'furthermore', 'additionally', 'moreover'
+    ];
+    
+    return agenticContinueIndicators.some(indicator => lowerResponse.includes(indicator));
   };
   
   // Get short confirmation message instead of verbose response
@@ -260,6 +702,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   };
   
   // Smart voice message processing - only use functions when needed
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const processVoiceMessage = useCallback(async (transcript: string) => {
     if (!transcript.trim()) return;
     
@@ -368,6 +811,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
   const [allSessions, setAllSessions] = useState<ChatSession[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [pendingFunctionCall, setPendingFunctionCall] = useState<any>(null);
   
   // Sidebar-specific state
@@ -1142,6 +1586,18 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     }
   }, [selectedGeminiVoice]);
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showModeDropdown && !(event.target as Element)?.closest('.mode-dropdown')) {
+        setShowModeDropdown(false);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [showModeDropdown]);
+
   // Note: Textarea resize handling is now handled internally by ContextAwareInput component
 
   // Sidebar resize handlers
@@ -1263,6 +1719,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     console.log('🐛 currentNoteTitle:', currentNoteTitle);
 
     // Note editing patterns - DEPRECATED, keeping for legacy support only
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const noteEditingPatterns = [
       /^(add to my note|write to my note|append to note|add to note|write to note|append note|note add|note write|note append)(.*)$/i,
       /^(replace my note|rewrite my note|replace note|rewrite note|note replace|note rewrite)(.*)$/i,
@@ -1349,7 +1806,8 @@ User message: ${processedMessage}`;
           processMessage, 
           categories.find(cat => cat.id === currentView)?.id,
           items,
-          categories
+          categories,
+          isAgenticMode
         );
 
         console.log('🔧 Fullscreen note mode - got response:', response);
@@ -1358,70 +1816,39 @@ User message: ${processedMessage}`;
 
         // Check if there's a pending function call
         if (response.pendingFunctionCall) {
-          if (isAgenticMode) {
-            // In agentic mode, automatically execute function calls
-            console.log('🤖 Agentic mode (note): Auto-executing function call:', response.pendingFunctionCall);
-            
-            try {
-              const autoResult = await geminiService.executeFunctionWithContext(
-                response.pendingFunctionCall.name,
-                response.pendingFunctionCall.args,
-                items,
-                categories
-              );
-              
-              // Add AI response indicating autonomous action
-              let aiResponse = `🤖 **Agentic Mode**: ${response.message}`;
-              if (hasImages) {
-                aiResponse = `I can see the image${selectedImages.length > 1 ? 's' : ''} you uploaded. ${aiResponse}`;
-              }
-              
-              await chatService.addMessage('assistant', aiResponse);
-              
-              // Add system message about auto-execution
-              if (autoResult.success) {
-                await chatService.addMessage('system', `✅ **Auto-executed**: ${autoResult.message || 'Action completed successfully'}`);
-                if (autoResult.itemsModified) {
-                  // Handle note content updates in fullscreen mode
-                  setTimeout(() => {
-                    try {
-                      const storedItems = JSON.parse(localStorage.getItem('georgetownAI_items') || '[]');
-                      const currentNote = storedItems.find((item: any) => 
-                        item.type === 'note' && 
-                        ((currentNoteTitle && item.title === currentNoteTitle) ||
-                         (currentNoteContent && item.text && item.text.includes(currentNoteContent.substring(0, 50))))
-                      );
-                      
-                      if (currentNote && currentNote.text !== currentNoteContent) {
-                        console.log('🤖 Agentic mode: Refreshing note content after auto-execution');
-                        onUpdateNoteContent?.(currentNote.text);
-                        if (currentNote.title !== currentNoteTitle) {
-                          onUpdateNoteTitle?.(currentNote.title);
-                        }
-                      }
-                    } catch (error) {
-                      console.error('🤖 Agentic mode note update error:', error);
-                    }
-                  }, 200);
-                }
-              } else {
-                await chatService.addMessage('system', `❌ **Auto-execution failed**: ${autoResult.message || 'Unknown error'}`);
-              }
-            } catch (error) {
-              console.error('❌ Agentic mode auto-execution error (note):', error);
-              await chatService.addMessage('system', `❌ **Auto-execution error**: ${error instanceof Error ? error.message : 'Unknown error'}`);
-            }
+          // For Cursor-like experience: AI response and function call should appear together
+          const functionCallId = Date.now().toString();
+          const newFunctionCall = {
+            id: functionCallId,
+            name: response.pendingFunctionCall.name,
+            args: response.pendingFunctionCall.args
+          };
+          
+          // Add AI response with function call immediately following
+          let aiResponse = response.message;
+          if (hasImages) {
+            aiResponse = `I can see the image${selectedImages.length > 1 ? 's' : ''} you uploaded. ${aiResponse}`;
+          }
+          await chatService.addMessage('assistant', aiResponse);
+          
+          // Immediately show function call UI
+          console.log('🔍 DEBUG: Adding function call to pending state:', newFunctionCall);
+          setPendingFunctionCalls(prev => {
+            const updated = [...prev, newFunctionCall];
+            console.log('🔍 DEBUG: Updated pending function calls:', updated);
+            return updated;
+          });
+          
+          // Auto-approve logic
+          console.log('🔍 DEBUG: Auto-approve enabled?', autoApprove);
+          if (autoApprove) {
+            console.log('🔄 Auto-approving function call:', newFunctionCall.name, 'with ID:', functionCallId);
+            setTimeout(() => {
+              console.log('🔄 Executing auto-approval for:', functionCallId);
+              handleApproveFunctionCall(functionCallId);
+            }, 1000);
           } else {
-            // Normal mode: show confirmation dialog
-            setPendingFunctionCall(response.pendingFunctionCall);
-            
-            // Add AI response with function call preview
-            let aiResponse = response.message;
-            if (hasImages) {
-              aiResponse = `I can see the image${selectedImages.length > 1 ? 's' : ''} you uploaded. ${response.message}`;
-            }
-            
-            await chatService.addMessage('assistant', aiResponse);
+            console.log('⏸️ Auto-approve disabled, waiting for manual approval');
           }
         } else {
           // In note mode, if AI modified items, check if it was the current note
@@ -1466,6 +1893,13 @@ User message: ${processedMessage}`;
         // Regular chat processing (not in note mode)
         const currentCategoryId = categories.find(cat => cat.id === currentView)?.id;
         
+        // Initialize agentic context tracking for new agentic requests
+        if (isAgenticMode && agenticLoopCount === 0) {
+          const userIntent = classifyUserIntent(processedMessage);
+          trackAgenticContext(processedMessage, userIntent);
+          console.log('🚀 Starting new agentic session:', { intent: userIntent, message: processedMessage.substring(0, 50) + '...' });
+        }
+        
         // For now, we'll process text normally. In a real app, you'd send images to your AI service
         let processMessage = processedMessage;
         if (hasImages && !messageToSend) {
@@ -1475,7 +1909,9 @@ User message: ${processedMessage}`;
         console.log('🔄 AIAssistant: Calling chatService.processGeorgetownCommand with:', {
           message: processMessage,
           categoryId: currentCategoryId,
-          itemsCount: items?.length || 0
+          itemsCount: items?.length || 0,
+          agenticMode: isAgenticMode,
+          agenticContext: { intent: agenticRequestType, originalRequest: originalUserIntent }
         });
 
         // Check if this looks like a function call command
@@ -1490,7 +1926,8 @@ User message: ${processedMessage}`;
           processMessage, 
           currentCategoryId,
           items,
-          categories
+          categories,
+          isAgenticMode
         );
 
         console.log('📥 AIAssistant: Received response from chatService:', response);
@@ -1510,41 +1947,48 @@ User message: ${processedMessage}`;
         // Check if there's a pending function call
         if (response.pendingFunctionCall) {
           if (isAgenticMode) {
-            // In agentic mode, automatically execute function calls
-            console.log('🤖 Agentic mode (regular): Auto-executing function call:', response.pendingFunctionCall);
+            // In agentic mode, show visual function call UI and let user approve
+            console.log('🤖 Agentic mode: Showing function call UI for user review:', response.pendingFunctionCall);
             
-            try {
-              const autoResult = await geminiService.executeFunctionWithContext(
-                response.pendingFunctionCall.name,
-                response.pendingFunctionCall.args,
-                items,
-                categories
-              );
-              
-              // Add AI response indicating autonomous action
-              let aiResponse = `🤖 **Agentic Mode**: ${response.message}`;
-              if (hasImages) {
-                aiResponse = `I can see the image${selectedImages.length > 1 ? 's' : ''} you uploaded. ${aiResponse}`;
-              }
-              
-              await chatService.addMessage('assistant', aiResponse);
-              
-              // Add system message about auto-execution
-              if (autoResult.success) {
-                await chatService.addMessage('system', `✅ **Auto-executed**: ${autoResult.message || 'Action completed successfully'}`);
-                if (autoResult.itemsModified) {
-                  onRefreshItems();
-                }
-              } else {
-                await chatService.addMessage('system', `❌ **Auto-execution failed**: ${autoResult.message || 'Unknown error'}`);
-              }
-            } catch (error) {
-              console.error('❌ Agentic mode auto-execution error (regular):', error);
-              await chatService.addMessage('system', `❌ **Auto-execution error**: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            // Add AI response first
+            let aiResponse = response.message;
+            if (hasImages) {
+              aiResponse = `I can see the image${selectedImages.length > 1 ? 's' : ''} you uploaded. ${aiResponse}`;
+            }
+            await chatService.addMessage('assistant', aiResponse);
+            
+            // Show the visual UI (no auto-execution)
+            const functionCallId = Date.now().toString();
+            const newFunctionCall = {
+              id: functionCallId,
+              name: response.pendingFunctionCall.name,
+              args: response.pendingFunctionCall.args
+            };
+            
+            console.log('🔍 DEBUG: Adding function call to pending state:', newFunctionCall);
+            console.log('🔍 DEBUG: Function call args:', JSON.stringify(response.pendingFunctionCall.args, null, 2));
+            
+            setPendingFunctionCalls(prev => {
+              const updated = [...prev, newFunctionCall];
+              console.log('🔍 DEBUG: Updated pending function calls:', updated);
+              return updated;
+            });
+            
+            // Auto-approve if enabled
+            if (autoApprove) {
+              console.log('🔄 Auto-approving function call:', newFunctionCall.name);
+              setTimeout(() => {
+                handleApproveFunctionCall(functionCallId);
+              }, 1000); // Brief delay to show the UI
             }
           } else {
-            // Normal mode: show confirmation dialog
-            setPendingFunctionCall(response.pendingFunctionCall);
+            // Normal mode: show visual function call UI
+            const functionCallId = Date.now().toString();
+            setPendingFunctionCalls(prev => [...prev, {
+              id: functionCallId,
+              name: response.pendingFunctionCall.name,
+              args: response.pendingFunctionCall.args
+            }]);
             
             // Add AI response with function call preview
             let aiResponse = response.message;
@@ -1593,6 +2037,24 @@ User message: ${processedMessage}`;
           console.log('💬 AIAssistant: Adding AI response to chat:', aiResponse);
           await chatService.addMessage('assistant', aiResponse);
           console.log('✅ AIAssistant: AI response added successfully');
+          
+          // Intelligent agentic mode continuation based on intent and context
+          if (isAgenticMode) {
+            const currentIntent = agenticRequestType || 'creation';
+            const shouldContinue = shouldContinueAgentic(currentIntent, items.length, aiResponse);
+            
+            if (shouldContinue) {
+              console.log('🧠 Continuing agentic mode:', { intent: currentIntent, itemCount: items.length });
+              setTimeout(() => {
+                continueAgenticMode(aiResponse);
+              }, 1000);
+            } else {
+              console.log('🎯 Agentic mode naturally completing based on intent fulfillment');
+              setIsAgenticMode(false);
+              setOriginalUserIntent(null);
+              setAgenticRequestType(null);
+            }
+          }
         }
       }
       
@@ -1644,7 +2106,8 @@ User message: ${processedMessage}`;
           newContent, 
           currentCategoryId,
           items,
-          categories
+          categories,
+          false // Voice mode is always Ask mode, not Agent mode
         );
 
         // Handle item creation
@@ -1771,11 +2234,18 @@ User message: ${processedMessage}`;
   if (!isOpen) return null;
 
   return (
-    <div 
-      ref={panelRef}
-      className={`fixed top-0 right-0 h-screen z-40 shadow-2xl transition-all duration-300 ease-in-out ${
-        isCollapsed ? 'rounded-l-full' : 'rounded-l-2xl'
-      }`}
+    <>
+      <style>{`
+        @keyframes scaleUpDown {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.5); }
+        }
+      `}</style>
+      <div 
+        ref={panelRef}
+        className={`fixed top-0 right-0 h-screen z-40 shadow-2xl transition-all duration-300 ease-in-out ${
+          isCollapsed ? 'rounded-l-full' : 'rounded-l-2xl'
+        }`}
       style={{
         width: isCollapsed ? '60px' : `${sidebarWidth || 420}px`,
         background: isDarkMode 
@@ -1830,21 +2300,6 @@ User message: ${processedMessage}`;
                 {isDarkMode ? <Sun className="w-4 h-4 text-yellow-400" /> : <Moon className="w-4 h-4 text-gray-600" />}
               </button>
               
-              <button
-                onClick={() => setIsAgenticMode(!isAgenticMode)}
-                className={`p-2 rounded-lg transition-all hover:scale-110 ${
-                  isAgenticMode 
-                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600' 
-                    : (isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100')
-                }`}
-                title={`${isAgenticMode ? 'Disable' : 'Enable'} Agentic Mode - AI takes autonomous actions`}
-              >
-                <Zap className={`w-4 h-4 ${
-                  isAgenticMode 
-                    ? 'text-white' 
-                    : (isDarkMode ? 'text-gray-300' : 'text-gray-600')
-                }`} />
-              </button>
               
               <button
                 onClick={createNewSession}
@@ -1924,7 +2379,7 @@ User message: ${processedMessage}`;
                   <div className="flex items-center space-x-1">
                     <div className="w-1 h-1 bg-purple-500 rounded-full animate-pulse"></div>
                     <span className="text-xs font-medium text-purple-600 bg-purple-100/50 px-2 py-0.5 rounded-full">
-                      🤖 Agentic
+                      ∞ Agent
                     </span>
                   </div>
                 )}
@@ -2524,8 +2979,26 @@ User message: ${processedMessage}`;
               </div>
             )}
             
-            {/* Function Confirmation Card */}
-            {/* Function confirmation removed - immediate execution like OpenRouter */}
+            {/* Function Call UIs */}
+            {pendingFunctionCalls.map((functionCall) => (
+              <div key={functionCall.id} className="flex justify-start relative z-10 mb-4">
+                <div className="flex items-start space-x-3 w-full max-w-4xl">
+                  <div className="p-2 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 shadow-lg">
+                    <Sparkles className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <FunctionCallUI
+                      functionCall={functionCall}
+                      onApprove={() => handleApproveFunctionCall(functionCall.id)}
+                      onReject={() => handleRejectFunctionCall(functionCall.id)}
+                      isDarkMode={isDarkMode}
+                      autoApprove={autoApprove}
+                      onAutoApproveChange={setAutoApprove}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
             
             {isProcessing && (
               <div className="flex justify-start relative z-10">
@@ -2543,63 +3016,32 @@ User message: ${processedMessage}`;
                     <div className="flex items-center space-x-3">
                       {/* Thinking indicator */}
                       {isAIThinking && (
-                        <>
-                          <div className="flex space-x-1">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                          </div>
-                          <span className={`text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-                            Thinking...
-                          </span>
-                        </>
+                        <div className={`w-2 h-2 rounded-full animate-bounce ${isDarkMode ? 'bg-gray-200' : 'bg-gray-700'}`} 
+                             style={{
+                               animation: 'bounce 1s infinite, scaleUpDown 1.5s infinite'
+                             }}>
+                        </div>
                       )}
                       
                       {/* Function call indicator */}
                       {isCallingFunction && (
-                        <>
-                          <div className="flex space-x-1">
-                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                        <div className="flex items-center space-x-2">
+                          <div className={`px-2 py-1 rounded-lg text-xs font-medium ${
+                            isDarkMode ? 'bg-green-500/20 text-green-400' : 'bg-green-100 text-green-700'
+                          }`}>
+                            🔧 {currentFunctionName || 'Function'}
                           </div>
-                          <span className={`text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-                            {currentFunctionName || 'Executing function...'}
-                          </span>
-                        </>
+                        </div>
                       )}
                       
                       {/* Fallback processing indicator */}
                       {!isAIThinking && !isCallingFunction && (
-                        <>
-                          <div className="flex space-x-1">
-                            <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
-                            <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></div>
-                            <div className="w-2 h-2 bg-pink-500 rounded-full animate-pulse"></div>
-                          </div>
-                          <span className={`text-sm ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-                            Processing...
-                          </span>
-                        </>
+                        <div className={`w-2 h-2 rounded-full animate-bounce ${isDarkMode ? 'bg-gray-200' : 'bg-gray-700'}`} 
+                             style={{
+                               animation: 'bounce 1s infinite, scaleUpDown 1.5s infinite'
+                             }}>
+                        </div>
                       )}
-                      
-                      <button
-                        onClick={async () => {
-                          chatService.setProcessing(false);
-                          setIsAIThinking(false);
-                          setIsCallingFunction(false);
-                          setCurrentFunctionName(null);
-                          await chatService.addMessage('system', 'Response cancelled by user');
-                        }}
-                        className={`ml-3 px-3 py-1 rounded-lg text-xs transition-all hover:scale-105 ${
-                          isDarkMode 
-                            ? 'bg-red-600 hover:bg-red-700 text-white' 
-                            : 'bg-red-500 hover:bg-red-600 text-white'
-                        }`}
-                        title="Stop AI Response"
-                      >
-                        Stop
-                      </button>
                     </div>
                   </div>
                 </div>
@@ -2704,7 +3146,7 @@ User message: ${processedMessage}`;
                 />
                 
                 {/* Input Icons */}
-                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex space-x-2">
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex space-x-2 z-50">
                   {/* Voice Transcription Button */}
                   <button
                     onClick={handleVoiceButtonClick}
@@ -2757,8 +3199,26 @@ User message: ${processedMessage}`;
                 </div>
               </div>
               
-              {/* Voice Chat/Send Button */}
-              {inputMessage.trim() === '' ? (
+              {/* Voice Chat/Send/Stop Button */}
+              {isAIThinking || isProcessing ? (
+                // Stop Button (shows when AI is thinking/processing)
+                <button
+                  onClick={() => {
+                    if (isAgenticMode) {
+                      stopAgenticMode();
+                    }
+                    setIsAIThinking(false);
+                    chatService.setProcessing(false);
+                  }}
+                  className={`w-14 h-14 rounded-2xl shadow-xl border flex items-center justify-center transition-all duration-300 transform hover:scale-110 active:scale-95 group relative overflow-hidden bg-gradient-to-br from-red-500 via-red-600 to-red-700 border-red-400/50`}
+                  style={{
+                    boxShadow: '0 12px 40px rgba(239, 68, 68, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
+                  }}
+                  title="Stop AI Processing"
+                >
+                  <Square className="w-4 h-4 text-white fill-current" />
+                </button>
+              ) : inputMessage.trim() === '' ? (
                 // Voice Chat Button (for real-time conversation)
                 <button
                   onClick={toggleVoiceMode}
@@ -2848,20 +3308,75 @@ User message: ${processedMessage}`;
               className="hidden"
             />
             
-            <div className={`text-xs mt-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-              Enter to send • Shift+Enter for new line • 🎤 Voice to text • 📷 Upload photos • 🎤 Voice chat
-              {isTranscribing && (
-                <div className="flex items-center space-x-2 mt-1 text-yellow-600">
-                  <div className="w-3 h-3 border border-yellow-600 border-t-transparent rounded-full animate-spin"></div>
-                  <span>Transcribing voice...</span>
+            <div className="flex items-center justify-between mt-2">
+              <div className="flex items-center space-x-3">
+                {/* Mode Dropdown - Bottom Left */}
+                <div className="relative mode-dropdown">
+                  <button
+                    onClick={() => setShowModeDropdown(!showModeDropdown)}
+                    className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-sm transition-all ${
+                      isDarkMode ? 'hover:bg-gray-700 text-white border border-gray-600' : 'hover:bg-gray-100 text-gray-700 border border-gray-300'
+                    }`}
+                  >
+                    <span>∞</span>
+                    <span>{isAgenticMode ? 'Agent' : 'Ask'}</span>
+                    <ChevronDown className="w-3 h-3" />
+                  </button>
+                  
+                  {showModeDropdown && (
+                    <div className={`absolute bottom-full left-0 mb-1 w-32 rounded-lg border shadow-lg z-50 ${
+                      isDarkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
+                    }`}>
+                      <button
+                        onClick={() => {
+                          stopAgenticMode();
+                          setShowModeDropdown(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left text-sm transition-all flex items-center space-x-2 ${
+                          !isAgenticMode
+                            ? isDarkMode ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-900'
+                            : isDarkMode ? 'hover:bg-gray-700 text-white' : 'hover:bg-gray-100 text-gray-700'
+                        }`}
+                      >
+                        <span>💬</span>
+                        <span>Ask</span>
+                        {!isAgenticMode && <span className="ml-auto">✓</span>}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsAgenticMode(true);
+                          setShowModeDropdown(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left text-sm transition-all flex items-center space-x-2 ${
+                          isAgenticMode
+                            ? 'bg-gradient-to-r from-purple-500 to-indigo-600 text-white'
+                            : isDarkMode ? 'hover:bg-gray-700 text-white' : 'hover:bg-gray-100 text-gray-700'
+                        }`}
+                      >
+                        <span>∞</span>
+                        <span>Agent</span>
+                        {isAgenticMode && <span className="ml-auto">✓</span>}
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
-              {isVoiceMode && (
-                <div className="flex items-center space-x-2 mt-1 text-purple-600">
-                  <div className="w-3 h-3 bg-purple-600 rounded-full animate-pulse"></div>
-                  <span>Voice chat active</span>
-                </div>
-              )}
+              </div>
+              
+              <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                Enter to send • Shift+Enter for new line • 🎤 Voice to text • 📷 Upload photos • 🎤 Voice chat
+                {isTranscribing && (
+                  <div className="flex items-center space-x-2 mt-1 text-yellow-600">
+                    <div className="w-3 h-3 border border-yellow-600 border-t-transparent rounded-full animate-spin"></div>
+                    <span>Transcribing voice...</span>
+                  </div>
+                )}
+                {isVoiceMode && (
+                  <div className="flex items-center space-x-2 mt-1 text-purple-600">
+                    <div className="w-3 h-3 bg-purple-600 rounded-full animate-pulse"></div>
+                    <span>Voice chat active</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           )}
@@ -2878,6 +3393,7 @@ User message: ${processedMessage}`;
         </div>
       )}
     </div>
+    </>
   );
 };
 

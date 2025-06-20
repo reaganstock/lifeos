@@ -17,6 +17,7 @@ export interface GeminiResponse {
   functionResults?: any[];
   itemsModified?: boolean;
   itemCreated?: any;
+  pendingFunctionCall?: any;
   thinkingContent?: string;
 }
 
@@ -122,7 +123,9 @@ export class GeminiService {
   async processMessage(
     message: string, 
     items: Item[], 
-    conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = []
+    conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [],
+    categories: any[] = [],
+    isAgenticMode: boolean = false
   ): Promise<GeminiResponse> {
     console.log('🚀 GEMINI DIRECT API - Processing:', message);
     
@@ -133,7 +136,7 @@ export class GeminiService {
     this.itemsModified = false;
     
     // Build system prompt with better instructions for conversational responses
-    const systemPrompt = this.buildSmartSystemPrompt(items) + `
+    const systemPrompt = this.buildSmartSystemPrompt(items, categories) + `
 
 CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
 - Keep responses natural and conversational, not robotic
@@ -157,7 +160,7 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
     ];
     
     // Use function calling intelligently - not for every message
-    const tools = this.getTools();
+    const tools = this.getTools(categories);
     console.log('🔧 DEBUG: Tools being sent:', tools.length, 'tools');
     console.log('🔧 DEBUG: First few tools:', tools.slice(0, 3).map(t => t.name));
     
@@ -170,8 +173,19 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
       console.log('🔍 DEBUG: Candidates:', response.candidates);
       console.log('🔍 DEBUG: Parts:', response.candidates?.[0]?.content?.parts);
       
+      // EXTRA DEBUG: Check for function calls more explicitly
+      if (response.candidates?.[0]?.content?.parts) {
+        response.candidates[0].content.parts.forEach((part: any, index: number) => {
+          console.log(`🔍 DEBUG Part ${index}:`, part);
+          console.log(`🔍 DEBUG Part ${index} has functionCall:`, !!(part as any).functionCall);
+          console.log(`🔍 DEBUG Part ${index} has text:`, !!(part as any).text);
+        });
+      }
+      
       // Handle function calls - EXECUTE IMMEDIATELY like OpenRouter
       const functionResults: any[] = [];
+      
+      let pendingFunctionCall: any = null;
       
       if (response.candidates?.[0]?.content?.parts) {
         const parts = response.candidates[0].content.parts;
@@ -182,30 +196,57 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
           console.log('🔍 DEBUG: Part has functionCall?', !!(part as any).functionCall);
           if ((part as any).functionCall) {
             const functionCall = (part as any).functionCall;
-            console.log('🎯 Executing function immediately:', functionCall.name);
+            console.log('🎯 Found function call:', functionCall.name, '| Agentic mode:', isAgenticMode);
             
-            try {
-              const result = await this.executeFunction(functionCall.name, functionCall.args);
-              functionResults.push(result);
-              
-              // Set items modified flag
-              if (['createItem', 'updateItem', 'deleteItem', 'bulkCreateItems', 'bulkUpdateItems', 'bulkDeleteItems'].includes(functionCall.name)) {
-                this.itemsModified = true;
+            if (isAgenticMode) {
+              // Agent mode: Return as pending function call for visual UI
+              pendingFunctionCall = {
+                name: functionCall.name,
+                args: functionCall.args
+              };
+              console.log('📋 Agent mode: Returning function call as pending for visual approval');
+              break; // Only handle the first function call
+            } else {
+              // Ask mode: Execute immediately like before
+              console.log('⚡ Ask mode: Executing function immediately');
+              try {
+                const result = await this.executeFunction(functionCall.name, functionCall.args);
+                functionResults.push({
+                  function: functionCall.name,
+                  ...result
+                });
+                console.log('✅ Ask mode: Function executed successfully');
+              } catch (error) {
+                console.error('❌ Ask mode: Function execution failed:', error);
+                functionResults.push({
+                  function: functionCall.name,
+                  error: error instanceof Error ? error.message : 'Unknown error'
+                });
               }
-            } catch (error) {
-              console.error('❌ Function execution error:', error);
-              functionResults.push({
-                function: functionCall.name,
-                error: error instanceof Error ? error.message : 'Unknown error'
-              });
             }
           }
         }
       }
       
       // Get text response and thinking content
-      const textResponse = response.candidates?.[0]?.content?.parts
-        ?.find((part: any) => part.text)?.text || 'Unable to complete the requested action.';
+      const textPart = response.candidates?.[0]?.content?.parts?.find((part: any) => part.text);
+      console.log('🔍 DEBUG: Text part found:', !!textPart);
+      console.log('🔍 DEBUG: Pending function call exists:', !!pendingFunctionCall);
+      
+      let textResponse = textPart?.text || '';
+      
+      // Only use fallback if no text AND no function call
+      if (!textResponse && !pendingFunctionCall) {
+        textResponse = 'Unable to complete the requested action.';
+        console.log('⚠️ DEBUG: Using fallback text response - no text part and no function call found');
+      } else if (!textResponse && pendingFunctionCall) {
+        textResponse = `I'll handle that for you now.`;
+        console.log('✅ DEBUG: Using function prep text response');
+      } else if (textResponse) {
+        console.log('✅ DEBUG: Using actual AI text response');
+      }
+      
+      console.log('🔍 DEBUG: Final text response:', textResponse);
       
       // Extract thinking content if available (for thinking models)
       const thinkingContent = response.candidates?.[0]?.content?.parts
@@ -304,6 +345,7 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
               response: intelligentFallback,
               functionResults,
               itemsModified: this.itemsModified,
+              pendingFunctionCall: pendingFunctionCall,
               thinkingContent
             };
           }
@@ -313,6 +355,7 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
             response: textResponse,
             functionResults,
             itemsModified: this.itemsModified,
+            pendingFunctionCall: pendingFunctionCall,
             thinkingContent
           };
         }
@@ -322,6 +365,7 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
         success: true,
         response: textResponse,
         itemsModified: false,
+        pendingFunctionCall: pendingFunctionCall, // This was missing!
         thinkingContent
       };
       
@@ -331,7 +375,7 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
     }
   }
 
-  private buildSmartSystemPrompt(items: Item[]): string {
+  private buildSmartSystemPrompt(items: Item[], categories: any[] = []): string {
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
     const nextWeekStr = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -342,21 +386,65 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
       event.dateTime && new Date(event.dateTime) >= today
     ).slice(0, 10); // Show next 10 events for context
 
-    // Get unique categories from current items (since users create their own categories)
-    const uniqueCategories = Array.from(new Set(items.map(item => item.categoryId)))
-      .filter(categoryId => categoryId) // Remove empty/null category IDs
-      .map(categoryId => ({ id: categoryId, name: categoryId })); // Simple mapping since we don't have category details here
+    // Use actual categories from Supabase if available, otherwise fall back to item categories
+    const availableCategories = categories.length > 0 
+      ? categories.map(cat => ({ id: cat.id, name: cat.name }))
+      : Array.from(new Set(items.map(item => item.categoryId)))
+          .filter(categoryId => categoryId)
+          .map(categoryId => ({ id: categoryId, name: categoryId }));
+
+    console.log('📂 GEMINI SERVICE: Available categories for context:', availableCategories);
 
     return `You are an AI assistant for lifeOS, a comprehensive life management system. 
 
-🎯 SMART FUNCTION CALLING RULES:
-1. Call functions for ACTION requests (create, add, update, delete, mark, change)
-2. Answer questions CONVERSATIONALLY using the data context provided below
-3. For creation requests → CALL createItem or bulkCreateItems functions
-4. For update requests → CALL updateItem or bulkUpdateItems functions
-5. For questions about data → ANSWER from context, do NOT call searchItems
-6. Function calls are REQUIRED for actions, OPTIONAL for informational requests
-7. If no function exists for an action request, explain that specifically
+🎯 MANDATORY FUNCTION CALLING RULES:
+1. You MUST call functions for ALL action requests - NO EXCEPTIONS
+2. For creation requests → CALL createItem or bulkCreateItems functions
+3. For update requests → CALL updateItem function  
+4. For deletion requests → CALL deleteItem function (call multiple times to delete all items)
+5. DO NOT just talk about actions - EXECUTE them with function calls
+6. EVERY action request REQUIRES a function call
+7. "Delete everything" or "clear dashboard" → CALL deleteItem for EVERY existing item - DO NOT CREATE NEW ITEMS
+8. When user says "delete everything" you MUST delete ALL items, not create new ones
+9. Talking without function calls for action requests is FORBIDDEN
+
+🤖 AGENTIC MODE - INTELLIGENT AUTONOMOUS EXECUTION:
+
+You are an intelligent autonomous agent that executes complex, multi-step requests systematically.
+
+CORE PRINCIPLES:
+1. UNDERSTAND the user's true intent and maintain it across all cycles
+2. EXECUTE actions systematically using appropriate functions
+3. ADAPT your approach based on the type of request
+4. CONTINUE until the original goal is genuinely complete
+5. NEVER lose track of the original user request
+
+AGENTIC REQUEST PATTERNS:
+- DELETION: "delete everything", "clear dashboard", "remove all" → deleteItem for all items, then STOP
+- CREATION: "prepare my life", "build app", "organize business" → systematic creation using createItem/bulkCreateItems
+- PLANNING: "plan my wedding", "organize trip" → create structured goals, todos, events, notes
+- RESEARCH: "research topic" → create notes, goals for learning, todos for next steps
+- OPTIMIZATION: "improve my routine" → analyze existing, update items, create complementary items
+
+INTELLIGENT CONTINUATION:
+- Remember the ORIGINAL USER INTENT across all cycles
+- Stop when the original goal is achieved, not when you feel like stopping
+- For complex requests, break into logical phases and execute systematically
+- Maintain coherence between cycles - each action should build toward the original goal
+
+EXAMPLE RESPONSE STYLE:
+"Perfect! I'm setting up your wedding planning system. Let me start by creating a comprehensive timeline goal and some immediate action items to get you organized. This will help you track all the moving pieces for your big day.
+
+I'll create:
+- A master wedding planning goal with timeline
+- Key preparation todos for the next month
+- Important vendor research tasks
+
+[Then call bulkCreateItems with wedding-related items]
+
+This gives you a solid foundation to build from, and we can add more specific details as you think of them!"
+
+CRITICAL: Be helpful and explanatory like a real assistant, not robotic.
 
 EXAMPLES:
 - "create a goal" → CALL createItem function
@@ -708,7 +796,7 @@ Remember: Execute actions immediately via function calls. Be intelligent, specif
 
 CURRENT ITEMS CONTEXT (${items.length} total):
 ${items.length > 0 ? items.slice(0, 20).map(item => {
-  const category = uniqueCategories.find(c => c.id === item.categoryId);
+  const category = availableCategories.find(c => c.id === item.categoryId);
   const dueInfo = item.dueDate ? ` (due: ${item.dueDate.toLocaleDateString()})` : '';
   const completedInfo = item.completed ? ' ✓' : '';
   const progressInfo = item.metadata?.progress ? ` (${item.metadata.progress}%)` : '';
@@ -739,7 +827,11 @@ Examples:
 - "Add to my recipe note that it takes 45 minutes" → Use appendText to add cooking time without losing existing recipe content`;
   }
 
-  getTools() {
+  getTools(categories: any[] = []) {
+    // Build dynamic category description
+    const categoryDescription = categories.length > 0 
+      ? `MUST use one of these exact category IDs: ${categories.map(cat => `"${cat.id}" (${cat.name})`).join(', ')}. DO NOT use any other category IDs.`
+      : 'Life category for this item. Use the exact category ID from the available categories.';
     return [
       {
         name: 'createItem',
@@ -766,7 +858,7 @@ Examples:
             },
             categoryId: {
               type: 'STRING',
-              description: 'Life category for this item. Can be any category name the user specifies (e.g., "dating", "work", "fitness", "personal", etc.) or use existing ones: self-regulation, gym-calisthenics, mobile-apps, catholicism, social-charisma, content'
+              description: categoryDescription
             },
             dueDate: {
               type: 'STRING',
@@ -2991,7 +3083,7 @@ Please specify your preference or say "create anyway" to override.`,
   private async copyRoutineFromPerson(args: any): Promise<any> {
     console.log('👤 Copying routine from person:', args);
     
-    const items = this.getStoredItems();
+    // const items = this.getStoredItems(); // TODO: Use for routine lookup
     const personName = args.personName;
     const routineType = args.routineType || 'daily';
     const startDate = args.startDate || new Date().toISOString().split('T')[0];
@@ -4585,7 +4677,7 @@ Please specify "delete this one" or "delete all" to proceed.`,
     try {
       const items = this.getStoredItems();
       const canceledEventId = args.canceledEventId;
-      const rescheduleType = args.rescheduleType || 'auto'; // 'auto', 'priority', 'category'
+      // const rescheduleType = args.rescheduleType || 'auto'; // 'auto', 'priority', 'category' // TODO: Use for scheduling logic
       
       // Try to find the event by ID first, then by description
       let canceledEvent = items.find(item => item.id === canceledEventId);
@@ -4627,7 +4719,8 @@ Please specify "delete this one" or "delete all" to proceed.`,
       // Smart rescheduling logic - UPDATE existing event instead of creating new one
       if (canceledCategory === 'gym-calisthenics' || canceledCategory === 'cardio-running') {
         // If workout was canceled, find next available slot
-        const workoutEvents = filteredItems.filter(item => 
+        // const workoutEvents = filteredItems.filter(item =>  // TODO: Use for workout scheduling
+        const isWorkoutRelated = filteredItems.filter(item => 
           item.type === 'event' && 
           (item.categoryId === 'gym-calisthenics' || item.categoryId === 'cardio-running') &&
           item.dateTime &&
@@ -4809,13 +4902,14 @@ Please specify "delete this one" or "delete all" to proceed.`,
       const slotEnd = new Date(currentSlot.getTime() + durationMinutes * 60 * 1000);
       
       // Check if this slot conflicts with any existing event
+      const slotStartTime = currentSlot.getTime();
       const hasConflict = events.some(event => {
         const eventStart = new Date(event.dateTime!);
         const eventEnd = event.metadata?.endTime ? 
           new Date(event.metadata.endTime) : 
           new Date(eventStart.getTime() + 60 * 60 * 1000); // Default 1 hour
         
-        return (currentSlot < eventEnd && slotEnd > eventStart);
+        return (slotStartTime < eventEnd.getTime() && slotEnd.getTime() > eventStart.getTime());
       });
       
       if (!hasConflict) {

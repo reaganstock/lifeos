@@ -41,7 +41,7 @@ const FUNCTIONS = [
         },
         categoryId: {
           type: 'string',
-          description: 'Category ID (self-regulation, gym-calisthenics, mobile-apps, catholicism, social-charisma, content)'
+          description: 'MUST use one of these exact category IDs from the available categories'
         },
         priority: {
           type: 'string',
@@ -1554,8 +1554,32 @@ export class AIActions {
   }
 
   // Get tools in the new OpenRouter format
-  getTools() {
-    return FUNCTIONS.map(func => ({
+  getTools(categories: any[] = []) {
+    // Update the categoryId description in createItem function
+    const updatedFunctions = FUNCTIONS.map(func => {
+      if (func.name === 'createItem') {
+        const categoryDescription = categories.length > 0 
+          ? `MUST use one of these exact category IDs: ${categories.map(cat => `"${cat.id}" (${cat.name})`).join(', ')}`
+          : 'MUST use one of these exact category IDs from the available categories';
+        
+        return {
+          ...func,
+          parameters: {
+            ...func.parameters,
+            properties: {
+              ...func.parameters.properties,
+              categoryId: {
+                ...func.parameters.properties.categoryId,
+                description: categoryDescription
+              }
+            }
+          }
+        };
+      }
+      return func;
+    });
+
+    return updatedFunctions.map(func => ({
       type: "function",
       function: func
     }));
@@ -1640,7 +1664,7 @@ END OF NATURAL LANGUAGE REVOLUTION PROMPT - UNDERSTAND EVERYTHING! 🧠💪`;
   }
 
   // Process a message with function calling
-  async processMessage(message: string, items: Item[], conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = []): Promise<any> {
+  async processMessage(message: string, items: Item[], conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [], categories: any[] = []): Promise<any> {
     console.log('🎯 Message:', message);
     
     if (!OPENROUTER_API_KEY) {
@@ -1714,7 +1738,7 @@ END OF NATURAL LANGUAGE REVOLUTION PROMPT - UNDERSTAND EVERYTHING! 🧠💪`;
       
       // Only add function calling for task management
       if (shouldUseFunctions) {
-        requestBody.tools = this.getTools();
+        requestBody.tools = this.getTools(categories);
         requestBody.tool_choice = 'auto';
       }
       

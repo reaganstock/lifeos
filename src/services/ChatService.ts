@@ -3,7 +3,7 @@ import { Item, Category } from '../types';
 import { AIActions, getCurrentModel, forceResetToGemini } from '../services/aiActions';
 import { geminiService } from '../services/geminiService';
 import { SupabaseChatService } from './SupabaseChatService';
-import { supabase } from '../lib/supabase';
+// import { supabase } from '../lib/supabase';
 
 class ChatService {
   private state: ChatState = {
@@ -404,17 +404,16 @@ class ChatService {
     message: string, 
     currentCategoryId?: string,
     allItems?: Item[],
-    allCategories?: Category[]
+    allCategories?: Category[],
+    isAgenticMode?: boolean
   ): Promise<AIResponse> {
     try {
       // Get recent items for context
-      let recentItems: Item[] = [];
       try {
-        recentItems = await this.aiActions.getRecentItems(10, 7);
+        await this.aiActions.getRecentItems(10, 7);
       } catch (error) {
         console.warn('Could not fetch recent items for context:', error);
-        // Use provided items as fallback
-        recentItems = allItems?.slice(0, 10) || [];
+        // Use provided items as fallback - handled by allItems parameter
       }
 
       // Get conversation history from current session
@@ -454,18 +453,23 @@ class ChatService {
       try {
         if (isGeminiModel) {
           console.log('🧠 ChatService: ✅ ROUTING TO GEMINI DIRECT API for model:', currentModel);
+          console.log('📂 Categories being passed to Gemini:', Array.isArray(allCategories) ? allCategories.map(c => ({ id: c.id, name: c.name })) : 'NOT AN ARRAY:', allCategories);
           result = await geminiService.processMessage(
             message, 
             allItems || [], 
-            conversationHistory
+            conversationHistory,
+            Array.isArray(allCategories) ? allCategories : [],
+            isAgenticMode || false
           );
           console.log('✅ ChatService: Gemini Direct API result:', result);
         } else {
           console.log('🧠 ChatService: ❌ ROUTING TO OPENROUTER/AIActions for model:', currentModel);
+          console.log('📂 Categories being passed to AIActions:', Array.isArray(allCategories) ? allCategories.map(c => ({ id: c.id, name: c.name })) : 'NOT AN ARRAY:', allCategories);
           result = await this.aiActions.processMessage(
             message, 
             allItems || [], 
-            conversationHistory
+            conversationHistory,
+            allCategories || []
           );
           console.log('✅ ChatService: AIActions result:', result);
         }
