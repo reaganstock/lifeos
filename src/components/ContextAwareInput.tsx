@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { createPortal } from 'react-dom';
 import { Item } from '../types';
 import { showCopyFeedback } from '../utils/clipboard';
 
@@ -12,6 +13,7 @@ interface ContextAwareInputProps {
   rows?: number;
   items: Item[];
   isDarkMode?: boolean;
+  onContextChange?: (contextTags: ContextTag[]) => void;
 }
 
 interface ContextTag {
@@ -32,6 +34,7 @@ interface ContextSuggestion {
 export interface ContextAwareInputRef {
   focus: () => void;
   blur: () => void;
+  clearContext: () => void;
 }
 
 const ContextAwareInput = forwardRef<ContextAwareInputRef, ContextAwareInputProps>(({
@@ -43,7 +46,8 @@ const ContextAwareInput = forwardRef<ContextAwareInputRef, ContextAwareInputProp
   style,
   rows = 1,
   items,
-  isDarkMode = false
+  isDarkMode = false,
+  onContextChange
 }, ref) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -56,8 +60,14 @@ const ContextAwareInput = forwardRef<ContextAwareInputRef, ContextAwareInputProp
 
   useImperativeHandle(ref, () => ({
     focus: () => textareaRef.current?.focus(),
-    blur: () => textareaRef.current?.blur()
+    blur: () => textareaRef.current?.blur(),
+    clearContext: () => setContextTags([])
   }));
+
+  // Notify parent when context tags change
+  useEffect(() => {
+    onContextChange?.(contextTags);
+  }, [contextTags, onContextChange]);
 
   // Scroll selected suggestion into view
   const scrollToSelectedItem = (index: number) => {
@@ -168,20 +178,19 @@ const ContextAwareInput = forwardRef<ContextAwareInputRef, ContextAwareInputProp
     
     if (foundItem) {
       e.preventDefault();
-      const cursorPosition = textareaRef.current?.selectionStart || 0;
-      const beforeCursor = value.substring(0, cursorPosition);
-      const afterCursor = value.substring(cursorPosition);
-      const mentionText = `@${foundItem.title}`;
-      const newValue = `${beforeCursor}${mentionText}${afterCursor}`;
-      onChange(newValue);
       
-      // Set cursor position after the mention
-      setTimeout(() => {
-        if (textareaRef.current) {
-          const newPosition = cursorPosition + mentionText.length;
-          textareaRef.current.setSelectionRange(newPosition, newPosition);
-        }
-      }, 0);
+      // Create suggestion object for the found item
+      const suggestion: ContextSuggestion = {
+        id: foundItem.id,
+        title: foundItem.title,
+        type: foundItem.type,
+        categoryId: foundItem.categoryId,
+        displayText: foundItem.title,
+        mentionText: `@${foundItem.title}`
+      };
+      
+      // Use the same logic as selecting a suggestion
+      selectSuggestion(suggestion);
     }
   };
 
@@ -286,21 +295,25 @@ const ContextAwareInput = forwardRef<ContextAwareInputRef, ContextAwareInputProp
 
   // Note: Using simple @ItemName format for better UX
 
-  // Get position for suggestions dropdown (above input)
+  // Get position for suggestions dropdown (above input) - using viewport coordinates for portal
   const getSuggestionPosition = () => {
-    if (!textareaRef.current || mentionStart < 0) return { bottom: 0, left: 0 };
+    if (!textareaRef.current || mentionStart < 0) return { top: 0, left: 0, bottom: 'auto' };
     
     const textarea = textareaRef.current;
+    const rect = textarea.getBoundingClientRect();
     const textBeforeMention = value.substring(0, mentionStart);
     const lines = textBeforeMention.split('\n');
     const currentLineLength = lines[lines.length - 1].length;
     
     // Approximate position (this is simplified - could be more precise)
     const charWidth = 8; // Approximate character width
+    const leftOffset = Math.min(currentLineLength * charWidth, 200);
     
+    // Position above the textarea with viewport coordinates
     return {
-      bottom: textarea.offsetHeight + 60, // 60px above the input (higher up to avoid tab bar)
-      left: Math.min(currentLineLength * charWidth, 200) // Prevent overflow
+      top: rect.top - 260, // 260px above the input
+      left: rect.left + leftOffset,
+      bottom: 'auto'
     };
   };
 
@@ -364,16 +377,16 @@ const ContextAwareInput = forwardRef<ContextAwareInputRef, ContextAwareInputProp
         rows={rows}
       />
       
-      {/* Suggestions Dropdown */}
-      {showSuggestions && suggestions.length > 0 && (
+      {/* Suggestions Dropdown - Rendered via Portal */}
+      {showSuggestions && suggestions.length > 0 && createPortal(
         <div
-          className={`suggestions-dropdown absolute z-20 min-w-80 max-w-96 rounded-2xl shadow-2xl border backdrop-blur-xl ${
+          className={`suggestions-dropdown fixed z-[9999] min-w-80 max-w-96 rounded-2xl shadow-2xl border backdrop-blur-xl ${
             isDarkMode
               ? 'bg-gray-900/98 border-gray-600/50'
               : 'bg-white/98 border-gray-300/50'
           }`}
           style={{
-            bottom: suggestionPosition.bottom,
+            top: suggestionPosition.top,
             left: suggestionPosition.left,
             maxHeight: '200px'
           }}
@@ -461,7 +474,8 @@ const ContextAwareInput = forwardRef<ContextAwareInputRef, ContextAwareInputProp
           }`}>
             ↑↓ Navigate • ↵ Select • Esc Cancel
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

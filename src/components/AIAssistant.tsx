@@ -222,6 +222,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   const [currentFunctionName, setCurrentFunctionName] = useState<string | null>(null);
   const [showModeDropdown, setShowModeDropdown] = useState(false);
   const [autoApprove, setAutoApprove] = useState(false);
+  const [contextTags, setContextTags] = useState<any[]>([]);
   // REMOVED: agenticLoopCount, maxAgenticLoops, originalUserIntent, agenticRequestType - complex state causing bugs
   
   // Load auto-approve preference on mount
@@ -1477,9 +1478,22 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
       console.log('🐛 REGULAR CHAT MODE - currentNoteContent is undefined');
     }
     
+    // Include context information if available
+    let messageWithContext = messageToSend;
+    if (contextTags.length > 0) {
+      const contextInfo = contextTags.map(tag => `@${tag.name} (${tag.type}: ${tag.id})`).join(' ');
+      messageWithContext = `${messageToSend}\n\nContext: ${contextInfo}`;
+      console.log('🏷️ Including context tags in message:', contextTags);
+    }
+
     setInputMessage('');
     setSelectedImages([]);
     setIsRecording(false);
+    
+    // Clear context tags after sending
+    if (inputRef.current && 'clearContext' in inputRef.current) {
+      inputRef.current.clearContext();
+    }
     
     chatService.setProcessing(true);
     setIsAIThinking(true);
@@ -1530,7 +1544,7 @@ You can:
 4. Help brainstorm ideas related to the current note content
 5. ONLY modify THIS note if explicitly requested (using updateItem)
 
-User message: ${processedMessage}`;
+User message: ${messageWithContext}`;
 
         console.log('🔧 Fullscreen note mode - processing message:', processMessage);
 
@@ -1622,7 +1636,7 @@ User message: ${processedMessage}`;
         // SIMPLIFIED: Agent mode doesn't need complex intent tracking
         
         // For now, we'll process text normally. In a real app, you'd send images to your AI service
-        let processMessage = processedMessage;
+        let processMessage = messageWithContext;
         if (hasImages && !messageToSend) {
           processMessage = "I've uploaded some images. Can you help me with them?";
         }
@@ -2808,6 +2822,7 @@ User message: ${processedMessage}`;
                   }}
                   items={items}
                   isDarkMode={isDarkMode}
+                  onContextChange={setContextTags}
                 />
                 
                 {/* Input Icons */}
