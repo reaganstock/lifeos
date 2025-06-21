@@ -282,44 +282,34 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
       );
 
       if (result.success) {
-        // Always add feedback - whether there are function results or not
-        let systemFeedback = '';
+        // Always add AI feedback - no system message clutter
         let aiFeedback = '';
         
         if (result.functionResults && result.functionResults.length > 0) {
           const funcResult = result.functionResults[0];
           
           if (funcResult.function === 'deleteItem' && funcResult.result?.item) {
-            systemFeedback = `✅ Deleted ${funcResult.result.item.type}: "${funcResult.result.item.title}"`;
             aiFeedback = `Perfect! I've successfully deleted "${funcResult.result.item.title}" from your ${funcResult.result.item.type}s. Your dashboard has been updated.`;
           } else if (funcResult.function === 'createItem' && funcResult.result?.items?.length > 0) {
             const item = funcResult.result.items[0];
-            systemFeedback = `✅ Created ${item.type}: "${item.title}" in ${item.categoryId}`;
             aiFeedback = `Excellent! I've created the ${item.type} "${item.title}" and added it to your ${item.categoryId} category. You can find it in your dashboard now.`;
           } else if (funcResult.function === 'bulkCreateItems' && funcResult.result?.items?.length > 0) {
             const items = funcResult.result.items;
-            systemFeedback = `✅ Created ${items.length} items: ${items.map((item: any) => `${item.type}: "${item.title}"`).slice(0, 3).join(', ')}${items.length > 3 ? '...' : ''}`;
             aiFeedback = `Amazing! I've successfully created ${items.length} items for you. This includes ${items.filter((i: any) => i.type === 'todo').length} todos, ${items.filter((i: any) => i.type === 'goal').length} goals, ${items.filter((i: any) => i.type === 'event').length} events, and more. Everything has been organized into the appropriate categories and is ready for you to use!`;
           } else if (funcResult.function === 'updateItem' && funcResult.result?.item) {
-            systemFeedback = `✅ Updated ${funcResult.result.item.type}: "${funcResult.result.item.title}"`;
             aiFeedback = `Great! I've updated "${funcResult.result.item.title}" with your changes. The modifications have been saved and are now active.`;
           } else {
-            systemFeedback = `✅ ${result.message || 'Function executed successfully'}`;
             aiFeedback = `Perfect! I've completed the ${functionCall.name} function successfully. Your dashboard has been updated with the changes.`;
           }
         } else {
           // Fallback if no function results but success
-          systemFeedback = `✅ Function executed: ${functionCall.name}`;
           aiFeedback = `Excellent! I've successfully executed the ${functionCall.name} function. Your request has been completed and your dashboard should now reflect the changes.`;
         }
         
-        // Always add both system message and AI explanation
-        console.log('🔍 Adding system feedback:', systemFeedback);
-        await chatService.addMessage('system', systemFeedback);
-        
+        // Only add AI explanation, no system message clutter
         console.log('🔍 Adding AI feedback:', aiFeedback);
         await chatService.addMessage('assistant', aiFeedback);
-        console.log('✅ Both feedback messages added successfully');
+        console.log('✅ AI feedback message added successfully');
         
         // Trigger data refresh
         if (result.itemsModified) {
@@ -332,17 +322,12 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
         console.error('Function failed:', result.message || 'Unknown error');
       }
 
-      // Mark as completed and auto-remove after a short display
+      // Mark as completed but keep in message flow
       setPendingFunctionCalls(prev => prev.map(fc => 
         fc.id === functionCallId 
           ? { ...fc, completed: true, result: result } 
           : fc
       ));
-      
-      // Auto-remove completed function call after 2 seconds
-      setTimeout(() => {
-        setPendingFunctionCalls(prev => prev.filter(fc => fc.id !== functionCallId));
-      }, 2000);
     } catch (error) {
       console.error('Function execution error:', error);
       // Silent error handling - no chat clutter
@@ -2687,6 +2672,7 @@ User message: ${processedMessage}`;
               </div>
             ) : (
               <div className="relative z-10">
+                {/* Combined timeline of messages and function calls */}
                 {currentSession.messages.map((message) => (
                   <MessageBubble
                     key={message.id}
@@ -2698,29 +2684,29 @@ User message: ${processedMessage}`;
                     isDarkMode={isDarkMode}
                   />
                 ))}
+                
+                {/* Function Call UIs integrated into message flow */}
+                {pendingFunctionCalls.map((functionCall) => (
+                  <div key={functionCall.id} className="flex justify-start relative z-10 mb-6">
+                    <div className="flex items-start space-x-3 w-full max-w-4xl">
+                      <div className="p-2 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 shadow-lg">
+                        <Sparkles className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <FunctionCallUI
+                          functionCall={functionCall}
+                          onApprove={() => handleApproveFunctionCall(functionCall.id)}
+                          onReject={() => handleRejectFunctionCall(functionCall.id)}
+                          isDarkMode={isDarkMode}
+                          autoApprove={autoApprove}
+                          onAutoApproveChange={setAutoApprove}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
-            
-            {/* Function Call UIs */}
-            {pendingFunctionCalls.map((functionCall) => (
-              <div key={functionCall.id} className="flex justify-start relative z-10 mb-4">
-                <div className="flex items-start space-x-3 w-full max-w-4xl">
-                  <div className="p-2 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 shadow-lg">
-                    <Sparkles className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <FunctionCallUI
-                      functionCall={functionCall}
-                      onApprove={() => handleApproveFunctionCall(functionCall.id)}
-                      onReject={() => handleRejectFunctionCall(functionCall.id)}
-                      isDarkMode={isDarkMode}
-                      autoApprove={autoApprove}
-                      onAutoApproveChange={setAutoApprove}
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
             
             {isProcessing && (
               <div className="flex justify-start relative z-10">
