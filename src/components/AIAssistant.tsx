@@ -332,12 +332,17 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
         console.error('Function failed:', result.message || 'Unknown error');
       }
 
-      // Keep the function call visible but mark as completed
+      // Mark as completed and auto-remove after a short display
       setPendingFunctionCalls(prev => prev.map(fc => 
         fc.id === functionCallId 
           ? { ...fc, completed: true, result: result } 
           : fc
       ));
+      
+      // Auto-remove completed function call after 2 seconds
+      setTimeout(() => {
+        setPendingFunctionCalls(prev => prev.filter(fc => fc.id !== functionCallId));
+      }, 2000);
     } catch (error) {
       console.error('Function execution error:', error);
       // Silent error handling - no chat clutter
