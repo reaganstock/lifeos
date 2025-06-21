@@ -241,6 +241,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   const handleExecuteFunction = async (messageId: string, functionCall: any) => {
     try {
       setIsCallingFunction(true);
+      setIsAIThinking(true); // Keep AI thinking state during function execution
       setCurrentFunctionName(functionCall.name);
       
       const result = await geminiService.executeFunctionWithContext(
@@ -285,95 +286,8 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
           onRefreshItems();
         }
 
-        // INTELLIGENT AGENTIC CONTINUATION: Check if we should continue
-        if (isAgenticMode) {
-          console.log('🤖 CHECKING AGENTIC CONTINUATION after function execution...');
-          
-          // Get conversation context for intelligent analysis
-          const currentSession = chatService.getCurrentSession();
-          if (currentSession && currentSession.messages.length > 0) {
-            // Find the original user message that started this agentic flow
-            const userMessages = currentSession.messages
-              .filter(m => m.role === 'user')
-              .map(m => m.versions[m.currentVersionIndex].content);
-            const lastUserMessage = userMessages[userMessages.length - 1] || '';
-            
-            // Get recent AI responses for context
-            const recentAIResponses = currentSession.messages
-              .filter(m => m.role === 'assistant')
-              .slice(-5)
-              .map(m => m.versions[m.currentVersionIndex].content);
-            
-            // Get all function results from this session
-            const allFunctionResults = currentSession.messages
-              .filter(m => m.role === 'function_call' && m.functionCall?.status === 'completed')
-              .map(m => ({
-                function: m.functionCall?.name,
-                result: m.functionCall?.result,
-                success: m.functionCall?.status === 'completed'
-              }));
-            
-            // Use intelligent goal analysis
-            const shouldContinue = chatService.shouldContinueAgentic(
-              lastUserMessage,
-              recentAIResponses,
-              allFunctionResults
-            );
-            
-            if (shouldContinue) {
-              console.log('🔄 CONTINUING AGENTIC MODE: Goal not yet achieved, continuing...');
-              
-              // Continue the agentic flow by processing the original request again
-              setTimeout(async () => {
-                try {
-                  setIsAIThinking(true);
-                  const currentCategoryId = categories.find(cat => cat.id === currentView)?.id;
-                  
-                  // Create continuation context message for the AI
-                  const continuationMessage = `AGENTIC CONTINUATION: The user's original request "${lastUserMessage}" is not yet complete. Previous function calls: ${allFunctionResults.map(r => `${r.function} (${r.success ? 'success' : 'failed'})`).join(', ')}. Please continue working toward the goal.`;
-                  
-                  const response = await chatService.processGeorgetownCommand(
-                    continuationMessage,
-                    currentCategoryId,
-                    items,
-                    categories,
-                    true // Keep agentic mode active
-                  );
-                  
-                  // Handle the continuation response
-                  if (response.pendingFunctionCall) {
-                    const functionCallMessage = await chatService.addFunctionCallMessage({
-                      name: response.pendingFunctionCall.name,
-                      args: response.pendingFunctionCall.args,
-                      status: 'pending'
-                    });
-                    
-                    // Auto-execute in agentic mode
-                    const shouldAutoExecute = chatService.shouldAutoApprove(functionCallMessage, true);
-                    if (shouldAutoExecute) {
-                      chatService.updateFunctionCall(functionCallMessage.id, { 
-                        status: 'executing', 
-                        autoApproved: true 
-                      });
-                      setTimeout(() => {
-                        handleExecuteFunction(functionCallMessage.id, functionCallMessage.functionCall!);
-                      }, 1000);
-                    }
-                  } else {
-                    // No more functions needed, goal achieved
-                    await chatService.addMessage('assistant', response.message);
-                  }
-                } catch (error) {
-                  console.error('Agentic continuation error:', error);
-                } finally {
-                  setIsAIThinking(false);
-                }
-              }, 2000); // Small delay to let the UI update
-            } else {
-              console.log('🎯 AGENTIC GOAL ACHIEVED: Stopping agentic mode');
-            }
-          }
-        }
+        // SIMPLIFIED AGENTIC MODE: No automatic continuation - user controls when to stop
+        console.log('🤖 Function executed successfully in agentic mode. Waiting for user input or stop command.');
       } else {
         // Function failed
         let failureReason = result.message || 'Please try again.';
@@ -404,17 +318,18 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
       });
     } finally {
       setIsCallingFunction(false);
+      setIsAIThinking(false);
       setCurrentFunctionName(null);
     }
   };
   
-  // Stop agentic mode - simplified
+  // Stop agentic mode - ONLY stop processing, don't change mode
   const stopAgenticMode = () => {
-    setIsAgenticMode(false);
     setIsAIThinking(false);
     setIsCallingFunction(false);
     setCurrentFunctionName(null);
-    console.log('🛑 Agentic mode stopped');
+    chatService.setProcessing(false);
+    console.log('🛑 Agentic processing stopped (mode unchanged)');
   };
 
   
@@ -2950,14 +2865,14 @@ User message: ${processedMessage}`;
               </div>
               
               {/* Voice Chat/Send/Stop Button */}
-              {isAIThinking || isProcessing ? (
-                // Stop Button (shows when AI is thinking/processing)
+              {isAIThinking || isProcessing || isCallingFunction ? (
+                // Stop Button (shows when AI is thinking/processing/calling functions)
                 <button
                   onClick={() => {
-                    if (isAgenticMode) {
-                      stopAgenticMode();
-                    }
+                    stopAgenticMode(); // Just stop processing, don't change mode
                     setIsAIThinking(false);
+                    setIsCallingFunction(false);
+                    setCurrentFunctionName(null);
                     chatService.setProcessing(false);
                   }}
                   className={`w-14 h-14 rounded-2xl shadow-xl border flex items-center justify-center transition-all duration-300 transform hover:scale-110 active:scale-95 group relative overflow-hidden bg-gradient-to-br from-red-500 via-red-600 to-red-700 border-red-400/50`}
