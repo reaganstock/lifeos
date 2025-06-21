@@ -282,11 +282,12 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
       );
 
       if (result.success) {
-        // Add comprehensive feedback about what was accomplished
+        // Always add feedback - whether there are function results or not
+        let systemFeedback = '';
+        let aiFeedback = '';
+        
         if (result.functionResults && result.functionResults.length > 0) {
           const funcResult = result.functionResults[0];
-          let systemFeedback = '';
-          let aiFeedback = '';
           
           if (funcResult.function === 'deleteItem' && funcResult.result?.item) {
             systemFeedback = `✅ Deleted ${funcResult.result.item.type}: "${funcResult.result.item.title}"`;
@@ -303,17 +304,22 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
             systemFeedback = `✅ Updated ${funcResult.result.item.type}: "${funcResult.result.item.title}"`;
             aiFeedback = `Great! I've updated "${funcResult.result.item.title}" with your changes. The modifications have been saved and are now active.`;
           } else {
-            systemFeedback = `✅ ${result.message || 'Action completed successfully'}`;
-            aiFeedback = `Done! I've completed the requested action successfully. Your dashboard has been updated with the changes.`;
+            systemFeedback = `✅ ${result.message || 'Function executed successfully'}`;
+            aiFeedback = `Perfect! I've completed the ${functionCall.name} function successfully. Your dashboard has been updated with the changes.`;
           }
-          
-          await chatService.addMessage('system', systemFeedback);
-          
-          // Add AI explanation after a brief delay for better UX
-          setTimeout(async () => {
-            await chatService.addMessage('assistant', aiFeedback);
-          }, 500);
+        } else {
+          // Fallback if no function results but success
+          systemFeedback = `✅ Function executed: ${functionCall.name}`;
+          aiFeedback = `Excellent! I've successfully executed the ${functionCall.name} function. Your request has been completed and your dashboard should now reflect the changes.`;
         }
+        
+        // Always add both system message and AI explanation
+        console.log('🔍 Adding system feedback:', systemFeedback);
+        await chatService.addMessage('system', systemFeedback);
+        
+        console.log('🔍 Adding AI feedback:', aiFeedback);
+        await chatService.addMessage('assistant', aiFeedback);
+        console.log('✅ Both feedback messages added successfully');
         
         // Trigger data refresh
         if (result.itemsModified) {
