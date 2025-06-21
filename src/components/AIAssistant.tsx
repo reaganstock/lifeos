@@ -34,23 +34,7 @@ const isConversationalMessage = (message: string): boolean => {
   return conversationalPatterns.some(pattern => pattern.test(lower));
 };
 
-// Modern agent execution - Cursor-like behavior with smart discernment
-const executeAgentTask = async (message: string, isAgentMode: boolean) => {
-  // Respect conversational boundaries - like Cursor AI
-  if (isConversationalMessage(message)) {
-    console.log('🤖 Agent: Detected conversational message, responding normally');
-    return { mode: 'conversation' };
-  }
-  
-  // Agent mode: intelligent tool use decisions
-  if (isAgentMode) {
-    console.log('🤖 Agent: Processing task with smart tool discernment');
-    return { mode: 'agent' };
-  }
-  
-  // Ask mode: normal chat processing
-  return { mode: 'ask' };
-};
+// Agent mode is now just Ask mode with visual function call cards - no complex logic needed
 
 // Helper function to clean markdown formatting from messages
 const cleanMarkdownFormatting = (text: string): string => {
@@ -308,13 +292,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
           onRefreshItems();
         }
         
-        // Intelligent agentic mode continuation after function execution
-        if (isAgenticMode) {
-          console.log('🤖 Agentic mode: Evaluating continuation after function execution');
-          
-          // SIMPLIFIED: Agent mode just executes functions and stops (no infinite loops)
-          console.log('🤖 Agent mode: Function completed successfully');
-        }
+        // No special agent mode logic - both modes work the same
       } else {
         // Silent failure logging - no chat clutter
         console.error('Function failed:', result.message || 'Unknown error');
@@ -350,10 +328,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     // REMOVED: Complex state variables that caused bugs
     console.log('🛑 Agentic mode stopped and all pending operations cleared');
     
-    // Provide user feedback about completion
-    setTimeout(() => {
-      chatService.addMessage('system', '✨ Agentic mode completed. Switched back to Ask mode.');
-    }, 100);
+    // No robotic messaging - user can see the mode change in UI
   };
 
   
@@ -1411,6 +1386,42 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     
     if (!messageToSend && !hasImages) return;
 
+    // SAFETY CHECK: Prevent AI hallucination of delete operations from greetings
+    const isSimpleGreeting = isConversationalMessage(messageToSend);
+    if (isSimpleGreeting) {
+      console.log('🛡️ SAFETY: Simple greeting detected, bypassing function calling to prevent AI hallucination');
+      
+      // Process as pure conversational message without function calling capabilities
+      setInputMessage('');
+      setSelectedImages([]);
+      setIsRecording(false);
+      
+      chatService.setProcessing(true);
+      setIsAIThinking(true);
+      
+      try {
+        await chatService.addMessage('user', messageToSend);
+        
+        // Simple conversational response - no function calling allowed
+        const conversationalResponse = await chatService.processGeorgetownCommand(
+          `CONVERSATIONAL MODE: ${messageToSend}\n\nIMPORTANT: This is a simple greeting/conversational message. Do NOT use any function calls. Just respond conversationally.`,
+          undefined,
+          [],
+          [],
+          false // Force non-agentic mode for safety
+        );
+        
+        await chatService.addMessage('assistant', conversationalResponse.message || "Hi there! How can I help you today?");
+      } catch (error) {
+        console.error('Conversational processing error:', error);
+        await chatService.addMessage('assistant', "Hi there! How can I help you today?");
+      } finally {
+        chatService.setProcessing(false);
+        setIsAIThinking(false);
+      }
+      return;
+    }
+
     // Process @mentions: enhance @ItemName with ID lookup for AI precision
     const processedMessage = messageToSend.replace(/@([^\s]+)/g, (match, itemName) => {
       // Find the item by name to get the ID
@@ -1660,66 +1671,31 @@ User message: ${processedMessage}`;
 
         // Check if there's a pending function call
         if (response.pendingFunctionCall) {
-          // Use modern agent execution logic with smart discernment
-          const agentDecision = await executeAgentTask(processedMessage, isAgenticMode);
+          // SIMPLIFIED: Both Ask and Agent mode work exactly the same - just show the visual UI
+          const functionCallId = Date.now().toString();
+          const newFunctionCall = {
+            id: functionCallId,
+            name: response.pendingFunctionCall.name,
+            args: response.pendingFunctionCall.args
+          };
           
-          if (isAgenticMode && agentDecision.mode !== 'conversation') {
-            // CURSOR-STYLE: Add AI message first, then auto-execute function (like Cursor AI)
-            console.log('🤖 Agent mode: Auto-executing function call like Cursor AI:', response.pendingFunctionCall.name);
-            
-            // Add AI response first (proper message ordering)
-            let aiResponse = response.message;
-            if (hasImages) {
-              aiResponse = `I can see the image${selectedImages.length > 1 ? 's' : ''} you uploaded. ${aiResponse}`;
-            }
-            await chatService.addMessage('assistant', aiResponse);
-            
-            // Show the visual UI (no auto-execution)
-            const functionCallId = Date.now().toString();
-            const newFunctionCall = {
-              id: functionCallId,
-              name: response.pendingFunctionCall.name,
-              args: response.pendingFunctionCall.args
-            };
-            
-            console.log('🔍 DEBUG: Adding function call to pending state:', newFunctionCall);
-            console.log('🔍 DEBUG: Function call args:', JSON.stringify(response.pendingFunctionCall.args, null, 2));
-            
-            setPendingFunctionCalls(prev => {
-              const updated = [...prev, newFunctionCall];
-              console.log('🔍 DEBUG: Updated pending function calls:', updated);
-              return updated;
-            });
-            
-            // CURSOR-STYLE: Auto-execute in agent mode (like Cursor AI)
-            console.log('🤖 Agent mode: Auto-executing function like Cursor AI:', newFunctionCall.name);
+          // Add AI response first (proper message ordering like Cursor)
+          let aiResponse = response.message;
+          if (hasImages) {
+            aiResponse = `I can see the image${selectedImages.length > 1 ? 's' : ''} you uploaded. ${aiResponse}`;
+          }
+          await chatService.addMessage('assistant', aiResponse);
+          
+          // Show the visual function call UI (same for both modes)
+          console.log('🔍 Adding function call to UI:', newFunctionCall);
+          setPendingFunctionCalls(prev => [...prev, newFunctionCall]);
+          
+          // Auto-approve if enabled (same for both modes)
+          if (autoApprove) {
+            console.log('🔄 Auto-approving function call:', response.pendingFunctionCall.name);
             setTimeout(() => {
               handleApproveFunctionCall(functionCallId);
-            }, 500); // Brief delay to show the UI before execution
-          } else {
-            // Normal mode: show visual function call UI
-            const functionCallId = Date.now().toString();
-            setPendingFunctionCalls(prev => [...prev, {
-              id: functionCallId,
-              name: response.pendingFunctionCall.name,
-              args: response.pendingFunctionCall.args
-            }]);
-            
-            // Add AI response with function call preview
-            let aiResponse = response.message;
-            if (hasImages) {
-              aiResponse = `I can see the image${selectedImages.length > 1 ? 's' : ''} you uploaded. ${response.message}`;
-            }
-            
-            await chatService.addMessage('assistant', aiResponse);
-            
-            // Auto-approve in Ask mode if enabled
-            if (autoApprove) {
-              console.log('🔄 Ask mode: Auto-approving function call:', response.pendingFunctionCall.name);
-              setTimeout(() => {
-                handleApproveFunctionCall(functionCallId);
-              }, 1000);
-            }
+            }, 1000);
           }
         } else {
           // Handle item creation (legacy support)
@@ -1761,10 +1737,7 @@ User message: ${processedMessage}`;
           await chatService.addMessage('assistant', aiResponse);
           console.log('✅ AIAssistant: AI response added successfully');
           
-          // SIMPLIFIED: Agent mode completes after responding (no infinite loops)
-          if (isAgenticMode) {
-            console.log('🤖 Agent mode: Message sent, task completed');
-          }
+          // Both modes work the same - no special agent logic
         }
       }
       
