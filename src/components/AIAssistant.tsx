@@ -282,24 +282,37 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
       );
 
       if (result.success) {
-        // Add visual feedback about what was actually changed
+        // Add comprehensive feedback about what was accomplished
         if (result.functionResults && result.functionResults.length > 0) {
           const funcResult = result.functionResults[0];
-          let feedback = '';
+          let systemFeedback = '';
+          let aiFeedback = '';
           
           if (funcResult.function === 'deleteItem' && funcResult.result?.item) {
-            feedback = `✅ Deleted ${funcResult.result.item.type}: "${funcResult.result.item.title}"`;
+            systemFeedback = `✅ Deleted ${funcResult.result.item.type}: "${funcResult.result.item.title}"`;
+            aiFeedback = `Perfect! I've successfully deleted "${funcResult.result.item.title}" from your ${funcResult.result.item.type}s. Your dashboard has been updated.`;
           } else if (funcResult.function === 'createItem' && funcResult.result?.items?.length > 0) {
             const item = funcResult.result.items[0];
-            feedback = `✅ Created ${item.type}: "${item.title}" in ${item.categoryId}`;
+            systemFeedback = `✅ Created ${item.type}: "${item.title}" in ${item.categoryId}`;
+            aiFeedback = `Excellent! I've created the ${item.type} "${item.title}" and added it to your ${item.categoryId} category. You can find it in your dashboard now.`;
           } else if (funcResult.function === 'bulkCreateItems' && funcResult.result?.items?.length > 0) {
             const items = funcResult.result.items;
-            feedback = `✅ Created ${items.length} items: ${items.map((item: any) => `${item.type}: "${item.title}"`).slice(0, 3).join(', ')}${items.length > 3 ? '...' : ''}`;
+            systemFeedback = `✅ Created ${items.length} items: ${items.map((item: any) => `${item.type}: "${item.title}"`).slice(0, 3).join(', ')}${items.length > 3 ? '...' : ''}`;
+            aiFeedback = `Amazing! I've successfully created ${items.length} items for you. This includes ${items.filter((i: any) => i.type === 'todo').length} todos, ${items.filter((i: any) => i.type === 'goal').length} goals, ${items.filter((i: any) => i.type === 'event').length} events, and more. Everything has been organized into the appropriate categories and is ready for you to use!`;
+          } else if (funcResult.function === 'updateItem' && funcResult.result?.item) {
+            systemFeedback = `✅ Updated ${funcResult.result.item.type}: "${funcResult.result.item.title}"`;
+            aiFeedback = `Great! I've updated "${funcResult.result.item.title}" with your changes. The modifications have been saved and are now active.`;
           } else {
-            feedback = `✅ ${result.message || 'Action completed successfully'}`;
+            systemFeedback = `✅ ${result.message || 'Action completed successfully'}`;
+            aiFeedback = `Done! I've completed the requested action successfully. Your dashboard has been updated with the changes.`;
           }
           
-          await chatService.addMessage('system', feedback);
+          await chatService.addMessage('system', systemFeedback);
+          
+          // Add AI explanation after a brief delay for better UX
+          setTimeout(async () => {
+            await chatService.addMessage('assistant', aiFeedback);
+          }, 500);
         }
         
         // Trigger data refresh

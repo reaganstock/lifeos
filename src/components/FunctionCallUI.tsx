@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle, Calendar, Target, FileText, Repeat, X, Edit3 } from 'lucide-react';
+import { CheckCircle, Calendar, BowArrow, FileText, RotateCcw, X, Edit3, CheckSquare } from 'lucide-react';
 
 interface FunctionCallUIProps {
   functionCall: {
@@ -27,11 +27,11 @@ const FunctionCallUI: React.FC<FunctionCallUIProps> = ({
 
   const getIcon = (type: string) => {
     switch (type) {
-      case 'todo': return <CheckCircle className="w-5 h-5 text-blue-500" />;
+      case 'todo': return <CheckSquare className="w-5 h-5 text-blue-500" />;
       case 'event': return <Calendar className="w-5 h-5 text-purple-500" />;
-      case 'goal': return <Target className="w-5 h-5 text-green-500" />;
+      case 'goal': return <BowArrow className="w-5 h-5 text-green-500" />;
       case 'note': return <FileText className="w-5 h-5 text-yellow-500" />;
-      case 'routine': return <Repeat className="w-5 h-5 text-orange-500" />;
+      case 'routine': return <RotateCcw className="w-5 h-5 text-orange-500" />;
       default: return <Edit3 className="w-5 h-5 text-gray-500" />;
     }
   };
@@ -246,10 +246,14 @@ const FunctionCallUI: React.FC<FunctionCallUIProps> = ({
         
         {/* Enhanced Auto-approve checkbox */}
         {onAutoApproveChange && (
-          <div className={`relative p-3 rounded-lg border-2 border-dashed transition-all duration-300 ${
-            isDarkMode ? 'border-gray-600/50 bg-gray-800/30' : 'border-gray-300/50 bg-gray-50/30'
+          <div className={`relative p-4 rounded-xl border transition-all duration-300 ${
+            autoApprove
+              ? 'border-green-500/30 bg-gradient-to-r from-green-500/10 to-emerald-500/10'
+              : isDarkMode 
+                ? 'border-gray-600/30 bg-gray-800/20' 
+                : 'border-gray-300/30 bg-gray-50/20'
           }`}>
-            <label className={`flex items-center justify-center space-x-3 cursor-pointer group`}>
+            <label className={`flex items-center space-x-4 cursor-pointer group`}>
               <div className="relative">
                 <input
                   type="checkbox"
@@ -257,25 +261,32 @@ const FunctionCallUI: React.FC<FunctionCallUIProps> = ({
                   onChange={(e) => onAutoApproveChange(e.target.checked)}
                   className="sr-only"
                 />
-                <div className={`w-6 h-6 rounded-lg border-2 transition-all duration-300 ${
+                <div className={`w-8 h-8 rounded-xl border-2 transition-all duration-300 flex items-center justify-center ${
                   autoApprove 
-                    ? 'bg-gradient-to-br from-green-500 to-emerald-600 border-green-400 shadow-lg' 
+                    ? 'bg-gradient-to-br from-green-500 to-emerald-600 border-green-400 shadow-lg transform scale-105' 
                     : isDarkMode 
-                      ? 'border-gray-600 bg-gray-700/50' 
-                      : 'border-gray-300 bg-white'
+                      ? 'border-gray-500 bg-gray-700/50 hover:border-gray-400' 
+                      : 'border-gray-400 bg-white hover:border-gray-500'
                 }`}>
                   {autoApprove && (
-                    <CheckCircle className="w-4 h-4 text-white absolute top-0.5 left-0.5" />
+                    <CheckSquare className="w-5 h-5 text-white" />
                   )}
                 </div>
               </div>
-              <span className={`font-medium text-sm transition-colors duration-300 ${
-                autoApprove 
-                  ? 'text-green-600' 
-                  : isDarkMode ? 'text-gray-300' : 'text-gray-600'
-              }`}>
-                ⚡ Auto-approve future function calls
-              </span>
+              <div className="flex-1">
+                <div className={`font-semibold text-base transition-colors duration-300 ${
+                  autoApprove 
+                    ? 'text-green-600 dark:text-green-400' 
+                    : isDarkMode ? 'text-gray-200' : 'text-gray-700'
+                }`}>
+                  ⚡ Auto-approve future calls
+                </div>
+                <div className={`text-sm transition-colors duration-300 ${
+                  isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                }`}>
+                  Automatically execute similar function calls
+                </div>
+              </div>
             </label>
           </div>
         )}
