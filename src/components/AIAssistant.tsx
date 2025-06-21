@@ -231,7 +231,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   const [autoApprove, setAutoApprove] = useState(false);
   // REMOVED: agenticLoopCount, maxAgenticLoops, originalUserIntent, agenticRequestType - complex state causing bugs
   
-  // Clear pending function calls when component mounts (new conversation)
+  // Clear pending function calls when component mounts or session changes
   useEffect(() => {
     setPendingFunctionCalls([]);
     setIsAIThinking(false);
@@ -243,7 +243,22 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     if (savedAutoApprove === 'true') {
       setAutoApprove(true);
     }
-  }, []);
+  }, []); // This runs on mount
+  
+  // CRITICAL: Clear function calls when switching sessions to prevent bleeding
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const chatState = chatService.getState();
+  
+  useEffect(() => {
+    if (chatState.currentSessionId !== currentSessionId) {
+      console.log('🧹 Session changed, clearing function calls to prevent bleeding');
+      setPendingFunctionCalls([]);
+      setIsAIThinking(false);
+      setIsCallingFunction(false);
+      setCurrentFunctionName(null);
+      setCurrentSessionId(chatState.currentSessionId);
+    }
+  }, [chatState.currentSessionId, currentSessionId]);
   
   // Save auto-approve preference
   useEffect(() => {

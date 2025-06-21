@@ -81,43 +81,81 @@ const FunctionCallUI: React.FC<FunctionCallUIProps> = ({
   };
 
   return (
-    <div className={`border rounded-xl p-4 mb-4 transition-all duration-200 ${
+    <div className={`relative overflow-hidden rounded-2xl p-5 mb-6 transition-all duration-300 transform hover:scale-[1.02] ${
       isDarkMode 
-        ? 'bg-gray-800/50 border-gray-600/50 backdrop-blur-sm' 
-        : 'bg-white/90 border-gray-200/50 backdrop-blur-sm'
-    }`}>
+        ? 'bg-gradient-to-br from-gray-900/90 via-gray-800/95 to-gray-900/90 border border-gray-700/50 shadow-2xl' 
+        : 'bg-gradient-to-br from-white/95 via-gray-50/98 to-white/95 border border-gray-200/60 shadow-2xl'
+    }`}
+    style={{
+      backdropFilter: 'blur(20px)',
+      boxShadow: isDarkMode 
+        ? '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.1)' 
+        : '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.8)'
+    }}>
+      {/* Animated background glow */}
+      <div className="absolute inset-0 opacity-20">
+        <div className={`absolute inset-0 rounded-2xl animate-pulse ${
+          functionCall.args.type === 'todo' ? 'bg-gradient-to-r from-blue-500/20 to-indigo-500/20' :
+          functionCall.args.type === 'event' ? 'bg-gradient-to-r from-purple-500/20 to-pink-500/20' :
+          functionCall.args.type === 'goal' ? 'bg-gradient-to-r from-green-500/20 to-emerald-500/20' :
+          functionCall.args.type === 'note' ? 'bg-gradient-to-r from-yellow-500/20 to-orange-500/20' :
+          functionCall.args.type === 'routine' ? 'bg-gradient-to-r from-orange-500/20 to-red-500/20' :
+          'bg-gradient-to-r from-purple-500/20 to-indigo-500/20'
+        }`}></div>
+      </div>
+
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center space-x-3">
-          {functionCall.name === 'bulkCreateItems' ? 
-            <Edit3 className="w-5 h-5 text-purple-500" /> : 
-            getIcon(functionCall.args.type)
-          }
+      <div className="relative flex items-center justify-between mb-4">
+        <div className="flex items-center space-x-4">
+          {/* Enhanced icon with glow effect */}
+          <div className={`relative p-3 rounded-xl shadow-lg transform transition-all duration-300 ${
+            functionCall.args.type === 'todo' ? 'bg-gradient-to-br from-blue-500 to-indigo-600' :
+            functionCall.args.type === 'event' ? 'bg-gradient-to-br from-purple-500 to-pink-600' :
+            functionCall.args.type === 'goal' ? 'bg-gradient-to-br from-green-500 to-emerald-600' :
+            functionCall.args.type === 'note' ? 'bg-gradient-to-br from-yellow-500 to-orange-600' :
+            functionCall.args.type === 'routine' ? 'bg-gradient-to-br from-orange-500 to-red-600' :
+            'bg-gradient-to-br from-purple-500 to-indigo-600'
+          }`}>
+            <div className="absolute inset-0 rounded-xl bg-white/20 animate-pulse"></div>
+            {functionCall.name === 'bulkCreateItems' ? 
+              <Edit3 className="w-6 h-6 text-white relative z-10" /> : 
+              React.cloneElement(getIcon(functionCall.args.type) as React.ReactElement, { 
+                className: "w-6 h-6 text-white relative z-10" 
+              })
+            }
+          </div>
           <div>
-            <div className={`font-medium ${getActionColor(functionCall.name)} text-sm`}>
+            <div className={`font-bold text-lg ${getActionColor(functionCall.name)} mb-1`}>
               {functionCall.name.replace(/([A-Z])/g, ' $1').toLowerCase().replace(/^./, str => str.toUpperCase())}
             </div>
-            <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-              Function Call
+            <div className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+              🎯 AI Function Call
             </div>
           </div>
         </div>
         
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className={`text-xs px-2 py-1 rounded transition-all ${
+          className={`relative px-4 py-2 rounded-lg font-medium text-sm transition-all duration-300 transform hover:scale-105 ${
             isDarkMode 
-              ? 'hover:bg-gray-700 text-gray-300' 
-              : 'hover:bg-gray-100 text-gray-600'
+              ? 'bg-gray-700/50 hover:bg-gray-600/50 text-gray-300 border border-gray-600/50' 
+              : 'bg-gray-100/50 hover:bg-gray-200/50 text-gray-600 border border-gray-300/50'
           }`}
         >
-          {isExpanded ? 'Less' : 'More'}
+          <span className="relative z-10">{isExpanded ? '👁️ Less' : '🔍 More'}</span>
         </button>
       </div>
 
-      {/* Preview */}
-      <div className={`text-sm mb-3 ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-        {getPreviewText()}
+      {/* Enhanced Preview */}
+      <div className={`relative p-4 rounded-xl mb-4 ${
+        isDarkMode ? 'bg-gray-800/30 border border-gray-700/30' : 'bg-gray-50/30 border border-gray-200/30'
+      }`}>
+        <div className={`font-semibold text-base mb-2 ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>
+          ✨ {getPreviewText()}
+        </div>
+        <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+          Ready to execute when you approve
+        </div>
       </div>
 
       {/* Expandable Details */}
@@ -169,51 +207,75 @@ const FunctionCallUI: React.FC<FunctionCallUIProps> = ({
         </div>
       )}
 
-      {/* Action Buttons */}
-      <div className="space-y-3">
-        <div className="flex items-center space-x-2">
+      {/* Enhanced Action Buttons */}
+      <div className="space-y-4">
+        <div className="flex items-center space-x-3">
           {functionCall.completed ? (
-            <div className="flex-1 bg-gradient-to-r from-green-600 to-green-700 text-white text-sm py-2 px-4 rounded-lg flex items-center justify-center space-x-2 opacity-75">
-              <CheckCircle className="w-4 h-4" />
-              <span>Executed</span>
+            <div className="flex-1 relative overflow-hidden bg-gradient-to-r from-green-500 via-emerald-500 to-green-600 text-white py-4 px-6 rounded-xl flex items-center justify-center space-x-3 shadow-lg">
+              <div className="absolute inset-0 bg-gradient-to-r from-green-400/20 to-emerald-400/20 animate-pulse"></div>
+              <CheckCircle className="w-5 h-5 relative z-10" />
+              <span className="font-bold text-lg relative z-10">✅ Executed Successfully</span>
             </div>
           ) : (
             <>
               <button
                 onClick={onApprove}
-                className="flex-1 bg-gradient-to-r from-green-500 to-green-600 text-white text-sm py-2 px-4 rounded-lg hover:from-green-600 hover:to-green-700 transition-all duration-200 flex items-center justify-center space-x-2"
+                className="flex-1 relative overflow-hidden bg-gradient-to-r from-green-500 via-emerald-500 to-green-600 text-white py-4 px-6 rounded-xl hover:from-green-600 hover:via-emerald-600 hover:to-green-700 transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center space-x-3 font-bold text-base shadow-xl group"
+                style={{
+                  boxShadow: '0 10px 25px -5px rgba(34, 197, 94, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
+                }}
               >
-                <CheckCircle className="w-4 h-4" />
-                <span>Execute</span>
+                <div className="absolute inset-0 bg-gradient-to-r from-green-400/20 to-emerald-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <CheckCircle className="w-5 h-5 relative z-10 group-hover:rotate-12 transition-transform duration-300" />
+                <span className="relative z-10">🚀 Execute Function</span>
               </button>
               
               <button
                 onClick={onReject}
-                className={`px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
+                className={`relative px-4 py-4 rounded-xl transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-lg group ${
                   isDarkMode 
-                    ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' 
-                    : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
+                    ? 'bg-gradient-to-r from-gray-700 to-gray-600 hover:from-gray-600 hover:to-gray-500 text-gray-300 border border-gray-600' 
+                    : 'bg-gradient-to-r from-gray-200 to-gray-100 hover:from-gray-300 hover:to-gray-200 text-gray-600 border border-gray-300'
                 }`}
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
               </button>
             </>
           )}
         </div>
         
-        {/* Auto-approve checkbox */}
+        {/* Enhanced Auto-approve checkbox */}
         {onAutoApproveChange && (
-          <div className="flex items-center justify-center">
-            <label className={`flex items-center space-x-2 cursor-pointer text-sm ${
-              isDarkMode ? 'text-gray-300' : 'text-gray-600'
-            }`}>
-              <input
-                type="checkbox"
-                checked={autoApprove}
-                onChange={(e) => onAutoApproveChange(e.target.checked)}
-                className="w-4 h-4 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2"
-              />
-              <span>Auto-approve future calls</span>
+          <div className={`relative p-3 rounded-lg border-2 border-dashed transition-all duration-300 ${
+            isDarkMode ? 'border-gray-600/50 bg-gray-800/30' : 'border-gray-300/50 bg-gray-50/30'
+          }`}>
+            <label className={`flex items-center justify-center space-x-3 cursor-pointer group`}>
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={autoApprove}
+                  onChange={(e) => onAutoApproveChange(e.target.checked)}
+                  className="sr-only"
+                />
+                <div className={`w-6 h-6 rounded-lg border-2 transition-all duration-300 ${
+                  autoApprove 
+                    ? 'bg-gradient-to-br from-green-500 to-emerald-600 border-green-400 shadow-lg' 
+                    : isDarkMode 
+                      ? 'border-gray-600 bg-gray-700/50' 
+                      : 'border-gray-300 bg-white'
+                }`}>
+                  {autoApprove && (
+                    <CheckCircle className="w-4 h-4 text-white absolute top-0.5 left-0.5" />
+                  )}
+                </div>
+              </div>
+              <span className={`font-medium text-sm transition-colors duration-300 ${
+                autoApprove 
+                  ? 'text-green-600' 
+                  : isDarkMode ? 'text-gray-300' : 'text-gray-600'
+              }`}>
+                ⚡ Auto-approve future function calls
+              </span>
             </label>
           </div>
         )}
