@@ -216,6 +216,285 @@ class ChatService {
     return this.state.sessions.find(s => s.id === this.state.currentSessionId) || null;
   }
 
+  // Add function call message to current session
+  async addFunctionCallMessage(functionCall: {
+    name: string;
+    args: any;
+    status?: 'pending' | 'executing' | 'completed' | 'failed';
+    autoApproved?: boolean;
+  }): Promise<ChatMessage> {
+    let session = this.getCurrentSession();
+    
+    // Emergency session recovery
+    if (!session) {
+      console.warn('⚠️ No active session found, creating emergency session');
+      const emergencySession = await this.createSession('Function Call Chat');
+      this.state.currentSessionId = emergencySession.id;
+      session = emergencySession;
+    }
+
+    // Create function call message
+    const messageVersion: MessageVersion = {
+      id: this.generateVersionId(),
+      content: `Function call: ${functionCall.name}`,
+      timestamp: new Date()
+    };
+
+    const message: ChatMessage = {
+      id: this.generateMessageId(),
+      role: 'function_call',
+      versions: [messageVersion],
+      currentVersionIndex: 0,
+      timestamp: new Date(),
+      functionCall: {
+        name: functionCall.name,
+        args: functionCall.args,
+        status: functionCall.status || 'pending',
+        autoApproved: functionCall.autoApproved || false
+      }
+    };
+
+    session.messages.push(message);
+    session.updatedAt = new Date();
+    this.notifyListeners();
+    return message;
+  }
+
+  // Update function call status and results
+  updateFunctionCall(messageId: string, updates: {
+    status?: 'pending' | 'executing' | 'completed' | 'failed';
+    result?: any;
+    aiFeedback?: string;
+    autoApproved?: boolean;
+  }): boolean {
+    const session = this.getCurrentSession();
+    if (!session) return false;
+
+    const message = session.messages.find(m => m.id === messageId && m.role === 'function_call');
+    if (!message || !message.functionCall) return false;
+
+    // Update function call data
+    Object.assign(message.functionCall, updates);
+    
+    session.updatedAt = new Date();
+    this.notifyListeners();
+    return true;
+  }
+
+  // Get pending function calls in current session
+  getPendingFunctionCalls(): ChatMessage[] {
+    const session = this.getCurrentSession();
+    if (!session) return [];
+
+    return session.messages.filter(m => 
+      m.role === 'function_call' && 
+      m.functionCall?.status === 'pending'
+    );
+  }
+
+  // Intelligent auto-approve decision based on conversation context
+  shouldAutoApprove(functionCallMessage: ChatMessage, autoApproveEnabled: boolean): boolean {
+    if (!autoApproveEnabled || !functionCallMessage.functionCall) return false;
+
+    const session = this.getCurrentSession();
+    if (!session) return false;
+
+    // Get recent messages for context
+    const recentMessages = session.messages.slice(-10);
+    
+    // Check if user recently approved similar function calls
+    const recentApprovals = recentMessages.filter(m => 
+      m.role === 'function_call' && 
+      m.functionCall?.autoApproved === true &&
+      m.functionCall?.name === functionCallMessage.functionCall?.name
+    );
+
+    // Auto-approve if user has approved similar functions recently
+    if (recentApprovals.length > 0) {
+      console.log('🤖 Auto-approving based on recent similar approvals');
+      return true;
+    }
+
+    // Auto-approve safe operations
+    const safeFunctions = ['createItem', 'bulkCreateItems', 'updateItem', 'generateFullDaySchedule', 'copyRoutineFromPerson'];
+    if (safeFunctions.includes(functionCallMessage.functionCall.name)) {
+      console.log('🤖 Auto-approving safe operation:', functionCallMessage.functionCall.name);
+      return true;
+    }
+
+    // Don't auto-approve destructive operations unless explicitly approved recently
+    const destructiveFunctions = ['deleteItem', 'bulkDeleteItems'];
+    if (destructiveFunctions.includes(functionCallMessage.functionCall.name)) {
+      console.log('🛡️ Requiring manual approval for destructive operation');
+      return false;
+    }
+
+    return false;
+  }
+
+  // Intelligent goal completion analysis for agentic mode
+  shouldContinueAgentic(lastUserMessage: string, recentAIResponses: string[], functionResults: any[]): boolean {
+    console.log('🤖 AGENTIC INTELLIGENCE: Analyzing if goal is achieved...');
+    console.log('🤖 User request:', lastUserMessage);
+    console.log('🤖 Recent AI responses:', recentAIResponses);
+    console.log('🤖 Function results:', functionResults);
+
+    const userIntent = lastUserMessage.toLowerCase().trim();
+    
+    // DELETION OPERATIONS: Stop immediately if we've already deleted everything
+    const isDeletionRequest = userIntent.includes('clear') || userIntent.includes('delete') || userIntent.includes('remove');
+    if (isDeletionRequest) {
+      const deletionResults = functionResults.filter(r => r.function?.includes('delete') || r.function?.includes('bulkDelete'));
+      
+      // If we've attempted deletion multiple times, stop to prevent infinite loops
+      if (deletionResults.length >= 2) {
+        console.log('🛑 DELETION COMPLETE: Stopping to prevent infinite deletion loops');
+        return false;
+      }
+      
+      // If last deletion returned "no items found" or similar, stop
+      const lastDeletion = deletionResults[deletionResults.length - 1];
+      if (lastDeletion && lastDeletion.result?.message?.toLowerCase().includes('no items')) {
+        console.log('🛑 DELETION COMPLETE: No more items to delete');
+        return false;
+      }
+    }
+
+    // Extract quantity requests (e.g., "100 goals", "50 todos", "20 events")
+    const quantityMatch = userIntent.match(/(\d+)\s+(goals?|todos?|events?|notes?|routines?|items?)/);
+    if (quantityMatch) {
+      const requestedQuantity = parseInt(quantityMatch[1]);
+      const itemType = quantityMatch[2];
+      
+      // Calculate total items created so far
+      let totalCreated = 0;
+      functionResults.forEach(result => {
+        if (result.function?.includes('bulkCreate') && result.result?.itemsCreated) {
+          totalCreated += result.result.itemsCreated;
+        } else if (result.function?.includes('create') && result.success) {
+          totalCreated += 1;
+        }
+      });
+      
+      console.log(`🔢 QUANTITY CHECK: User wants ${requestedQuantity} ${itemType}, created ${totalCreated} so far`);
+      
+      if (totalCreated >= requestedQuantity) {
+        console.log(`🎯 QUANTITY GOAL ACHIEVED: Created ${totalCreated}/${requestedQuantity} ${itemType}`);
+        return false;
+      } else {
+        console.log(`🔄 QUANTITY GOAL INCOMPLETE: Need ${requestedQuantity - totalCreated} more ${itemType}`);
+        return true;
+      }
+    }
+
+    // COMPLEX LIFE EVENTS: Recognize major life changes that need extensive planning
+    const majorLifeEvents = [
+      'moving to china', 'move to china', 'relocating to', 'international move',
+      'changing countries', 'emigrating', 'studying abroad', 'working abroad',
+      'new job', 'career change', 'starting business', 'getting married',
+      'having baby', 'buying house', 'whole year', 'entire year', 'comprehensive plan'
+    ];
+    
+    const isMajorLifeEvent = majorLifeEvents.some(event => userIntent.includes(event));
+    if (isMajorLifeEvent) {
+      // For major life events, continue until we've created a substantial number of items
+      let totalCreated = 0;
+      functionResults.forEach(result => {
+        if (result.function?.includes('bulkCreate') && result.result?.itemsCreated) {
+          totalCreated += result.result.itemsCreated;
+        } else if (result.function?.includes('create') && result.success) {
+          totalCreated += 1;
+        }
+      });
+      
+      // Major life events should have 30+ items minimum, but be flexible with bulk attempts
+      const minimumItemsForLifeEvent = 30;
+      
+      // Check bulk creation attempts and success patterns
+      const bulkCreateAttempts = functionResults.filter(r => r.function?.includes('bulkCreate')).length;
+      const successfulBulkCreates = functionResults.filter(r => 
+        r.function?.includes('bulkCreate') && r.success
+      ).length;
+      
+      // Stop if we've achieved the minimum OR made multiple good attempts
+      const shouldStop = totalCreated >= minimumItemsForLifeEvent || 
+                        (bulkCreateAttempts >= 2 && successfulBulkCreates >= 1 && totalCreated >= 15) ||
+                        bulkCreateAttempts >= 4;
+      
+      if (shouldStop) {
+        console.log(`🎯 MAJOR LIFE EVENT COMPLETE: Created ${totalCreated} items (${successfulBulkCreates}/${bulkCreateAttempts} successful attempts) for major life change`);
+        return false;
+      } else {
+        console.log(`🔄 MAJOR LIFE EVENT PLANNING: Created ${totalCreated}/${minimumItemsForLifeEvent} items so far (attempt ${bulkCreateAttempts})`);
+        return true;
+      }
+    }
+
+    // Special analysis for complex multi-step requests
+    if (userIntent.includes('full day') || userIntent.includes('schedule')) {
+      const hasScheduleResult = functionResults.some(r => 
+        r.function?.includes('generateFullDaySchedule') || 
+        r.result?.eventsCreated > 0
+      );
+      if (hasScheduleResult) {
+        console.log('🎯 SCHEDULE GOAL ACHIEVED: Full day schedule was generated');
+        return false;
+      }
+    }
+
+    // Information/question requests should stop after one good response
+    const isQuestion = /^(what|how|when|why|where|who|can you|could you|would you|tell me|explain|show me|list|display)/i.test(userIntent);
+    if (isQuestion && (functionResults.length > 0 || recentAIResponses.some(resp => resp.length > 100))) {
+      console.log('🎯 QUESTION ANSWERED: Information request fulfilled');
+      return false;
+    }
+
+    // Single action requests that are complete
+    const singleActionPatterns = [
+      /^(create|add|make|generate)\s+(a|an|one)\s+/i,
+      /^(update|modify|change|edit)\s+/i,
+      /^(delete|remove)\s+/i
+    ];
+    
+    for (const pattern of singleActionPatterns) {
+      if (pattern.test(userIntent) && functionResults.length > 0 && functionResults[0].success) {
+        console.log('🎯 SINGLE ACTION COMPLETED: Simple request fulfilled');
+        return false;
+      }
+    }
+
+    // FAILURE DETECTION: Stop if recent functions are failing
+    const recentResults = functionResults.slice(-3); // Last 3 function calls
+    const recentFailures = recentResults.filter(r => !r.success).length;
+    
+    if (recentFailures >= 2) {
+      console.log('🛑 FAILURE STOP: Too many recent failures, stopping to prevent error loops');
+      return false;
+    }
+    
+    // Error pattern detection
+    const hasErrorPatterns = functionResults.some(r => 
+      r.result?.message?.includes('foreign key') ||
+      r.result?.message?.includes('category_id_fkey') ||
+      r.result?.message?.includes('Invalid category')
+    );
+    
+    if (hasErrorPatterns) {
+      console.log('🛑 ERROR PATTERN STOP: Database errors detected, stopping agentic mode');
+      return false;
+    }
+
+    // Safety: Prevent infinite loops
+    if (functionResults.length >= 10) {
+      console.log('⚠️ SAFETY STOP: Too many function calls, stopping to prevent infinite loops');
+      return false;
+    }
+
+    // Default: continue for complex/bulk requests
+    console.log('🔄 CONTINUE: Complex goal still in progress, continuing agentic mode');
+    return true;
+  }
+
   // Add message to current session
   async addMessage(role: 'user' | 'assistant' | 'system', content: string): Promise<ChatMessage> {
     let session = this.getCurrentSession();

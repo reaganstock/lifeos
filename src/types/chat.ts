@@ -7,11 +7,19 @@ export interface MessageVersion {
 
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'function_call';
   versions: MessageVersion[]; // Multiple versions of this message
   currentVersionIndex: number; // Which version is currently displayed
   timestamp: Date;
   isEditing?: boolean;
+  functionCall?: {
+    name: string;
+    args: any;
+    status: 'pending' | 'executing' | 'completed' | 'failed';
+    result?: any;
+    aiFeedback?: string;
+    autoApproved?: boolean;
+  };
 }
 
 // Chat Session Types

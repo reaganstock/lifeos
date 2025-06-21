@@ -58,7 +58,30 @@ const FunctionCallUI: React.FC<FunctionCallUIProps> = ({
   const getPreviewText = () => {
     const args = functionCall.args;
     
-    // Handle bulkCreateItems differently
+    // Handle deletion operations
+    if (functionCall.name === 'bulkDeleteItems') {
+      if (args.deleteAll) {
+        return `Deleting all items from dashboard`;
+      } else if (args.itemType) {
+        return `Deleting all ${args.itemType}s${args.categoryId ? ` from ${args.categoryId}` : ''}`;
+      } else {
+        return `Bulk deleting items`;
+      }
+    }
+    
+    if (functionCall.name === 'deleteItem') {
+      const itemId = args.id || args.itemId || 'item';
+      return `Deleting item: ${itemId}`;
+    }
+    
+    // Handle update operations
+    if (functionCall.name === 'updateItem') {
+      const itemId = args.id || args.itemId || 'item';
+      const title = args.title || args.name || 'item';
+      return `Updating item: "${title}"`;
+    }
+    
+    // Handle bulkCreateItems
     if (functionCall.name === 'bulkCreateItems' && args.itemsJson) {
       try {
         const items = JSON.parse(args.itemsJson);
@@ -73,11 +96,28 @@ const FunctionCallUI: React.FC<FunctionCallUIProps> = ({
     }
     
     // Handle single item creation
-    const type = args.type || 'item';
-    const title = args.title || args.name || 'Untitled';
-    const category = args.categoryId || args.category || '';
+    if (functionCall.name === 'createItem') {
+      const type = args.type || 'item';
+      const title = args.title || args.name || 'Untitled';
+      const category = args.categoryId || args.category || '';
+      
+      return `Creating ${type}: "${title}"${category ? ` in ${category}` : ''}`;
+    }
     
-    return `Creating ${type}: "${title}"${category ? ` in ${category}` : ''}`;
+    // Handle other function types
+    if (functionCall.name === 'generateFullDaySchedule') {
+      return `Generating full day schedule${args.date ? ` for ${args.date}` : ''}`;
+    }
+    
+    if (functionCall.name === 'copyRoutineFromPerson') {
+      return `Copying routine from ${args.personName || 'person'}`;
+    }
+    
+    // Fallback for unknown functions
+    const type = args.type || 'operation';
+    const title = args.title || args.name || functionCall.name.replace(/([A-Z])/g, ' $1').toLowerCase();
+    
+    return `Executing ${title}`;
   };
 
   return (
@@ -211,8 +251,8 @@ const FunctionCallUI: React.FC<FunctionCallUIProps> = ({
       <div className="space-y-4">
         <div className="flex items-center space-x-3">
           {functionCall.completed ? (
-            <div className="flex-1 relative overflow-hidden bg-gradient-to-r from-green-500 via-emerald-500 to-green-600 text-white py-4 px-6 rounded-xl flex items-center justify-center space-x-3 shadow-lg">
-              <div className="absolute inset-0 bg-gradient-to-r from-green-400/20 to-emerald-400/20 animate-pulse"></div>
+            <div className="flex-1 relative overflow-hidden bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-600 text-white py-4 px-6 rounded-xl flex items-center justify-center space-x-3 shadow-lg">
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-400/20 to-indigo-400/20 animate-pulse"></div>
               <CheckCircle className="w-5 h-5 relative z-10" />
               <span className="font-bold text-lg relative z-10">✅ Executed Successfully</span>
             </div>
@@ -220,12 +260,12 @@ const FunctionCallUI: React.FC<FunctionCallUIProps> = ({
             <>
               <button
                 onClick={onApprove}
-                className="flex-1 relative overflow-hidden bg-gradient-to-r from-green-500 via-emerald-500 to-green-600 text-white py-4 px-6 rounded-xl hover:from-green-600 hover:via-emerald-600 hover:to-green-700 transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center space-x-3 font-bold text-base shadow-xl group"
+                className="flex-1 relative overflow-hidden bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-600 text-white py-4 px-6 rounded-xl hover:from-blue-600 hover:via-indigo-600 hover:to-blue-700 transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center space-x-3 font-bold text-base shadow-xl group"
                 style={{
-                  boxShadow: '0 10px 25px -5px rgba(34, 197, 94, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
+                  boxShadow: '0 10px 25px -5px rgba(59, 130, 246, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
                 }}
               >
-                <div className="absolute inset-0 bg-gradient-to-r from-green-400/20 to-emerald-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-400/20 to-indigo-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                 <CheckCircle className="w-5 h-5 relative z-10 group-hover:rotate-12 transition-transform duration-300" />
                 <span className="relative z-10">🚀 Execute Function</span>
               </button>

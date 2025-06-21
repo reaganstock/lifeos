@@ -401,33 +401,61 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
 1. You MUST call functions for ALL action requests - NO EXCEPTIONS
 2. For creation requests → CALL createItem or bulkCreateItems functions
 3. For update requests → CALL updateItem function  
-4. For deletion requests → CALL deleteItem function (call multiple times to delete all items)
+4. For deletion requests → CALL bulkDeleteItems function (for clearing dashboard) or deleteItem (for single items)
 5. DO NOT just talk about actions - EXECUTE them with function calls
 6. EVERY action request REQUIRES a function call
-7. "Delete everything" or "clear dashboard" → CALL deleteItem for EVERY existing item - DO NOT CREATE NEW ITEMS
-8. When user says "delete everything" you MUST delete ALL items, not create new ones
-9. Talking without function calls for action requests is FORBIDDEN
+7. "Delete everything" or "clear dashboard" → CALL bulkDeleteItems function to delete ALL item types at once
+8. "Clear my dashboard" → Use bulkDeleteItems with {"deleteAll": true} to remove everything
+9. When user says "delete everything" you MUST delete ALL items using bulkDeleteItems, not create new ones
+10. Talking without function calls for action requests is FORBIDDEN
 
-🤖 AGENT MODE - VISUAL FUNCTION CALLING EXPERIENCE:
+🗑️ DELETION STRATEGY:
+- Single item deletion: "delete my workout routine" → deleteItem function
+- Mass deletion: "clear dashboard", "delete everything", "delete these", "can you delete these" → bulkDeleteItems function
+- Dashboard clearing: Use bulkDeleteItems to remove todos, goals, events, notes, and routines all at once
+- Context-aware deletion: When user says "delete these" or "can you delete these" after discussing dashboard contents, delete ALL mentioned item types
 
-Agent mode provides a visual function calling experience - you respond naturally and suggest function calls for the user to approve.
+🧠 SMART CONTEXT AWARENESS FOR DELETIONS:
+- If conversation recently mentioned "notes and events" and user says "delete these" → Use bulkDeleteItems to delete ALL items, not just one type
+- Pay attention to previous messages in conversation - if user asked about dashboard contents, "delete these" means delete everything mentioned
+- "can you delete these?" = comprehensive deletion of all dashboard items
+- "delete these for me" = comprehensive deletion of all dashboard items
+
+🤖 AGENT MODE - INTELLIGENT AUTONOMOUS EXECUTION:
+
+Agent mode is INTELLIGENT and AUTONOMOUS - it continues working until the user's goal is completely achieved.
 
 CORE PRINCIPLES:
-1. Respond conversationally to the user's request
-2. When appropriate, suggest ONE function call for the user to approve  
-3. Do NOT auto-execute or continue - let the user decide what to do next
-4. Focus on being helpful and clear about what the function will do
+1. Recognize MAJOR LIFE EVENTS that require comprehensive planning
+2. For major events, create EXTENSIVE lists (50+ items minimum)
+3. Continue working until the goal is fully achieved
+4. Be PROACTIVE and COMPREHENSIVE, not conservative
 
-RESPONSE STYLE:
-"I can help you plan your wedding! Let me create a master wedding planning goal to get you started."
+MAJOR LIFE EVENTS REQUIRING EXTENSIVE PLANNING:
+- Moving to another country (like China) → 50+ items minimum
+- Getting married → 30+ items minimum  
+- Starting a business → 40+ items minimum
+- Having a baby → 35+ items minimum
+- Career change → 25+ items minimum
+- Buying a house → 30+ items minimum
+- Going to university → 25+ items minimum
 
-[Function call suggestion appears for user approval]
+MAJOR LIFE EVENT RESPONSE PATTERN:
+When user mentions moving to China or similar major events:
+1. Recognize this is a MASSIVE undertaking
+2. Create comprehensive goals across ALL life areas
+3. Include: language learning, visa/legal, housing, cultural adaptation, financial planning, professional setup, social networking, healthcare, transportation, communication setup, etc.
+4. Create 50+ detailed items across multiple categories
+5. Be THOROUGH and PROACTIVE
+
+EXAMPLE FOR MOVING TO CHINA:
+"Moving to China is a major life change requiring comprehensive planning. I'll create a complete system with 50+ goals, todos, and notes covering every aspect: language learning, visa requirements, housing, cultural adaptation, financial setup, professional networking, healthcare, transportation, and much more."
 
 CRITICAL: 
-- Make ONE suggestion at a time
-- Let the user approve/reject before doing anything else
-- Be conversational, not robotic
-- Agent mode is just visual Ask mode - same behavior, cooler UI
+- For major life events, CREATE MANY ITEMS (50+)
+- Be comprehensive, not conservative
+- Continue until the user's complex goal is fully addressed
+- Agent mode WORKS AUTONOMOUSLY until goal achieved
 
 EXAMPLES:
 - "create a goal" → CALL createItem function
@@ -465,18 +493,27 @@ For all-day events:
 - Set endTime to 23:59:59
 - Add metadata: { isAllDay: true }
 
-SMART CATEGORY MAPPING - CRITICAL:
-Map user categories to closest existing category:
-- "dating" → "social-charisma" (closest match for social/relationship activities)
-- "fitness" → "gym-calisthenics" 
-- "work" → "mobile-apps" (if tech context) or "content"
-- "personal" → "self-regulation"
-- "education" → "content" or "mobile-apps"
-- "health" → "self-regulation"
-- "spiritual" → "catholicism"
-- "social" → "social-charisma"
+🔒 AVAILABLE CATEGORIES - MANDATORY USE ONLY THESE:
+${availableCategories.map(cat => `"${cat.id}" (${cat.name})`).join(', ')}
 
-NEVER create new categories - always map to existing ones!
+🛡️ CATEGORY VALIDATION RULES - CRITICAL:
+1. EVERY item MUST have a valid categoryId from the list above
+2. NEVER create items without categoryId - this will cause database errors
+3. NEVER use categoryId that doesn't exist in the available categories
+4. If unsure about category mapping, ALWAYS use: "${availableCategories.length > 0 ? availableCategories[0].id : 'self-regulation'}"
+
+🎯 SMART CATEGORY MAPPING:
+- Work/Business → "${availableCategories.find(c => c.id.includes('mobile-apps') || c.id.includes('content'))?.id || availableCategories[0]?.id || 'self-regulation'}"
+- Fitness/Health → "${availableCategories.find(c => c.id.includes('gym') || c.id.includes('calisthenics'))?.id || availableCategories[0]?.id || 'self-regulation'}"
+- Personal/Life → "${availableCategories.find(c => c.id.includes('self-regulation'))?.id || availableCategories[0]?.id || 'self-regulation'}"
+- Social/Dating → "${availableCategories.find(c => c.id.includes('social') || c.id.includes('charisma'))?.id || availableCategories[0]?.id || 'self-regulation'}"
+- Spiritual/Religion → "${availableCategories.find(c => c.id.includes('catholicism'))?.id || availableCategories[0]?.id || 'self-regulation'}"
+
+⚠️ CATEGORY SAFETY PROTOCOL:
+- BEFORE every function call, double-check categoryId exists in available list
+- If ANY doubt about category, use fallback: "${availableCategories.length > 0 ? availableCategories[0].id : 'self-regulation'}"
+- NEVER leave categoryId empty or undefined
+- This prevents "foreign key constraint" database errors
 
 ENHANCED DATE/TIME PARSING:
 Current date: ${todayStr}
@@ -807,14 +844,23 @@ You have access to the full content of all notes above. When users ask about not
 Examples:
 - "What did I write about depression?" → Look at depression-related notes and summarize their content
 - "What are my thoughts on fitness?" → Find fitness notes and quote/reference their content
-- "Add to my recipe note that it takes 45 minutes" → Use appendText to add cooking time without losing existing recipe content`;
+- "Add to my recipe note that it takes 45 minutes" → Use appendText to add cooking time without losing existing recipe content
+
+🧠 ENHANCED CONVERSATIONAL CONTEXT FOR DELETIONS:
+When you provide information about user's dashboard/items and they respond with deletion requests:
+- If you mention "You have X notes and Y events" and user says "delete these" → Use bulkDeleteItems to delete ALL item types mentioned
+- "delete these" after dashboard summary = delete everything you just told them about
+- "can you delete these?" = comprehensive deletion of all recently discussed items
+- Context carries across conversation - track what you've told the user, then honor comprehensive deletion requests
+- Example: If you say "You have 3 notes and 2 events" and user replies "can you delete these?" → Delete ALL notes AND events, not just one type
+- Be contextually intelligent - "these" refers to the full scope of what was recently discussed or displayed`;
   }
 
   getTools(categories: any[] = []) {
-    // Build dynamic category description
+    // Build dynamic category description with safety validation
     const categoryDescription = categories.length > 0 
-      ? `MUST use one of these exact category IDs: ${categories.map(cat => `"${cat.id}" (${cat.name})`).join(', ')}. DO NOT use any other category IDs.`
-      : 'Life category for this item. Use the exact category ID from the available categories.';
+      ? `CRITICAL: MUST use one of these exact category IDs: ${categories.map(cat => `"${cat.id}" (${cat.name})`).join(', ')}. NEVER use any other category IDs - this will cause database errors. If unsure, use "${categories[0]?.id || 'self-regulation'}".`
+      : `CRITICAL: Must use a valid category ID. If unsure, use "self-regulation" as fallback.`;
     return [
       {
         name: 'createItem',
@@ -1130,17 +1176,17 @@ Examples:
       },
       {
         name: 'generateFullDaySchedule',
-        description: 'Generate a complete daily schedule based on user\'s existing routines, goals, and preferences. Use when user says "fill my calendar" or "create my full day schedule".',
+        description: 'Generate a complete daily schedule based on user\'s existing routines, goals, and preferences. SMART AUTO-FILL: Use today as startDate and 7 days later as endDate if not specified. Use moderate intensity and 9am-5pm if not specified.',
         parameters: {
           type: 'OBJECT',
           properties: {
             startDate: {
               type: 'STRING',
-              description: 'Start date for the schedule (YYYY-MM-DD format)'
+              description: 'Start date for the schedule (YYYY-MM-DD format). DEFAULT: Use today\'s date if user doesn\'t specify'
             },
             endDate: {
               type: 'STRING',
-              description: 'End date for the schedule (YYYY-MM-DD format)'
+              description: 'End date for the schedule (YYYY-MM-DD format). DEFAULT: Use 7 days from startDate if user doesn\'t specify'
             },
             includeExistingRoutines: {
               type: 'BOOLEAN',
@@ -1149,17 +1195,17 @@ Examples:
             },
             workingHours: {
               type: 'STRING',
-              description: 'Working hours preference (e.g., "9am-5pm", "flexible", "early-bird", "night-owl")',
+              description: 'Working hours preference. DEFAULT: "9am-5pm" if not specified',
               default: '9am-5pm'
             },
             intensity: {
               type: 'STRING',
               enum: ['light', 'moderate', 'intense', 'extreme'],
-              description: 'How packed the schedule should be',
+              description: 'How packed the schedule should be. DEFAULT: "moderate" if not specified',
               default: 'moderate'
             }
           },
-          required: ['startDate', 'endDate']
+          required: []
         }
       },
       {
@@ -3395,10 +3441,18 @@ Please specify your preference or say "create anyway" to override.`,
     console.log('📅 Generating full day schedule:', args);
     
     const items = this.getStoredItems();
-    const startDate = args.startDate;
-    const endDate = args.endDate;
+    
+    // SMART AUTO-FILL: Auto-generate missing parameters
+    const today = new Date();
+    const weekLater = new Date(today);
+    weekLater.setDate(weekLater.getDate() + 7);
+    
+    const startDate = args.startDate || today.toISOString().split('T')[0];
+    const endDate = args.endDate || weekLater.toISOString().split('T')[0];
     const workingHours = args.workingHours || '9am-5pm';
     const intensity = args.intensity || 'moderate';
+    
+    console.log('📅 Auto-filled parameters:', { startDate, endDate, workingHours, intensity });
     
     // Get existing routines to incorporate
     const existingRoutines = items.filter(item => item.type === 'routine');

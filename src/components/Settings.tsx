@@ -1,11 +1,30 @@
-import React from 'react';
-import { Moon, Sun, Settings as SettingsIcon, LogOut, User, Shield, Database, Bell, Globe, HelpCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Moon, Sun, Settings as SettingsIcon, LogOut, User, Shield, Database, Bell, Globe, HelpCircle, Zap } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuthContext } from './AuthProvider';
 
 const Settings: React.FC = () => {
   const { isDarkMode, toggleDarkMode } = useTheme();
   const { user, signOut } = useAuthContext();
+  
+  // Auto-approve setting state
+  const [autoApprove, setAutoApprove] = useState(false);
+  
+  // Load auto-approve setting from localStorage
+  useEffect(() => {
+    const savedAutoApprove = localStorage.getItem('georgetownAI_autoApprove');
+    if (savedAutoApprove !== null) {
+      setAutoApprove(JSON.parse(savedAutoApprove));
+    }
+  }, []);
+  
+  // Save auto-approve setting to localStorage
+  const toggleAutoApprove = () => {
+    const newValue = !autoApprove;
+    setAutoApprove(newValue);
+    localStorage.setItem('georgetownAI_autoApprove', JSON.stringify(newValue));
+    console.log('🤖 Auto-approve setting changed to:', newValue);
+  };
 
   const handleSignOut = async () => {
     const confirmSignOut = window.confirm('Are you sure you want to sign out?');
@@ -71,6 +90,41 @@ const Settings: React.FC = () => {
                   }`}
                 />
               </button>
+            </div>
+          </div>
+
+          {/* AI Assistant */}
+          <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-2xl shadow-lg border border-white/30 dark:border-gray-700/30 p-6">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
+                <Zap className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              </div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">AI Assistant</h2>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between py-2">
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-white">Auto-approve Functions</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">Automatically execute safe AI function calls without manual approval</p>
+                </div>
+                <button
+                  onClick={toggleAutoApprove}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    autoApprove ? 'bg-purple-600' : 'bg-gray-200 dark:bg-gray-700'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      autoApprove ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
+                <p className="text-xs text-blue-600 dark:text-blue-400">
+                  <strong>Note:</strong> When enabled, the AI will automatically execute safe operations like creating items, updating content, and generating schedules. Destructive operations like deletions will still require manual approval.
+                </p>
+              </div>
             </div>
           </div>
 

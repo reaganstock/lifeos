@@ -212,16 +212,9 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [isAgenticMode, setIsAgenticMode] = useState(false);
   
-  // Function calling states
+  // Function calling states  
   const [isProcessingFunction, setIsProcessingFunction] = useState(false);
   const [functionResult, setFunctionResult] = useState<string | null>(null);
-  const [pendingFunctionCalls, setPendingFunctionCalls] = useState<Array<{
-    id: string;
-    name: string;
-    args: any;
-    completed?: boolean;
-    result?: any;
-  }>>([]);
   
   // AI processing states
   const [isAIThinking, setIsAIThinking] = useState(false);
@@ -231,45 +224,21 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   const [autoApprove, setAutoApprove] = useState(false);
   // REMOVED: agenticLoopCount, maxAgenticLoops, originalUserIntent, agenticRequestType - complex state causing bugs
   
-  // Clear pending function calls when component mounts or session changes
+  // Load auto-approve preference on mount
   useEffect(() => {
-    setPendingFunctionCalls([]);
-    setIsAIThinking(false);
-    setIsCallingFunction(false);
-    setCurrentFunctionName(null);
-    
-    // Load auto-approve preference
     const savedAutoApprove = localStorage.getItem('aiAssistantAutoApprove');
     if (savedAutoApprove === 'true') {
       setAutoApprove(true);
     }
-  }, []); // This runs on mount
-  
-  // CRITICAL: Clear function calls when switching sessions to prevent bleeding
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const chatState = chatService.getState();
-  
-  useEffect(() => {
-    if (chatState.currentSessionId !== currentSessionId) {
-      console.log('🧹 Session changed, clearing function calls to prevent bleeding');
-      setPendingFunctionCalls([]);
-      setIsAIThinking(false);
-      setIsCallingFunction(false);
-      setCurrentFunctionName(null);
-      setCurrentSessionId(chatState.currentSessionId);
-    }
-  }, [chatState.currentSessionId, currentSessionId]);
+  }, []);
   
   // Save auto-approve preference
   useEffect(() => {
     localStorage.setItem('aiAssistantAutoApprove', autoApprove.toString());
   }, [autoApprove]);
   
-  // Function call approval/rejection handlers
-  const handleApproveFunctionCall = async (functionCallId: string) => {
-    const functionCall = pendingFunctionCalls.find(fc => fc.id === functionCallId);
-    if (!functionCall) return;
-
+  // Simplified function call execution using ChatService
+  const handleExecuteFunction = async (messageId: string, functionCall: any) => {
     try {
       setIsCallingFunction(true);
       setCurrentFunctionName(functionCall.name);
@@ -281,10 +250,9 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
         categories
       );
 
+      // Generate AI feedback
+      let aiFeedback = '';
       if (result.success) {
-        // Always add AI feedback - no system message clutter
-        let aiFeedback = '';
-        
         if (result.functionResults && result.functionResults.length > 0) {
           const funcResult = result.functionResults[0];
           
@@ -302,57 +270,151 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
             aiFeedback = `Perfect! I've completed the ${functionCall.name} function successfully. Your dashboard has been updated with the changes.`;
           }
         } else {
-          // Fallback if no function results but success
           aiFeedback = `Excellent! I've successfully executed the ${functionCall.name} function. Your request has been completed and your dashboard should now reflect the changes.`;
         }
         
-        // Only add AI explanation, no system message clutter
-        console.log('🔍 Adding AI feedback:', aiFeedback);
-        await chatService.addMessage('assistant', aiFeedback);
-        console.log('✅ AI feedback message added successfully');
+        // Update function call message as completed
+        chatService.updateFunctionCall(messageId, {
+          status: 'completed',
+          result: result,
+          aiFeedback: aiFeedback
+        });
         
         // Trigger data refresh
         if (result.itemsModified) {
           onRefreshItems();
         }
-        
-        // No special agent mode logic - both modes work the same
-      } else {
-        // Silent failure logging - no chat clutter
-        console.error('Function failed:', result.message || 'Unknown error');
-      }
 
-      // Mark as completed but keep in message flow
-      setPendingFunctionCalls(prev => prev.map(fc => 
-        fc.id === functionCallId 
-          ? { ...fc, completed: true, result: result } 
-          : fc
-      ));
+        // INTELLIGENT AGENTIC CONTINUATION: Check if we should continue
+        if (isAgenticMode) {
+          console.log('🤖 CHECKING AGENTIC CONTINUATION after function execution...');
+          
+          // Get conversation context for intelligent analysis
+          const currentSession = chatService.getCurrentSession();
+          if (currentSession && currentSession.messages.length > 0) {
+            // Find the original user message that started this agentic flow
+            const userMessages = currentSession.messages
+              .filter(m => m.role === 'user')
+              .map(m => m.versions[m.currentVersionIndex].content);
+            const lastUserMessage = userMessages[userMessages.length - 1] || '';
+            
+            // Get recent AI responses for context
+            const recentAIResponses = currentSession.messages
+              .filter(m => m.role === 'assistant')
+              .slice(-5)
+              .map(m => m.versions[m.currentVersionIndex].content);
+            
+            // Get all function results from this session
+            const allFunctionResults = currentSession.messages
+              .filter(m => m.role === 'function_call' && m.functionCall?.status === 'completed')
+              .map(m => ({
+                function: m.functionCall?.name,
+                result: m.functionCall?.result,
+                success: m.functionCall?.status === 'completed'
+              }));
+            
+            // Use intelligent goal analysis
+            const shouldContinue = chatService.shouldContinueAgentic(
+              lastUserMessage,
+              recentAIResponses,
+              allFunctionResults
+            );
+            
+            if (shouldContinue) {
+              console.log('🔄 CONTINUING AGENTIC MODE: Goal not yet achieved, continuing...');
+              
+              // Continue the agentic flow by processing the original request again
+              setTimeout(async () => {
+                try {
+                  setIsAIThinking(true);
+                  const currentCategoryId = categories.find(cat => cat.id === currentView)?.id;
+                  
+                  // Create continuation context message for the AI
+                  const continuationMessage = `AGENTIC CONTINUATION: The user's original request "${lastUserMessage}" is not yet complete. Previous function calls: ${allFunctionResults.map(r => `${r.function} (${r.success ? 'success' : 'failed'})`).join(', ')}. Please continue working toward the goal.`;
+                  
+                  const response = await chatService.processGeorgetownCommand(
+                    continuationMessage,
+                    currentCategoryId,
+                    items,
+                    categories,
+                    true // Keep agentic mode active
+                  );
+                  
+                  // Handle the continuation response
+                  if (response.pendingFunctionCall) {
+                    const functionCallMessage = await chatService.addFunctionCallMessage({
+                      name: response.pendingFunctionCall.name,
+                      args: response.pendingFunctionCall.args,
+                      status: 'pending'
+                    });
+                    
+                    // Auto-execute in agentic mode
+                    const shouldAutoExecute = chatService.shouldAutoApprove(functionCallMessage, true);
+                    if (shouldAutoExecute) {
+                      chatService.updateFunctionCall(functionCallMessage.id, { 
+                        status: 'executing', 
+                        autoApproved: true 
+                      });
+                      setTimeout(() => {
+                        handleExecuteFunction(functionCallMessage.id, functionCallMessage.functionCall!);
+                      }, 1000);
+                    }
+                  } else {
+                    // No more functions needed, goal achieved
+                    await chatService.addMessage('assistant', response.message);
+                  }
+                } catch (error) {
+                  console.error('Agentic continuation error:', error);
+                } finally {
+                  setIsAIThinking(false);
+                }
+              }, 2000); // Small delay to let the UI update
+            } else {
+              console.log('🎯 AGENTIC GOAL ACHIEVED: Stopping agentic mode');
+            }
+          }
+        }
+      } else {
+        // Function failed
+        let failureReason = result.message || 'Please try again.';
+        
+        // Check for foreign key constraint error
+        if (failureReason.includes('foreign key constraint') || failureReason.includes('category_id_fkey')) {
+          failureReason = 'Invalid category ID used. The AI tried to use a category that doesn\'t exist in your database.';
+        }
+        
+        aiFeedback = `I encountered an issue while executing the ${functionCall.name} function. ${failureReason}`;
+        chatService.updateFunctionCall(messageId, {
+          status: 'failed',
+          result: result,
+          aiFeedback: aiFeedback
+        });
+        
+        // STOP AGENTIC MODE on critical errors to prevent infinite loops
+        if (isAgenticMode && (failureReason.includes('foreign key') || failureReason.includes('Invalid category'))) {
+          console.log('🛑 STOPPING AGENTIC MODE: Critical database error detected');
+          setIsAgenticMode(false);
+        }
+      }
     } catch (error) {
       console.error('Function execution error:', error);
-      // Silent error handling - no chat clutter
+      chatService.updateFunctionCall(messageId, {
+        status: 'failed',
+        aiFeedback: 'An unexpected error occurred while executing the function.'
+      });
     } finally {
       setIsCallingFunction(false);
       setCurrentFunctionName(null);
     }
   };
-
-  const handleRejectFunctionCall = async (functionCallId: string) => {
-    setPendingFunctionCalls(prev => prev.filter(fc => fc.id !== functionCallId));
-    // Silent rejection - no chat message clutter
-  };
   
-  // Stop agentic mode and clear all pending operations with proper cleanup
+  // Stop agentic mode - simplified
   const stopAgenticMode = () => {
     setIsAgenticMode(false);
-    setPendingFunctionCalls([]);
     setIsAIThinking(false);
     setIsCallingFunction(false);
     setCurrentFunctionName(null);
-    // REMOVED: Complex state variables that caused bugs
-    console.log('🛑 Agentic mode stopped and all pending operations cleared');
-    
-    // No robotic messaging - user can see the mode change in UI
+    console.log('🛑 Agentic mode stopped');
   };
 
   
@@ -1571,39 +1633,33 @@ User message: ${processedMessage}`;
 
         // Check if there's a pending function call
         if (response.pendingFunctionCall) {
-          // For Cursor-like experience: AI response and function call should appear together
-          const functionCallId = Date.now().toString();
-          const newFunctionCall = {
-            id: functionCallId,
-            name: response.pendingFunctionCall.name,
-            args: response.pendingFunctionCall.args
-          };
-          
-          // Add AI response with function call immediately following
+          // Add AI response first
           let aiResponse = response.message;
           if (hasImages) {
             aiResponse = `I can see the image${selectedImages.length > 1 ? 's' : ''} you uploaded. ${aiResponse}`;
           }
           await chatService.addMessage('assistant', aiResponse);
           
-          // Immediately show function call UI
-          console.log('🔍 DEBUG: Adding function call to pending state:', newFunctionCall);
-          setPendingFunctionCalls(prev => {
-            const updated = [...prev, newFunctionCall];
-            console.log('🔍 DEBUG: Updated pending function calls:', updated);
-            return updated;
+          // Add function call as timeline message
+          const functionCallMessage = await chatService.addFunctionCallMessage({
+            name: response.pendingFunctionCall.name,
+            args: response.pendingFunctionCall.args,
+            status: 'pending'
           });
           
-          // Auto-approve logic
-          console.log('🔍 DEBUG: Auto-approve enabled?', autoApprove);
-          if (autoApprove) {
-            console.log('🔄 Auto-approving function call:', newFunctionCall.name, 'with ID:', functionCallId);
+          // Intelligent auto-approve using ChatService
+          const shouldAutoExecute = chatService.shouldAutoApprove(functionCallMessage, autoApprove);
+          if (shouldAutoExecute) {
+            console.log('🤖 Auto-executing function call:', functionCallMessage.functionCall?.name);
+            chatService.updateFunctionCall(functionCallMessage.id, { 
+              status: 'executing', 
+              autoApproved: true 
+            });
             setTimeout(() => {
-              console.log('🔄 Executing auto-approval for:', functionCallId);
-              handleApproveFunctionCall(functionCallId);
+              handleExecuteFunction(functionCallMessage.id, functionCallMessage.functionCall!);
             }, 1000);
           } else {
-            console.log('⏸️ Auto-approve disabled, waiting for manual approval');
+            console.log('⏸️ Waiting for manual approval or auto-approve not suitable');
           }
         } else {
           // In note mode, if AI modified items, check if it was the current note
@@ -1695,14 +1751,6 @@ User message: ${processedMessage}`;
 
         // Check if there's a pending function call
         if (response.pendingFunctionCall) {
-          // SIMPLIFIED: Both Ask and Agent mode work exactly the same - just show the visual UI
-          const functionCallId = Date.now().toString();
-          const newFunctionCall = {
-            id: functionCallId,
-            name: response.pendingFunctionCall.name,
-            args: response.pendingFunctionCall.args
-          };
-          
           // Add AI response first (proper message ordering like Cursor)
           let aiResponse = response.message;
           if (hasImages) {
@@ -1710,16 +1758,26 @@ User message: ${processedMessage}`;
           }
           await chatService.addMessage('assistant', aiResponse);
           
-          // Show the visual function call UI (same for both modes)
-          console.log('🔍 Adding function call to UI:', newFunctionCall);
-          setPendingFunctionCalls(prev => [...prev, newFunctionCall]);
+          // Add function call as timeline message
+          const functionCallMessage = await chatService.addFunctionCallMessage({
+            name: response.pendingFunctionCall.name,
+            args: response.pendingFunctionCall.args,
+            status: 'pending'
+          });
           
-          // Auto-approve if enabled (same for both modes)
-          if (autoApprove) {
-            console.log('🔄 Auto-approving function call:', response.pendingFunctionCall.name);
+          // Intelligent auto-approve using ChatService
+          const shouldAutoExecute = chatService.shouldAutoApprove(functionCallMessage, autoApprove);
+          if (shouldAutoExecute) {
+            console.log('🤖 Auto-executing function call:', functionCallMessage.functionCall?.name);
+            chatService.updateFunctionCall(functionCallMessage.id, { 
+              status: 'executing', 
+              autoApproved: true 
+            });
             setTimeout(() => {
-              handleApproveFunctionCall(functionCallId);
+              handleExecuteFunction(functionCallMessage.id, functionCallMessage.functionCall!);
             }, 1000);
+          } else {
+            console.log('⏸️ Waiting for manual approval or auto-approve not suitable');
           }
         } else {
           // Handle item creation (legacy support)
@@ -2671,7 +2729,7 @@ User message: ${processedMessage}`;
               </div>
             ) : (
               <div className="relative z-10">
-                {/* Combined timeline of messages and function calls */}
+                {/* Combined timeline: Messages first */}
                 {currentSession.messages.map((message) => (
                   <MessageBubble
                     key={message.id}
@@ -2680,82 +2738,67 @@ User message: ${processedMessage}`;
                     onStartEdit={startEditing}
                     onCancelEdit={cancelEdit}
                     onNavigateVersion={navigateVersion}
+                    onExecuteFunction={handleExecuteFunction}
                     isDarkMode={isDarkMode}
+                    isAgenticMode={isAgenticMode}
+                    categories={categories}
+                    items={items}
+                    currentView={currentView}
+                    setIsAIThinking={setIsAIThinking}
                   />
                 ))}
                 
-                {/* Function Call UIs integrated into message flow */}
-                {pendingFunctionCalls.map((functionCall) => (
-                  <div key={functionCall.id} className="flex justify-start relative z-10 mb-6">
-                    <div className="flex items-start space-x-3 w-full max-w-4xl">
-                      <div className="p-2 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 shadow-lg">
+                {isProcessing && (
+                  <div className="flex justify-start relative z-10">
+                    <div className="flex items-start space-x-3">
+                      <div className="p-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 shadow-lg">
                         <Sparkles className="w-5 h-5 text-white" />
                       </div>
-                      <div className="flex-1">
-                        <FunctionCallUI
-                          functionCall={functionCall}
-                          onApprove={() => handleApproveFunctionCall(functionCall.id)}
-                          onReject={() => handleRejectFunctionCall(functionCall.id)}
-                          isDarkMode={isDarkMode}
-                          autoApprove={autoApprove}
-                          onAutoApproveChange={setAutoApprove}
-                        />
+                      <div 
+                        className="p-4 rounded-2xl backdrop-blur-sm border shadow-lg"
+                        style={{ 
+                          backgroundColor: isDarkMode ? 'rgba(30, 41, 59, 0.8)' : 'rgba(255, 255, 255, 0.8)',
+                          borderColor: themeColors.border
+                        }}
+                      >
+                        <div className="flex items-center space-x-3">
+                          {/* Thinking indicator */}
+                          {isAIThinking && (
+                            <div className={`w-2 h-2 rounded-full animate-bounce ${isDarkMode ? 'bg-gray-200' : 'bg-gray-700'}`} 
+                                 style={{
+                                   animation: 'bounce 1s infinite, scaleUpDown 1.5s infinite'
+                                 }}>
+                            </div>
+                          )}
+                          
+                          {/* Function call indicator */}
+                          {isCallingFunction && (
+                            <div className="flex items-center space-x-2">
+                              <div className={`px-2 py-1 rounded-lg text-xs font-medium ${
+                                isDarkMode ? 'bg-green-500/20 text-green-400' : 'bg-green-100 text-green-700'
+                              }`}>
+                                🔧 {currentFunctionName || 'Function'}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Fallback processing indicator */}
+                          {!isAIThinking && !isCallingFunction && (
+                            <div className={`w-2 h-2 rounded-full animate-bounce ${isDarkMode ? 'bg-gray-200' : 'bg-gray-700'}`} 
+                                 style={{
+                                   animation: 'bounce 1s infinite, scaleUpDown 1.5s infinite'
+                                 }}>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                ))}
+                )}
+                
+                <div ref={messagesEndRef} />
               </div>
             )}
-            
-            {isProcessing && (
-              <div className="flex justify-start relative z-10">
-                <div className="flex items-start space-x-3">
-                  <div className="p-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 shadow-lg">
-                    <Sparkles className="w-5 h-5 text-white" />
-                  </div>
-                  <div 
-                    className="p-4 rounded-2xl backdrop-blur-sm border shadow-lg"
-                    style={{ 
-                      backgroundColor: isDarkMode ? 'rgba(30, 41, 59, 0.8)' : 'rgba(255, 255, 255, 0.8)',
-                      borderColor: themeColors.border
-                    }}
-                  >
-                    <div className="flex items-center space-x-3">
-                      {/* Thinking indicator */}
-                      {isAIThinking && (
-                        <div className={`w-2 h-2 rounded-full animate-bounce ${isDarkMode ? 'bg-gray-200' : 'bg-gray-700'}`} 
-                             style={{
-                               animation: 'bounce 1s infinite, scaleUpDown 1.5s infinite'
-                             }}>
-                        </div>
-                      )}
-                      
-                      {/* Function call indicator */}
-                      {isCallingFunction && (
-                        <div className="flex items-center space-x-2">
-                          <div className={`px-2 py-1 rounded-lg text-xs font-medium ${
-                            isDarkMode ? 'bg-green-500/20 text-green-400' : 'bg-green-100 text-green-700'
-                          }`}>
-                            🔧 {currentFunctionName || 'Function'}
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Fallback processing indicator */}
-                      {!isAIThinking && !isCallingFunction && (
-                        <div className={`w-2 h-2 rounded-full animate-bounce ${isDarkMode ? 'bg-gray-200' : 'bg-gray-700'}`} 
-                             style={{
-                               animation: 'bounce 1s infinite, scaleUpDown 1.5s infinite'
-                             }}>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            <div ref={messagesEndRef} />
           </div>
           )}
 
@@ -3111,8 +3154,14 @@ const MessageBubble: React.FC<{
   onStartEdit: (messageId: string) => void;
   onCancelEdit: (messageId: string) => void;
   onNavigateVersion: (messageId: string, direction: 'prev' | 'next') => void;
+  onExecuteFunction?: (messageId: string, functionCall: any) => void;
   isDarkMode: boolean;
-}> = ({ message, onEdit, onStartEdit, onCancelEdit, onNavigateVersion, isDarkMode }) => {
+  isAgenticMode?: boolean;
+  categories?: any[];
+  items?: any[];
+  currentView?: string;
+  setIsAIThinking?: (thinking: boolean) => void;
+}> = ({ message, onEdit, onStartEdit, onCancelEdit, onNavigateVersion, onExecuteFunction, isDarkMode, isAgenticMode = false, categories = [], items = [], currentView = '', setIsAIThinking }) => {
   const currentVersion = message.versions[message.currentVersionIndex];
   const [editContent, setEditContent] = useState(currentVersion.content);
   const versionInfo = chatService.getVersionInfo(message.id);
@@ -3141,6 +3190,124 @@ const MessageBubble: React.FC<{
             <span>{cleanMarkdownFormatting(currentVersion.content)}</span>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (message.role === 'function_call' && message.functionCall) {
+    return (
+      <div className="mb-6">
+        {/* Function Call Card */}
+        <div className="flex items-start space-x-3 mb-4">
+          <div className="relative">
+            <div className="p-2 rounded-xl shadow-lg bg-gradient-to-br from-gray-600 to-gray-700">
+              <Sparkles className="w-5 h-5 text-white" />
+            </div>
+          </div>
+          
+          <div className="flex-1 max-w-[80%]">
+            <FunctionCallUI
+              functionCall={{
+                name: message.functionCall.name,
+                args: message.functionCall.args,
+                completed: message.functionCall.status === 'completed',
+                result: message.functionCall.result
+              }}
+              onApprove={() => {
+                // Update to executing status and execute
+                chatService.updateFunctionCall(message.id, { status: 'executing' });
+                onExecuteFunction!(message.id, message.functionCall!);
+              }}
+              onReject={async () => {
+                // Update to failed status
+                chatService.updateFunctionCall(message.id, { status: 'failed' });
+                
+                // SMART REJECTION HANDLING: Continue with alternative approach in agentic mode
+                if (isAgenticMode) {
+                  console.log('🔄 SMART REJECTION: User rejected function, seeking alternative approach...');
+                  
+                  // Add a small delay then continue with alternative approach
+                  setTimeout(async () => {
+                    try {
+                      setIsAIThinking?.(true);
+                      const currentCategoryId = categories.find(cat => cat.id === currentView)?.id;
+                      
+                      // Get original user message for context
+                      const currentSession = chatService.getCurrentSession();
+                      const userMessages = currentSession?.messages
+                        .filter(m => m.role === 'user')
+                        .map(m => m.versions[m.currentVersionIndex].content) || [];
+                      const lastUserMessage = userMessages[userMessages.length - 1] || '';
+                      
+                      // Create rejection context message for the AI
+                      const rejectionMessage = `REJECTION HANDLING: The user rejected the ${message.functionCall?.name} function. Their original request was "${lastUserMessage}". Please suggest an alternative approach to help achieve their goal.`;
+                      
+                      const response = await chatService.processGeorgetownCommand(
+                        rejectionMessage,
+                        currentCategoryId,
+                        items,
+                        categories,
+                        true // Keep agentic mode active
+                      );
+                      
+                      // Handle the alternative response
+                      if (response.pendingFunctionCall) {
+                        const functionCallMessage = await chatService.addFunctionCallMessage({
+                          name: response.pendingFunctionCall.name,
+                          args: response.pendingFunctionCall.args,
+                          status: 'pending'
+                        });
+                        
+                        // Don't auto-execute after rejection - let user decide
+                        console.log('💭 Offering alternative approach for user approval');
+                      } else {
+                        // Add AI response suggesting alternatives
+                        await chatService.addMessage('assistant', response.message);
+                      }
+                    } catch (error) {
+                      console.error('Smart rejection handling error:', error);
+                      await chatService.addMessage('assistant', "I understand you don't want that approach. Could you let me know how you'd prefer to proceed?");
+                    } finally {
+                      setIsAIThinking?.(false);
+                    }
+                  }, 1500); // Small delay to let UI update
+                }
+              }}
+              isDarkMode={isDarkMode}
+            />
+          </div>
+        </div>
+        
+        {/* AI Feedback after execution */}
+        {message.functionCall.status === 'completed' && message.functionCall.aiFeedback && (
+          <div className="flex items-start space-x-3">
+            <div className="relative">
+              <div className="p-2 rounded-xl shadow-lg bg-gradient-to-br from-gray-600 to-gray-700">
+                <Sparkles className="w-5 h-5 text-white" />
+              </div>
+            </div>
+            
+            <div className="flex-1 max-w-[80%]">
+              <div 
+                className="rounded-2xl p-4 backdrop-blur-sm border shadow-lg rounded-tl-md"
+                style={{
+                  backgroundColor: isDarkMode ? 'rgba(55, 65, 81, 0.8)' : 'rgba(255, 255, 255, 0.8)',
+                  borderColor: isDarkMode ? 'rgba(99, 102, 241, 0.3)' : 'rgba(99, 102, 241, 0.2)'
+                }}
+              >
+                <div className={`text-sm leading-relaxed ${isDarkMode ? 'text-gray-100' : 'text-gray-800'}`}>
+                  {message.functionCall.aiFeedback}
+                </div>
+                <div className={`flex items-center justify-between mt-3 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  <span className="flex items-center space-x-1">
+                    <div className="w-1 h-1 bg-indigo-500 rounded-full"></div>
+                    <span>{currentVersion.timestamp.toLocaleTimeString()}</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
