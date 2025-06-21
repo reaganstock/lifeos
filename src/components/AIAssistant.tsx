@@ -1741,8 +1741,7 @@ User message: ${processedMessage}`;
 
             onAddItem(newItem);
             
-            // Add system message about item creation
-            await chatService.addMessage('system', `✅ Created ${response.itemCreated.type}: "${response.itemCreated.title}"`);
+            // No system message clutter - AI will explain in follow-up
           }
 
           // If items were modified, refresh the UI
@@ -1835,7 +1834,7 @@ User message: ${processedMessage}`;
           };
 
           onAddItem(newItem);
-          await chatService.addMessage('system', `✅ Created ${response.itemCreated.type}: "${response.itemCreated.title}"`);
+          // No system message clutter - AI will explain in follow-up
         }
 
         // If items were modified, refresh the UI
