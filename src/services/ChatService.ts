@@ -30,41 +30,26 @@ class ChatService {
     return `version_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
   }
 
-  // Load sessions from Supabase
+  // Load sessions from Supabase - LAZY LOADING for performance
   private async loadFromSupabase(): Promise<void> {
     try {
-      console.log('📂 ChatService: Loading from Supabase...');
+      console.log('📂 ChatService: Loading sessions metadata only (FAST)...');
       
       const dbSessions = await SupabaseChatService.getChatSessions();
       console.log('📂 ChatService: Found sessions:', dbSessions.length);
       
-      // Convert Supabase sessions to local format
-      this.state.sessions = await Promise.all(
-        dbSessions.map(async (dbSession: any) => {
-          // Get messages for this session
-          const sessionWithMessages = await SupabaseChatService.getChatSession(dbSession.id);
-          
-          const session: ChatSession = {
-            id: dbSession.id,
-            title: dbSession.title || 'Untitled Chat',
-            createdAt: new Date(dbSession.created_at || Date.now()),
-            updatedAt: new Date(dbSession.updated_at || Date.now()),
-            messages: (sessionWithMessages?.messages || []).map((msg: any) => ({
-              id: msg.id,
-              role: msg.role,
-              timestamp: new Date(msg.created_at || Date.now()),
-              currentVersionIndex: 0,
-              versions: [{
-                id: `v_${msg.id}`,
-                content: msg.content,
-                timestamp: new Date(msg.created_at || Date.now())
-              }]
-            }))
-          };
-          
-          return session;
-        })
-      );
+      // PERFORMANCE FIX: Only load session metadata, not all messages
+      this.state.sessions = dbSessions.map((dbSession: any) => {
+        const session: ChatSession = {
+          id: dbSession.id,
+          title: dbSession.title || 'Untitled Chat',
+          createdAt: new Date(dbSession.created_at || Date.now()),
+          updatedAt: new Date(dbSession.updated_at || Date.now()),
+          messages: [] // Load messages lazily when session is opened
+        };
+        
+        return session;
+      });
         
       console.log('✅ ChatService: Loaded and converted', this.state.sessions.length, 'sessions');
         
@@ -77,6 +62,36 @@ class ChatService {
       console.error('❌ ChatService: Error loading from Supabase:', error);
       this.state.sessions = [];
       this.state.currentSessionId = null;
+    }
+  }
+
+  // PERFORMANCE FIX: Load messages for a specific session when needed
+  private async loadSessionMessages(sessionId: string): Promise<void> {
+    try {
+      console.log(`📂 ChatService: Loading messages for session ${sessionId}...`);
+      
+      const sessionWithMessages = await SupabaseChatService.getChatSession(sessionId);
+      
+      // Find the session in our state and update its messages
+      const sessionIndex = this.state.sessions.findIndex(s => s.id === sessionId);
+      if (sessionIndex !== -1 && sessionWithMessages?.messages) {
+        this.state.sessions[sessionIndex].messages = sessionWithMessages.messages.map((msg: any) => ({
+          id: msg.id,
+          role: msg.role,
+          timestamp: new Date(msg.created_at || Date.now()),
+          currentVersionIndex: 0,
+          versions: [{
+            id: `v_${msg.id}`,
+            content: msg.content,
+            timestamp: new Date(msg.created_at || Date.now())
+          }]
+        }));
+        
+        console.log(`✅ ChatService: Loaded ${sessionWithMessages.messages.length} messages for session ${sessionId}`);
+        this.notifyListeners(); // Update UI
+      }
+    } catch (error) {
+      console.error('Failed to load session messages:', error);
     }
   }
 

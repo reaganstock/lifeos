@@ -243,13 +243,17 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   const [isAIThinking, setIsAIThinking] = useState(false);
   const [isCallingFunction, setIsCallingFunction] = useState(false);
   const [currentFunctionName, setCurrentFunctionName] = useState<string | null>(null);
+  const [agenticLoopCount, setAgenticLoopCount] = useState(0);
+  const [maxAgenticLoops] = useState(15); // Allow more cycles for comprehensive life setup
   const [showModeDropdown, setShowModeDropdown] = useState(false);
   const [autoApprove, setAutoApprove] = useState(false);
-  // REMOVED: agenticLoopCount, maxAgenticLoops, originalUserIntent, agenticRequestType - complex state causing bugs
+  const [originalUserIntent, setOriginalUserIntent] = useState<string | null>(null);
+  const [agenticRequestType, setAgenticRequestType] = useState<'deletion' | 'creation' | 'planning' | 'research' | 'optimization' | 'lifestyle_change' | 'goal_setting' | 'organization' | null>(null);
   
   // Clear pending function calls when component mounts (new conversation)
   useEffect(() => {
     setPendingFunctionCalls([]);
+    setAgenticLoopCount(0);
     setIsAIThinking(false);
     setIsCallingFunction(false);
     setCurrentFunctionName(null);
@@ -344,10 +348,12 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   const stopAgenticMode = () => {
     setIsAgenticMode(false);
     setPendingFunctionCalls([]);
+    setAgenticLoopCount(0);
     setIsAIThinking(false);
     setIsCallingFunction(false);
     setCurrentFunctionName(null);
-    // REMOVED: Complex state variables that caused bugs
+    setOriginalUserIntent(null);
+    setAgenticRequestType(null);
     console.log('🛑 Agentic mode stopped and all pending operations cleared');
     
     // Provide user feedback about completion
@@ -356,6 +362,66 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     }, 100);
   };
 
+  // Intelligent user intent classification system for robust agentic behavior
+  const classifyUserIntent = (message: string): 'deletion' | 'creation' | 'planning' | 'research' | 'optimization' | 'lifestyle_change' | 'goal_setting' | 'organization' => {
+    const lowerMessage = message.toLowerCase();
+    
+    // Deletion patterns (comprehensive)
+    if (lowerMessage.includes('delete') || lowerMessage.includes('clear') || lowerMessage.includes('remove') ||
+        lowerMessage.includes('clean up') || lowerMessage.includes('get rid of') || lowerMessage.includes('eliminate')) {
+      return 'deletion';
+    }
+    
+    // Lifestyle change patterns (major life events)
+    if (lowerMessage.includes('getting married') || lowerMessage.includes('preparing to get married') ||
+        lowerMessage.includes('move to') || lowerMessage.includes('moving to') || lowerMessage.includes('relocating') ||
+        lowerMessage.includes('new job') || lowerMessage.includes('starting a new') || lowerMessage.includes('becoming a')) {
+      return 'lifestyle_change';
+    }
+    
+    // Planning patterns (comprehensive)
+    if (lowerMessage.includes('plan') || lowerMessage.includes('organize') || lowerMessage.includes('prepare') || 
+        lowerMessage.includes('wedding') || lowerMessage.includes('trip') || lowerMessage.includes('project') ||
+        lowerMessage.includes('schedule') || lowerMessage.includes('setup') || lowerMessage.includes('set up')) {
+      return 'planning';
+    }
+    
+    // Goal setting patterns
+    if (lowerMessage.includes('goal') || lowerMessage.includes('achieve') || lowerMessage.includes('accomplish') ||
+        lowerMessage.includes('succeed') || lowerMessage.includes('target') || lowerMessage.includes('milestone')) {
+      return 'goal_setting';
+    }
+    
+    // Research patterns
+    if (lowerMessage.includes('research') || lowerMessage.includes('learn') || lowerMessage.includes('study') || 
+        lowerMessage.includes('find out') || lowerMessage.includes('investigate') || lowerMessage.includes('explore')) {
+      return 'research';
+    }
+    
+    // Organization patterns
+    if (lowerMessage.includes('organize') || lowerMessage.includes('structure') || lowerMessage.includes('categorize') ||
+        lowerMessage.includes('sort') || lowerMessage.includes('arrange') || lowerMessage.includes('manage')) {
+      return 'organization';
+    }
+    
+    // Optimization patterns  
+    if (lowerMessage.includes('improve') || lowerMessage.includes('optimize') || lowerMessage.includes('better') || 
+        lowerMessage.includes('enhance') || lowerMessage.includes('upgrade') || lowerMessage.includes('refine')) {
+      return 'optimization';
+    }
+    
+    // Default to creation for most requests
+    return 'creation';
+  };
+  
+  // Advanced context tracking for agentic persistence
+  const trackAgenticContext = (userMessage: string, intent: string) => {
+    if (!originalUserIntent) {
+      setOriginalUserIntent(userMessage);
+      setAgenticRequestType(intent as any);
+      console.log('🧠 Agentic context initialized:', { intent, message: userMessage.substring(0, 50) + '...' });
+    }
+  };
   
   // Intelligent continuation logic based on request type and dashboard state
   // REMOVED: shouldContinueAgentic function that caused infinite loops
@@ -1613,7 +1679,12 @@ User message: ${processedMessage}`;
         // Regular chat processing (not in note mode)
         const currentCategoryId = categories.find(cat => cat.id === currentView)?.id;
         
-        // SIMPLIFIED: Agent mode doesn't need complex intent tracking
+        // Initialize agentic context tracking for new agentic requests
+        if (isAgenticMode && agenticLoopCount === 0) {
+          const userIntent = classifyUserIntent(processedMessage);
+          trackAgenticContext(processedMessage, userIntent);
+          console.log('🚀 Starting new agentic session:', { intent: userIntent, message: processedMessage.substring(0, 50) + '...' });
+        }
         
         // For now, we'll process text normally. In a real app, you'd send images to your AI service
         let processMessage = processedMessage;
@@ -1625,7 +1696,8 @@ User message: ${processedMessage}`;
           message: processMessage,
           categoryId: currentCategoryId,
           itemsCount: items?.length || 0,
-          agenticMode: isAgenticMode
+          agenticMode: isAgenticMode,
+          agenticContext: { intent: agenticRequestType, originalRequest: originalUserIntent }
         });
 
         // Check if this looks like a function call command

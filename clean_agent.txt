@@ -1,0 +1,23 @@
+// CLEAN AGENT AI - ALL COMPLEX AGENTIC LOGIC REMOVED
+// Only UI and basic functionality preserved
+
+// Simple mode switching  
+const stopAgenticMode = () => {
+  setIsAgenticMode(false);
+  setPendingFunctionCalls([]);
+  setIsAIThinking(false);
+  setIsCallingFunction(false);
+  setCurrentFunctionName(null);
+  console.log('✨ Switched back to Ask mode');
+};
+
+// Placeholder voice functions (if needed for UI)
+const handleVoiceToggle = () => {
+  if (isVoiceMode) {
+    setIsVoiceMode(false);
+    console.log('🎙️ Voice recording stopped');
+  } else {
+    setIsVoiceMode(true);
+    console.log('🎙️ Voice recording started');
+  }
+};
