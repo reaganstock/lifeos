@@ -269,6 +269,158 @@ export class SupabaseService {
     }
   }
 
+  // ========== AUDIO UPLOAD UTILITIES ==========
+  
+  /**
+   * Upload audio blob to Supabase Storage and return permanent URL
+   */
+  async uploadAudioFile(audioBlob: Blob, fileName: string, userId?: string): Promise<{
+    storagePath: string;
+    publicUrl: string;
+  }> {
+    try {
+      const user = userId || (await this.getCurrentUser())?.id
+      if (!user) throw new Error('No user found for audio upload')
+
+      // Generate unique filename with timestamp
+      const timestamp = Date.now()
+      const fileExtension = this.getAudioFileExtension(audioBlob.type)
+      const uniqueFileName = `${user}/${timestamp}_${fileName}.${fileExtension}`
+      
+      console.log('🎵 Uploading audio file:', uniqueFileName, 'Size:', audioBlob.size, 'bytes')
+
+      // Upload to voice-recordings bucket
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('voice-recordings')
+        .upload(uniqueFileName, audioBlob, {
+          contentType: audioBlob.type,
+          cacheControl: '3600',
+          upsert: false // Don't overwrite if exists
+        })
+
+      if (uploadError) {
+        console.error('❌ Audio upload failed:', uploadError)
+        throw new Error(`Audio upload failed: ${uploadError.message}`)
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('voice-recordings')
+        .getPublicUrl(uniqueFileName)
+
+      if (!urlData?.publicUrl) {
+        throw new Error('Failed to get public URL for uploaded audio')
+      }
+
+      console.log('✅ Audio uploaded successfully:', urlData.publicUrl)
+
+      return {
+        storagePath: uniqueFileName,
+        publicUrl: urlData.publicUrl
+      }
+    } catch (error) {
+      console.error('❌ Audio upload error:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Delete audio file from storage
+   */
+  async deleteAudioFile(storagePath: string): Promise<boolean> {
+    try {
+      const { error } = await supabase.storage
+        .from('voice-recordings')
+        .remove([storagePath])
+
+      if (error) {
+        console.error('❌ Audio deletion failed:', error)
+        throw new Error(`Audio deletion failed: ${error.message}`)
+      }
+
+      console.log('✅ Audio file deleted:', storagePath)
+      return true
+    } catch (error) {
+      console.error('❌ Audio deletion error:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Validate if audio URL is accessible
+   */
+  async validateAudioUrl(url: string): Promise<boolean> {
+    try {
+      const response = await fetch(url, { method: 'HEAD' })
+      return response.ok
+    } catch (error) {
+      console.warn('⚠️ Audio URL validation failed:', url, error)
+      return false
+    }
+  }
+
+  /**
+   * Get file extension from MIME type
+   */
+  private getAudioFileExtension(mimeType: string): string {
+    const mimeToExt: { [key: string]: string } = {
+      'audio/wav': 'wav',
+      'audio/mp3': 'mp3',
+      'audio/mpeg': 'mp3',
+      'audio/mp4': 'mp4',
+      'audio/webm': 'webm',
+      'audio/ogg': 'ogg'
+    }
+    
+    return mimeToExt[mimeType] || 'wav'
+  }
+
+  /**
+   * Create or update voice note with audio upload
+   */
+  async createVoiceNoteWithAudio(noteData: {
+    title: string;
+    transcription: string;
+    audioBlob: Blob;
+    duration: number;
+    categoryId?: string;
+    confidence?: number;
+    language?: string;
+  }): Promise<Item> {
+    try {
+      console.log('🎵 Creating voice note with audio upload...')
+
+      // Upload audio file first
+      const { storagePath, publicUrl } = await this.uploadAudioFile(
+        noteData.audioBlob,
+        noteData.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()
+      )
+
+      // Create the voice note item with audio references
+      const voiceNoteItem = await this.createItem({
+        type: 'voiceNote',
+        title: noteData.title,
+        text: noteData.transcription,
+        categoryId: noteData.categoryId || '',
+        attachment: publicUrl, // Store URL in attachment field for backward compatibility
+        metadata: {
+          audioStoragePath: storagePath,
+          audioPublicUrl: publicUrl,
+          audioDuration: noteData.duration,
+          confidence: noteData.confidence,
+          language: noteData.language,
+          isVoiceNote: true
+        }
+      })
+
+      console.log('✅ Voice note created successfully:', voiceNoteItem.id)
+      return voiceNoteItem
+    } catch (error) {
+      console.error('❌ Voice note creation failed:', error)
+      throw error
+    }
+  }
+
   // ========== MIGRATION UTILITIES ==========
   
   async migrateFromLocalStorage() {

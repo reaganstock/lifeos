@@ -31,6 +31,16 @@ export interface Item {
     endTime?: Date; // For events - end time
     transcription?: string; // For voice notes
     tags?: string[]; // For any item
+    // Audio/Voice note properties
+    audioStoragePath?: string; // Supabase Storage path for audio files
+    audioPublicUrl?: string; // Public URL for audio files
+    audioDuration?: number; // Duration of audio in seconds
+    confidence?: number; // Transcription confidence score
+    language?: string; // Detected language
+    isVoiceNote?: boolean; // Flag for voice notes
+    uploadComplete?: boolean; // Flag for completed uploads
+    uploadFailed?: boolean; // Flag for failed uploads
+    uploadError?: string; // Error message for failed uploads
     aiGenerated?: boolean; // Mark items created by AI
     hasImage?: boolean; // For notes with image attachments
     imageUrl?: string; // For notes with image attachments

@@ -199,13 +199,32 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
             console.log('🎯 Found function call:', functionCall.name, '| Agentic mode:', isAgenticMode);
             
             if (isAgenticMode) {
-              // Agent mode: Return as pending function call for visual UI
-              pendingFunctionCall = {
-                name: functionCall.name,
-                args: functionCall.args
-              };
-              console.log('📋 Agent mode: Returning function call as pending for visual approval');
-              break; // Only handle the first function call
+              // Special exception: Don't show UI for searchItems - just execute silently
+              if (functionCall.name === 'searchItems') {
+                console.log('🔍 SILENT EXECUTION: searchItems function being executed without UI');
+                try {
+                  const result = await this.executeFunction(functionCall.name, functionCall.args);
+                  functionResults.push({
+                    function: functionCall.name,
+                    ...result
+                  });
+                  console.log('✅ searchItems executed silently');
+                } catch (error) {
+                  console.error('❌ searchItems execution failed:', error);
+                  functionResults.push({
+                    function: functionCall.name,
+                    error: error instanceof Error ? error.message : 'Unknown error'
+                  });
+                }
+              } else {
+                // Agent mode: Return as pending function call for visual UI
+                pendingFunctionCall = {
+                  name: functionCall.name,
+                  args: functionCall.args
+                };
+                console.log('📋 Agent mode: Returning function call as pending for visual approval');
+                break; // Only handle the first function call
+              }
             } else {
               // Ask mode: Execute immediately like before
               console.log('⚡ Ask mode: Executing function immediately');
@@ -408,6 +427,16 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
 8. "Clear my dashboard" → Use bulkDeleteItems with {"deleteAll": true} to remove everything
 9. When user says "delete everything" you MUST delete ALL items using bulkDeleteItems, not create new ones
 10. Talking without function calls for action requests is FORBIDDEN
+
+🔍 CONTEXT INFORMATION RULES - CRITICAL:
+- When user provides context information (marked with "Context:"), use that information directly
+- DO NOT call searchItems if the user message already contains the needed context
+- Context information includes item details, IDs, and content
+- NEVER call searchItems for questions that can be answered with provided context
+- If user asks about specific items they referenced, answer from context - DO NOT search
+- Example: "when did you schedule it? Context: @going to super bowl" → Answer directly from context, don't search
+- AGENT MODE: Be extra careful to NOT call searchItems when context is provided
+- searchItems is ONLY for when you need to find items NOT already provided in context
 
 🗑️ DELETION STRATEGY:
 - Single item deletion: "delete my workout routine" → deleteItem function

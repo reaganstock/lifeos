@@ -171,8 +171,8 @@ export class VoiceService {
     temperature?: number;
   }): Promise<TranscriptionResult> {
     try {
-      // Convert blob to file for OpenAI API
-      const audioFile = await this.blobToFile(audioBlob, 'recording.webm');
+      // Convert blob to supported format for OpenAI API with correct extension
+      const audioFile = await this.blobToFile(audioBlob, 'recording');
 
       // Prepare transcription request
       const transcriptionOptions: any = {
@@ -246,30 +246,45 @@ export class VoiceService {
   }
 
   /**
-   * Get supported MIME type for recording
+   * Get supported MIME type for recording - prioritize OpenAI compatible formats
    */
   private getSupportedMimeType(): string {
     const types = [
+      'audio/wav',           // WAV - supported by OpenAI
+      'audio/mp4',           // MP4 - supported by OpenAI  
+      'audio/mpeg',          // MP3 - supported by OpenAI
       'audio/webm;codecs=opus',
-      'audio/webm',
-      'audio/mp4',
-      'audio/wav'
+      'audio/webm'
     ];
 
     for (const type of types) {
       if (MediaRecorder.isTypeSupported(type)) {
+        console.log('🎤 Using MIME type:', type);
         return type;
       }
     }
 
-    return 'audio/webm'; // Fallback
+    console.warn('⚠️ No supported MIME type found, using fallback');
+    return 'audio/wav'; // Fallback to WAV which is widely supported
   }
 
   /**
    * Convert Blob to File for OpenAI API
    */
   private async blobToFile(blob: Blob, filename: string): Promise<File> {
-    return new File([blob], filename, { type: blob.type });
+    // Get the appropriate file extension based on MIME type
+    const getExtensionFromMimeType = (mimeType: string): string => {
+      if (mimeType.includes('wav')) return 'wav';
+      if (mimeType.includes('mp4')) return 'mp4';
+      if (mimeType.includes('mpeg')) return 'mp3';
+      if (mimeType.includes('webm')) return 'webm';
+      return 'wav'; // Default fallback
+    };
+    
+    const extension = getExtensionFromMimeType(blob.type);
+    const correctedFilename = `recording.${extension}`;
+    
+    return new File([blob], correctedFilename, { type: blob.type });
   }
 
   /**

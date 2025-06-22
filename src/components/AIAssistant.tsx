@@ -2,10 +2,10 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   User, Send, Image, Plus, X, Minimize2, 
   Sun, Moon, ChevronLeft, ChevronRight, Edit3, 
-  Zap, MessagesSquare, Mic, MicOff, ChevronDown, Sparkles, Square
+  Zap, MessagesSquare, Mic, MicOff, ChevronDown, Sparkles, Square, Paperclip
 } from 'lucide-react';
 import { chatService } from '../services/ChatService';
-import { voiceService } from '../services/voiceService';
+import { voiceService, VoiceService } from '../services/voiceService';
 import { ChatMessage, ChatSession } from '../types/chat';
 import { Item, Category } from '../types';
 import ModelSelector from './ModelSelector';
@@ -282,9 +282,35 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
           aiFeedback: aiFeedback
         });
         
-        // Trigger data refresh
+        // Trigger data refresh with aggressive timing for Supabase
         if (result.itemsModified) {
+          // Immediate refresh
           onRefreshItems();
+          
+          // Add visual feedback and additional refreshes
+          setTimeout(() => {
+            onRefreshItems();
+            // Add a flash animation to indicate refresh
+            const bodyElement = document.body;
+            bodyElement.style.transition = 'background-color 0.2s ease';
+            bodyElement.style.backgroundColor = isDarkMode ? 'rgba(34, 197, 94, 0.1)' : 'rgba(34, 197, 94, 0.05)';
+            setTimeout(() => {
+              bodyElement.style.backgroundColor = '';
+              setTimeout(() => {
+                bodyElement.style.transition = '';
+              }, 200);
+            }, 150);
+            
+            // Triple refresh for Supabase data consistency
+            setTimeout(() => {
+              onRefreshItems();
+            }, 300);
+            
+            // Final refresh to ensure categories are loaded
+            setTimeout(() => {
+              onRefreshItems();
+            }, 600);
+          }, 100);
         }
 
         // SIMPLIFIED AGENTIC MODE: No automatic continuation - user controls when to stop
@@ -1330,9 +1356,24 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   // Voice recording functions
   const startVoiceRecording = async () => {
     try {
+      console.log('🎤 Starting voice recording...');
+      
+      // Check browser support first
+      if (!VoiceService.isSupported()) {
+        throw new Error('Voice recording is not supported in this browser');
+      }
+
+      // Initialize microphone if needed
+      try {
+        await voiceService.initializeMicrophone();
+      } catch (micError) {
+        throw new Error(`Microphone access failed: ${micError instanceof Error ? micError.message : 'Unknown error'}`);
+      }
+
       setIsRecording(true);
       setRecordingDuration(0);
       await voiceService.startRecording();
+      console.log('✅ Voice recording started successfully');
       
       // Start duration counter
       const interval = setInterval(() => {
@@ -1343,21 +1384,58 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
         }
       }, 100);
     } catch (error) {
-      console.error('Error starting voice recording:', error);
+      console.error('❌ Error starting voice recording:', error);
+      
+      // Provide more specific error messages
+      let errorMessage = 'Voice recording failed';
+      if (error instanceof Error) {
+        if (error.message.includes('Permission denied')) {
+          errorMessage = 'Microphone access denied. Please allow microphone access and try again.';
+        } else if (error.message.includes('not supported')) {
+          errorMessage = 'Voice recording is not supported in this browser. Please use Chrome, Firefox, or Safari.';
+        } else {
+          errorMessage = `Voice recording failed: ${error.message}`;
+        }
+      }
+      
+      alert(errorMessage);
       setIsRecording(false);
     }
   };
 
   const stopVoiceRecording = async () => {
     try {
+      console.log('🛑 Stopping voice recording...');
+      
+      if (!voiceService.getRecordingState()) {
+        console.warn('⚠️ No active recording to stop');
+        setIsRecording(false);
+        return;
+      }
+
       const recording = await voiceService.stopRecording();
       setIsRecording(false);
+      console.log('✅ Voice recording stopped, duration:', recording.duration, 'seconds');
       
-      // Start transcription
+      // Validate recording
+      if (!recording.blob || recording.blob.size === 0) {
+        throw new Error('Recording is empty or invalid');
+      }
+
+      console.log('🔄 Starting transcription...');
       setIsTranscribing(true);
-      const currentCategoryId = categories.find(cat => cat.id === currentView)?.id;
-      const transcriptionResult = await voiceService.transcribeWithContext(recording.blob, currentCategoryId);
       
+      const currentCategoryId = categories.find(cat => cat.id === currentView)?.id;
+      console.log('📁 Using category for context:', currentCategoryId);
+      
+      const transcriptionResult = await voiceService.transcribeWithContext(recording.blob, currentCategoryId);
+      console.log('✅ Transcription completed:', transcriptionResult.text);
+      
+      // Validate transcription result
+      if (!transcriptionResult.text || transcriptionResult.text.trim() === '') {
+        throw new Error('Transcription result is empty. Please try speaking more clearly.');
+      }
+
       // Set the transcribed text in the input
       setInputMessage(transcriptionResult.text);
       setIsTranscribing(false);
@@ -1368,7 +1446,23 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
       }
       
     } catch (error) {
-      console.error('Error with voice recording/transcription:', error);
+      console.error('❌ Error with voice recording/transcription:', error);
+      
+      // Provide more specific error messages
+      let errorMessage = 'Transcription failed';
+      if (error instanceof Error) {
+        if (error.message.includes('400') || error.message.includes('Invalid file format')) {
+          errorMessage = 'Audio format not supported by transcription service. Please try again.';
+        } else if (error.message.includes('empty')) {
+          errorMessage = 'No speech detected. Please try speaking more clearly.';
+        } else if (error.message.includes('API key')) {
+          errorMessage = 'Transcription service not configured. Please check your API settings.';
+        } else {
+          errorMessage = `Transcription failed: ${error.message}`;
+        }
+      }
+      
+      alert(errorMessage);
       setIsRecording(false);
       setIsTranscribing(false);
     }
@@ -1480,9 +1574,14 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     
     // Include context information if available
     let messageWithContext = messageToSend;
+    let displayMessage = messageToSend;
     if (contextTags.length > 0) {
       const contextInfo = contextTags.map(tag => `@${tag.name} (${tag.type}: ${tag.id})`).join(' ');
       messageWithContext = `${messageToSend}\n\nContext: ${contextInfo}`;
+      
+      // Create display version with visible context for timeline
+      const contextDisplay = contextTags.map(tag => `@${tag.name}`).join(' ');
+      displayMessage = `${messageToSend}\n\n📎 Context: ${contextDisplay}`;
       console.log('🏷️ Including context tags in message:', contextTags);
     }
 
@@ -1514,8 +1613,8 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
         }
       }
     
-      // Add user message (store original with @mentions for display, send processed to AI)
-      await chatService.addMessage('user', messageToSend);
+      // Add user message (store display version with context for timeline, send processed to AI)
+      await chatService.addMessage('user', displayMessage);
 
       // In fullscreen note mode, handle everything as normal chat but with note context
       if (currentNoteContent !== undefined && onUpdateNoteContent) {
@@ -1731,10 +1830,26 @@ User message: ${messageWithContext}`;
             // No system message clutter - AI will explain in follow-up
           }
 
-          // If items were modified, refresh the UI
+          // If items were modified, refresh the UI with animation
           if (response.itemsModified) {
             console.log('✅ Items modified, calling onRefreshItems');
-            onRefreshItems();
+            setTimeout(() => {
+              onRefreshItems();
+              // Force a second refresh to ensure colors and UI update properly
+              setTimeout(() => {
+                onRefreshItems();
+              }, 200);
+              // Add subtle refresh indicator
+              const bodyElement = document.body;
+              bodyElement.style.transition = 'background-color 0.2s ease';
+              bodyElement.style.backgroundColor = isDarkMode ? 'rgba(34, 197, 94, 0.1)' : 'rgba(34, 197, 94, 0.05)';
+              setTimeout(() => {
+                bodyElement.style.backgroundColor = '';
+                setTimeout(() => {
+                  bodyElement.style.transition = '';
+                }, 200);
+              }, 150);
+            }, 100);
           }
 
           // Add AI response with image acknowledgment if needed
@@ -1759,6 +1874,11 @@ User message: ${messageWithContext}`;
       setIsAIThinking(false);
       setIsCallingFunction(false);
       setCurrentFunctionName(null);
+      
+      // Always refresh UI after AI processing completes
+      setTimeout(() => {
+        onRefreshItems();
+      }, 500);
     }
   };
 
@@ -2812,10 +2932,12 @@ User message: ${messageWithContext}`;
                   }`}
                   style={{
                     minHeight: '56px',
-                    maxHeight: 'calc(24vh - 100px)', // 24% of viewport height minus header/footer space
-                    lineHeight: '1.5',
+                    maxHeight: 'min(80vh, 600px)', // Much larger like ChatGPT
+                    lineHeight: '1.6',
                     wordWrap: 'break-word',
                     whiteSpace: 'pre-wrap',
+                    overflow: 'auto',
+                    resize: 'none',
                     boxShadow: isDarkMode 
                       ? '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)'
                       : '0 8px 32px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8)'
@@ -2831,7 +2953,7 @@ User message: ${messageWithContext}`;
                   <button
                     onClick={handleVoiceButtonClick}
                     disabled={isTranscribing}
-                    className={`p-2.5 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 backdrop-blur-sm ${
+                    className={`p-2.5 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 backdrop-blur-sm relative ${
                       isRecording 
                         ? 'text-red-500 bg-red-500/10 border border-red-500/20 animate-pulse shadow-lg' 
                         : isTranscribing
@@ -2847,7 +2969,7 @@ User message: ${messageWithContext}`;
                           ? '0 2px 8px rgba(0, 0, 0, 0.2)'
                           : '0 2px 8px rgba(0, 0, 0, 0.05)'
                     }}
-                    title={isRecording ? `Recording... ${recordingDuration.toFixed(1)}s` : isTranscribing ? 'Transcribing...' : 'Voice to Text'}
+                    title={isRecording ? `Recording... ${recordingDuration.toFixed(1)}s` : 'Voice to Text'}
                   >
                     {isTranscribing ? (
                       <div className="w-4 h-4 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin"></div>
@@ -2856,6 +2978,13 @@ User message: ${messageWithContext}`;
                         <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
                         <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
                       </svg>
+                    )}
+                    
+                    {/* Recording Duration Badge */}
+                    {isRecording && recordingDuration > 0 && (
+                      <div className="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full font-mono min-w-10 text-center animate-pulse shadow-lg border border-white/20">
+                        {recordingDuration.toFixed(1)}s
+                      </div>
                     )}
                   </button>
                   

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Play, Pause, Trash2, Download, Save, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { voiceService, VoiceRecording, TranscriptionResult, VoiceService } from '../services/voiceService';
+import { storeAudioBlob, getAudioUrl } from '../utils/audioStorage';
 
 interface VoiceNote {
   id: string;
@@ -62,8 +63,20 @@ const VoiceNotes: React.FC<VoiceNotesProps> = ({ category, onSaveNote }) => {
       if (durationIntervalRef.current) {
         clearInterval(durationIntervalRef.current);
       }
+      
+      // Clean up any blob URLs to prevent memory leaks
+      if (currentRecording?.url) {
+        URL.revokeObjectURL(currentRecording.url);
+      }
+      
+      // Clean up any blob URLs from notes
+      notes.forEach(note => {
+        if (note.audioUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(note.audioUrl);
+        }
+      });
     };
-  }, []);
+  }, []); // Empty dependency array is intentional - cleanup only on unmount
 
   // Update recording duration
   useEffect(() => {
@@ -119,8 +132,16 @@ const VoiceNotes: React.FC<VoiceNotesProps> = ({ category, onSaveNote }) => {
     setIsTranscribing(true);
     setError(null);
 
+    // Set a timeout to prevent infinite transcription loops
+    const transcriptionTimeout = setTimeout(() => {
+      setIsTranscribing(false);
+      setError('Transcription timed out. Please try again.');
+    }, 30000); // 30 second timeout
+
     try {
       const result = await voiceService.transcribeWithContext(recording.blob, category);
+      clearTimeout(transcriptionTimeout);
+      
       setTranscriptionResult(result);
       setShowSaveForm(true);
       
@@ -128,20 +149,28 @@ const VoiceNotes: React.FC<VoiceNotesProps> = ({ category, onSaveNote }) => {
       const words = result.text.split(' ').slice(0, 5).join(' ');
       setNoteTitle(words + (result.text.split(' ').length > 5 ? '...' : ''));
     } catch (err) {
+      clearTimeout(transcriptionTimeout);
       setError('Transcription failed: ' + (err as Error).message);
     } finally {
       setIsTranscribing(false);
     }
   };
 
-  const saveNote = () => {
+  const saveNote = async () => {
     if (!currentRecording || !transcriptionResult) return;
 
+    const noteId = Date.now().toString();
+    
+    // Store the audio blob persistently using our audio storage utility
+    const audioUrl = await storeAudioBlob(noteId, currentRecording.blob, currentRecording.duration);
+    
+    console.log('💾 Saving voice note with persistent storage:', audioUrl.substring(0, 50) + '...');
+
     const newNote: VoiceNote = {
-      id: Date.now().toString(),
+      id: noteId,
       title: noteTitle.trim() || 'Untitled Voice Note',
       transcription: transcriptionResult.text,
-      audioUrl: currentRecording.url,
+      audioUrl: audioUrl,
       duration: currentRecording.duration,
       confidence: transcriptionResult.confidence,
       language: transcriptionResult.language,
@@ -176,14 +205,47 @@ const VoiceNotes: React.FC<VoiceNotesProps> = ({ category, onSaveNote }) => {
       // Pause current
       if (audioRef.current) {
         audioRef.current.pause();
+        audioRef.current.currentTime = 0; // Reset to beginning
       }
       setPlayingNoteId(null);
     } else {
       // Play new
       if (audioRef.current) {
+        // Ensure we have a valid audio URL
+        if (!note.audioUrl || note.audioUrl === '') {
+          console.error('❌ Invalid audio URL for note:', note.id);
+          setError('Cannot play note: Invalid audio file');
+          return;
+        }
+
+        console.log('🎵 Playing audio from URL:', note.audioUrl);
+        
+        // Stop any currently playing audio
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        
+        // Set new source and play
         audioRef.current.src = note.audioUrl;
-        audioRef.current.play();
-        setPlayingNoteId(note.id);
+        
+        // Handle play promise to catch autoplay policy errors
+        const playPromise = audioRef.current.play();
+        
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              console.log('✅ Audio playback started successfully');
+              setPlayingNoteId(note.id);
+              setError(null); // Clear any previous errors
+            })
+            .catch(error => {
+              console.error('❌ Audio playback failed:', error);
+              setError(`Playback failed: ${error.message || 'Unknown audio error'}`);
+              setPlayingNoteId(null);
+            });
+        } else {
+          // Fallback for older browsers
+          setPlayingNoteId(note.id);
+        }
       }
     }
   };
@@ -411,8 +473,25 @@ const VoiceNotes: React.FC<VoiceNotesProps> = ({ category, onSaveNote }) => {
       {/* Hidden audio element for playback */}
       <audio
         ref={audioRef}
-        onEnded={() => setPlayingNoteId(null)}
-        onError={() => setPlayingNoteId(null)}
+        onEnded={() => {
+          console.log('🎵 Audio playback ended');
+          setPlayingNoteId(null);
+        }}
+        onError={(e) => {
+          console.error('❌ Audio playback error:', e);
+          setError('Audio playback failed. The audio file may be corrupted or unavailable.');
+          setPlayingNoteId(null);
+        }}
+        onLoadStart={() => {
+          console.log('🎵 Audio loading started');
+        }}
+        onCanPlay={() => {
+          console.log('🎵 Audio can play');
+        }}
+        onLoadedData={() => {
+          console.log('🎵 Audio data loaded');
+        }}
+        preload="metadata" // Preload metadata for better performance
       />
     </div>
   );

@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FileText, Plus, Search, Mic, MicOff, Play, Pause, Camera, X, Edit3, Save, Maximize2, Trash2, Loader2 } from 'lucide-react';
+import { FileText, Plus, Search, Mic, MicOff, Play, Pause, Camera, X, Edit3, Save, Maximize2, Trash2 } from 'lucide-react';
 import { Item, Category } from '../types';
 import { voiceService, VoiceRecording } from '../services/voiceService';
 import { AIService } from '../services/aiService';
 import { chatService } from '../services/ChatService';
+import { storeAudioBlob, getAudioUrl } from '../utils/audioStorage';
 import AIAssistant from './AIAssistant';
 import { copyToClipboard, showCopyFeedback } from '../utils/clipboard';
 
@@ -45,10 +46,12 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
     transcription: '',
     images: [] as File[],
     isTranscribingImages: false,
-    autoTranscribeImages: true,
-    autoTranscribeVoice: true
+    autoTranscribeImages: false,
+    autoTranscribeVoice: false
   });
   const [editText, setEditText] = useState('');
+  const [editingTitle, setEditingTitle] = useState('');
+  const [editingContent, setEditingContent] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
   // Slash command state
@@ -60,6 +63,27 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
   
   const [selectedVoiceRecording, setSelectedVoiceRecording] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<number | null>(null);
+
+  // Helper function to start editing a note
+  const startEditingNote = (noteId: string) => {
+    const note = items.find(item => item.id === noteId);
+    if (note) {
+      setEditingTitle(note.title);
+      setEditingContent(note.text);
+      setEditingNoteId(noteId);
+    }
+  };
+
+  // Helper function to save the currently editing note
+  const saveEditingNote = () => {
+    if (editingNoteId) {
+      setItems(prevItems => prevItems.map(item => 
+        item.id === editingNoteId 
+          ? { ...item, title: editingTitle, text: editingContent, updatedAt: new Date() }
+          : item
+      ));
+    }
+  };
 
   // Slash commands
   const slashCommands = [
@@ -145,6 +169,8 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
         setFullscreenNote(null);
         setShowSlashMenu(false);
         setEditingNoteId(null);
+        setEditingTitle('');
+        setEditingContent('');
         setShowAIAssistant(false);
       }
       // Arrow keys for slash menu navigation
@@ -302,14 +328,13 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
         : `Note - ${new Date().toLocaleDateString()}`);
 
     if (editingNoteId) {
-      // Update existing note
+      // Update existing note using local editing state
       setItems(prevItems => prevItems.map(item => 
         item.id === editingNoteId 
           ? {
               ...item,
-              title: generatedTitle,
-              text: newNote.text,
-              categoryId: newNote.categoryId,
+              title: editingTitle || generatedTitle,
+              text: editingContent,
               updatedAt: new Date(),
             }
           : item
@@ -322,7 +347,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
       type: newNote.voice ? 'voiceNote' : 'note',
       title: generatedTitle,
       text: newNote.text || '', // Start with just the text content
-      attachment: newNote.voice ? URL.createObjectURL(newNote.voice) : undefined,
+      attachment: undefined, // Will be set after storing audio
       createdAt: new Date(),
       updatedAt: new Date(),
       metadata: {
@@ -338,9 +363,9 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
     // Add the note immediately
     setItems(prevItems => [...prevItems, note]);
     
-    // Handle background voice transcription if needed
-    if (newNote.voice && shouldTranscribe) {
-      handleBackgroundTranscription(note.id, newNote.voice);
+    // Handle audio storage for voice notes
+    if (newNote.voice) {
+      handleAudioStorage(note.id, newNote.voice, shouldTranscribe);
     }
     
     // Handle background image transcription if needed
@@ -359,8 +384,8 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
       transcription: '',
       images: [],
       isTranscribingImages: false,
-      autoTranscribeImages: true,
-      autoTranscribeVoice: true
+      autoTranscribeImages: false,
+      autoTranscribeVoice: false
     });
     setCurrentRecording(null);
     setShouldTranscribe(true);
@@ -408,6 +433,53 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
         }
         return item;
       }));
+    }
+  };
+
+  const handleAudioStorage = async (noteId: string, voiceBlob: Blob, shouldTranscribe: boolean) => {
+    try {
+      console.log('🎵 Storing audio for note:', noteId);
+      
+      // Store audio persistently and get the data URL
+      const audioUrl = await storeAudioBlob(noteId, voiceBlob, 0); // Duration will be updated later
+      
+      // Update the note with the persistent audio URL
+      setItems(prevItems => prevItems.map(item => {
+        if (item.id === noteId) {
+          return {
+            ...item,
+            attachment: audioUrl,
+            updatedAt: new Date()
+          };
+        }
+        return item;
+      }));
+
+      // Handle transcription if needed
+      if (shouldTranscribe) {
+        handleBackgroundTranscription(noteId, voiceBlob);
+      }
+
+      console.log('✅ Audio stored successfully for note:', noteId);
+    } catch (error) {
+      console.error('❌ Audio storage failed:', error);
+      // Fallback to blob URL
+      const fallbackUrl = URL.createObjectURL(voiceBlob);
+      setItems(prevItems => prevItems.map(item => {
+        if (item.id === noteId) {
+          return {
+            ...item,
+            attachment: fallbackUrl,
+            updatedAt: new Date()
+          };
+        }
+        return item;
+      }));
+
+      // Still try transcription even if storage failed
+      if (shouldTranscribe) {
+        handleBackgroundTranscription(noteId, voiceBlob);
+      }
     }
   };
 
@@ -849,7 +921,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                       autoTranscribeImages: true,
                       autoTranscribeVoice: true
                     });
-                    setEditingNoteId(note.id);
+                    startEditingNote(note.id);
                     setFullscreenCreate(true);
                   }
                 }}
@@ -891,7 +963,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                             )}
                           </button>
                           <span className="text-xs text-orange-600 font-medium">
-                            {note.metadata?.isTranscribing ? 'Transcribing...' : 'Voice Note'}
+                            Voice Note
                           </span>
                         </div>
                       )}
@@ -973,7 +1045,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                                 autoTranscribeImages: true,
                                 autoTranscribeVoice: true
                               });
-                              setEditingNoteId(note.id);
+                              startEditingNote(note.id);
                               setFullscreenCreate(true);
                             }}
                             className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
@@ -1153,7 +1225,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                                       disabled={newNote.isTranscribingImages}
                                       className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white rounded-lg text-sm transition-colors font-medium shadow-lg"
                                     >
-                                      {newNote.isTranscribingImages ? 'Processing...' : 'Extract Text'}
+                                      Extract Text
                                     </button>
                                   </div>
                                 )}
@@ -1185,11 +1257,6 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                                   <span className="text-sm font-semibold text-orange-800">
                                     Voice Recording
                                 </span>
-                                  {note.metadata?.isTranscribing && (
-                                    <div className="text-xs text-orange-600 mt-1">
-                                      Processing audio...
-                                    </div>
-                                  )}
                                 </div>
                               </div>
                               
@@ -1313,11 +1380,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                       }
                       className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white rounded-lg text-sm font-medium transition-colors shadow-lg"
                     >
-                      {(selectedVoiceRecording && newNote.voiceRecordings.find(r => r.id === selectedVoiceRecording)?.isTranscribing) ||
-                       (selectedImage !== null && newNote.isTranscribingImages) 
-                        ? 'Processing...' 
-                        : 'Extract Text'
-                      }
+                      Extract Text
                     </button>
                   )}
                   
@@ -1332,6 +1395,8 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                     onClick={() => {
                       setShowAddForm(false);
                       setEditingNoteId(null);
+        setEditingTitle('');
+        setEditingContent('');
                     }}
                     className="p-2 hover:bg-white/20 rounded-xl transition-colors"
                   >
@@ -1411,20 +1476,6 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                     </button>
                     </div>
 
-                    {/* Auto-transcribe Voice Checkbox */}
-                    <div className="flex items-center space-x-3 p-3 bg-white/60 rounded-xl border border-orange-300/50">
-                      <input
-                        type="checkbox"
-                        id="autoTranscribeVoice"
-                        checked={newNote.autoTranscribeVoice}
-                        onChange={(e) => setNewNote(prev => ({ ...prev, autoTranscribeVoice: e.target.checked }))}
-                        className="w-4 h-4 rounded text-orange-500 focus:ring-orange-500 border-orange-300"
-                      />
-                      <label htmlFor="autoTranscribeVoice" className="text-sm text-orange-800 font-medium flex items-center">
-                        <span className="mr-2">🤖</span>
-                        Auto-transcribe voice recordings when saving
-                      </label>
-                  </div>
                   
                     {/* Voice Recordings List */}
                   {newNote.voiceRecordings.length > 0 && (
@@ -1472,12 +1523,6 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                                     input.select();
                                   }}
                                 />
-                                {recording.isTranscribing && (
-                                  <div className="text-sm text-orange-600 mt-1 flex items-center">
-                                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                                    Processing audio...
-                                  </div>
-                                )}
                                 {selectedVoiceRecording === recording.id && (
                                   <div className="text-xs text-orange-600 mt-1 flex items-center">
                                     <span className="mr-1">✨</span>
@@ -1519,16 +1564,9 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                         className="flex-1 px-6 py-4 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-xl flex items-center justify-center transition-all duration-300 shadow-lg hover:from-blue-600 hover:to-indigo-600 cursor-pointer transform hover:scale-[1.02] hover:shadow-xl"
                     >
                         <Camera className="w-5 h-5 mr-2" />
-                      {newNote.isTranscribingImages ? (
-                        <>
-                            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                            <span className="font-semibold">Processing Images...</span>
-                        </>
-                      ) : (
-                          <span className="font-semibold">
-                            {newNote.images.length > 0 ? 'Add More Images' : 'Choose Images'}
-                          </span>
-                      )}
+                      <span className="font-semibold">
+                        {newNote.images.length > 0 ? 'Add More Images' : 'Choose Images'}
+                      </span>
                     </label>
                   </div>
                   
@@ -1542,20 +1580,6 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                     multiple
                   />
                   
-                    {/* Auto-transcribe Images Checkbox */}
-                    <div className="flex items-center space-x-3 p-3 bg-white/60 rounded-xl border border-blue-300/50">
-                    <input
-                      type="checkbox"
-                      id="autoTranscribeImages"
-                      checked={newNote.autoTranscribeImages}
-                      onChange={(e) => setNewNote(prev => ({ ...prev, autoTranscribeImages: e.target.checked }))}
-                        className="w-4 h-4 rounded text-blue-500 focus:ring-blue-500 border-blue-300"
-                    />
-                      <label htmlFor="autoTranscribeImages" className="text-sm text-blue-800 font-medium flex items-center">
-                        <span className="mr-2">🤖</span>
-                      Auto-transcribe text from images when saving
-                    </label>
-                  </div>
 
                   {/* Image Previews */}
                   {newNote.images.length > 0 && (
@@ -1637,6 +1661,8 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                 onClick={() => {
                   setShowAddForm(false);
                   setEditingNoteId(null);
+        setEditingTitle('');
+        setEditingContent('');
                 }}
                 className="flex-1 px-6 py-3 bg-gray-100 text-gray-700 rounded-2xl hover:bg-gray-200 transition-all duration-300 font-semibold"
               >
@@ -1677,6 +1703,8 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                   onClick={() => {
                     setFullscreenCreate(false);
                     setEditingNoteId(null);
+        setEditingTitle('');
+        setEditingContent('');
                     setShowAIAssistant(false);
                   }}
                 className={`p-2 rounded-lg transition-colors ${
@@ -1722,11 +1750,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                     }
                     className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white rounded-lg text-sm font-medium transition-colors shadow-lg"
                     >
-                    {(selectedVoiceRecording && newNote.voiceRecordings.find(r => r.id === selectedVoiceRecording)?.isTranscribing) ||
-                     (selectedImage !== null && newNote.isTranscribingImages) 
-                      ? 'Processing...' 
-                      : 'Extract Text'
-                    }
+                    Extract Text
                     </button>
                 )}
 
@@ -1753,6 +1777,8 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                             if (editingNote) {
                               setFullscreenCreate(false);
                               setEditingNoteId(null);
+        setEditingTitle('');
+        setEditingContent('');
                               setShowAIAssistant(false);
                               startEditing(editingNote);
                             }
@@ -1794,18 +1820,11 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
               {/* Title Field */}
               <input
                 type="text"
-                value={editingNoteId ? (() => {
-                  const editingNote = items.find(item => item.id === editingNoteId);
-                  return editingNote?.title || '';
-                })() : newNote.title}
+                value={editingNoteId ? editingTitle : newNote.title}
                 onChange={(e) => {
                   if (editingNoteId) {
-                    // Update existing note title directly in items state
-                    setItems(prevItems => prevItems.map(item => 
-                      item.id === editingNoteId 
-                        ? { ...item, title: e.target.value, updatedAt: new Date() }
-                        : item
-                    ));
+                    // Update local editing state only - no Supabase updates
+                    setEditingTitle(e.target.value);
                   } else {
                     // Update new note title
                     setNewNote({ ...newNote, title: e.target.value });
@@ -1824,18 +1843,11 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
               <div className="space-y-6">
                 {/* Text Content */}
                 <textarea
-                  value={editingNoteId ? (() => {
-                    const editingNote = items.find(item => item.id === editingNoteId);
-                    return editingNote?.text || '';
-                  })() : newNote.text}
+                  value={editingNoteId ? editingContent : newNote.text}
                   onChange={(e) => {
                     if (editingNoteId) {
-                      // Update existing note directly in items state
-                      setItems(prevItems => prevItems.map(item => 
-                        item.id === editingNoteId 
-                          ? { ...item, text: e.target.value, updatedAt: new Date() }
-                          : item
-                      ));
+                      // Update local editing state only - no Supabase updates
+                      setEditingContent(e.target.value);
                     } else {
                       // Update new note
                       handleTextChange(e.target.value);
@@ -1902,7 +1914,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                                 disabled={newNote.isTranscribingImages}
                                 className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white rounded-lg text-sm transition-colors font-medium shadow-lg"
                               >
-                                {newNote.isTranscribingImages ? 'Processing...' : 'Extract Text'}
+                                Extract Text
                               </button>
                             </div>
                           )}
@@ -1955,7 +1967,47 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                         </div>
                       )}
 
-                      {/* Existing Recordings */}
+                      {/* Existing Voice Note Attachment (when editing existing voice note) */}
+                      {editingNoteId && (() => {
+                        const editingNote = items.find(item => item.id === editingNoteId);
+                        return editingNote?.type === 'voiceNote' && editingNote?.attachment ? (
+                          <div 
+                            className="relative p-4 rounded-xl border transition-all duration-300 bg-orange-50 border-orange-200"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-4">
+                                <div className="w-4 h-4 bg-orange-500 rounded-full shadow-sm" />
+                                <span className="font-medium text-orange-800">
+                                  Voice Note
+                                </span>
+                              </div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (editingNote.attachment) {
+                                    playVoiceNote(editingNote.id, editingNote.attachment);
+                                  }
+                                }}
+                                className="px-3 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-all duration-300 flex items-center space-x-2"
+                              >
+                                {playingNote === editingNote.id ? (
+                                  <>
+                                    <Pause className="w-4 h-4" />
+                                    <span>Pause</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Play className="w-4 h-4" />
+                                    <span>Play</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        ) : null;
+                      })()}
+
+                      {/* New Recordings */}
                       {newNote.voiceRecordings.map((recording, index) => (
                           <div 
                             key={recording.id} 
@@ -1994,11 +2046,6 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                                     input.select();
                                   }}
                                 />
-                                {recording.isTranscribing && (
-                                  <div className={`text-sm ${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'} mt-1`}>
-                                    Processing audio...
-                                  </div>
-                                )}
                           </div>
                           
                             <button
@@ -2112,22 +2159,12 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
               onResize={setAiSidebarWidth}
               onToggleCollapse={() => setIsAiSidebarCollapsed(!isAiSidebarCollapsed)}
               // Pass note context for real-time editing
-              currentNoteContent={editingNoteId ? (() => {
-                const editingNote = items.find(item => item.id === editingNoteId);
-                return editingNote?.text || '';
-              })() : newNote.text}
-              currentNoteTitle={editingNoteId ? (() => {
-                const editingNote = items.find(item => item.id === editingNoteId);
-                return editingNote?.title || '';
-              })() : newNote.title}
+              currentNoteContent={editingNoteId ? editingContent : newNote.text}
+              currentNoteTitle={editingNoteId ? editingTitle : newNote.title}
               onUpdateNoteContent={(content) => {
                 if (editingNoteId) {
-                  // Update existing note in real-time
-                  setItems(prevItems => prevItems.map(item => 
-                    item.id === editingNoteId 
-                      ? { ...item, text: content, updatedAt: new Date() }
-                      : item
-                  ));
+                  // Update local editing state only - no Supabase updates
+                  setEditingContent(content);
                 } else {
                   // Update new note
                   setNewNote(prev => ({ ...prev, text: content }));
@@ -2135,12 +2172,8 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
               }}
               onUpdateNoteTitle={(title) => {
                 if (editingNoteId) {
-                  // Update existing note title in real-time
-                  setItems(prevItems => prevItems.map(item => 
-                    item.id === editingNoteId 
-                      ? { ...item, title: title, updatedAt: new Date() }
-                      : item
-                  ));
+                  // Update local editing state only - no Supabase updates
+                  setEditingTitle(title);
                 } else {
                   // Update new note title
                   setNewNote(prev => ({ ...prev, title }));

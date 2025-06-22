@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Item } from '../types';
 import { showCopyFeedback } from '../utils/clipboard';
@@ -57,12 +57,49 @@ const ContextAwareInput = forwardRef<ContextAwareInputRef, ContextAwareInputProp
   const [currentQuery, setCurrentQuery] = useState('');
   const [contextTags, setContextTags] = useState<ContextTag[]>([]);
   const suggestionRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [textareaHeight, setTextareaHeight] = useState<number>(40); // Track textarea height
 
   useImperativeHandle(ref, () => ({
     focus: () => textareaRef.current?.focus(),
     blur: () => textareaRef.current?.blur(),
     clearContext: () => setContextTags([])
   }));
+
+  // Auto-resize textarea based on content
+  const adjustTextareaHeight = useCallback(() => {
+    if (textareaRef.current) {
+      const textarea = textareaRef.current;
+      // Reset height to auto to get the correct scrollHeight
+      textarea.style.height = 'auto';
+      
+      // Calculate new height with minimum and maximum constraints
+      const minHeight = 40; // Minimum height (1 line)
+      const maxHeight = 240; // Maximum height (6 lines approx)
+      const newHeight = Math.max(minHeight, Math.min(maxHeight, textarea.scrollHeight));
+      
+      // Apply the new height
+      textarea.style.height = `${newHeight}px`;
+      setTextareaHeight(newHeight);
+      
+      console.log('📏 Textarea auto-resize:', { 
+        scrollHeight: textarea.scrollHeight, 
+        newHeight, 
+        content: value.length 
+      });
+    }
+  }, [value]);
+
+  // Trigger resize when content changes
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [value, adjustTextareaHeight]);
+
+  // Trigger resize on window resize
+  useEffect(() => {
+    const handleResize = () => adjustTextareaHeight();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [adjustTextareaHeight]);
 
   // Notify parent when context tags change
   useEffect(() => {
@@ -143,6 +180,9 @@ const ContextAwareInput = forwardRef<ContextAwareInputRef, ContextAwareInputProp
     const cursorPosition = e.target.selectionStart;
     
     onChange(newValue);
+
+    // Trigger auto-resize
+    setTimeout(() => adjustTextareaHeight(), 0);
 
     // Check for @ mention
     const textBeforeCursor = newValue.substring(0, cursorPosition);
@@ -321,19 +361,21 @@ const ContextAwareInput = forwardRef<ContextAwareInputRef, ContextAwareInputProp
 
   return (
     <div className="relative">
-      {/* Context Tags Display - Positioned to prevent layout shifts */}
-      <div className={`absolute -top-12 left-0 right-0 flex flex-wrap gap-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} ${contextTags.length > 0 ? 'mb-2' : ''}`}>
+      {/* Context Tags Display - Fixed overlapping and cut-off issues */}
+      {contextTags.length > 0 && (
+        <div className={`absolute left-0 right-0 max-h-32 overflow-y-auto ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} mb-3 z-30`} style={{ top: `-${Math.max(100, contextTags.length * 25 + 50)}px` }}>
+          <div className="flex flex-wrap gap-2 p-4 rounded-xl backdrop-blur-md border border-purple-200/60 bg-purple-50/80 dark:bg-purple-900/40 dark:border-purple-700/60 shadow-xl">
         {contextTags.map((tag) => (
             <div
               key={tag.id}
-              className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border shadow-md min-w-0 ${
                 isDarkMode
-                  ? 'bg-purple-500/20 border-purple-400/30 text-purple-300'
-                  : 'bg-purple-100/80 border-purple-300/50 text-purple-700'
+                  ? 'bg-purple-500/30 border-purple-400/50 text-purple-100'
+                  : 'bg-purple-100 border-purple-300/70 text-purple-900'
               }`}
             >
-              <span className="opacity-60">{tag.type}</span>
-              <span>{tag.name}</span>
+              <span className="opacity-70 text-xs uppercase tracking-wide flex-shrink-0">{tag.type}</span>
+              <span className="max-w-24 truncate flex-shrink" title={tag.name}>{tag.name}</span>
               <button
                 onClick={() => {
                   const item = items.find(item => item.id === tag.id);
@@ -342,7 +384,7 @@ const ContextAwareInput = forwardRef<ContextAwareInputRef, ContextAwareInputProp
                     showCopyFeedback();
                   }
                 }}
-                className={`ml-1 hover:bg-blue-500/20 rounded-full w-4 h-4 flex items-center justify-center text-xs ${
+                className={`ml-2 hover:bg-blue-500/20 rounded-full w-5 h-5 flex items-center justify-center text-xs transition-colors ${
                   isDarkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-500 hover:text-blue-600'
                 }`}
                 title="Copy content"
@@ -350,8 +392,12 @@ const ContextAwareInput = forwardRef<ContextAwareInputRef, ContextAwareInputProp
                 📋
               </button>
               <button
-                onClick={() => removeContextTag(tag.id)}
-                className={`ml-1 hover:bg-red-500/20 rounded-full w-4 h-4 flex items-center justify-center text-xs ${
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  removeContextTag(tag.id);
+                }}
+                className={`ml-1 hover:bg-red-500/20 rounded-full w-5 h-5 flex items-center justify-center text-xs transition-colors ${
                   isDarkMode ? 'text-red-400 hover:text-red-300' : 'text-red-500 hover:text-red-600'
                 }`}
                 title="Remove context"
@@ -360,7 +406,9 @@ const ContextAwareInput = forwardRef<ContextAwareInputRef, ContextAwareInputProp
               </button>
             </div>
         ))}
-      </div>
+          </div>
+        </div>
+      )}
       
       <textarea
         ref={textareaRef}
@@ -369,12 +417,18 @@ const ContextAwareInput = forwardRef<ContextAwareInputRef, ContextAwareInputProp
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
         placeholder={placeholder}
-        className={`${className} context-aware-input relative z-20`}
+        className={`${className} context-aware-input relative z-20 resize-none transition-all duration-200 ease-in-out`}
         style={{
           ...style,
           color: isDarkMode ? '#ffffff' : '#1f2937',
+          height: `${textareaHeight}px`,
+          minHeight: '40px',
+          maxHeight: '240px',
+          lineHeight: '1.5',
+          overflow: 'hidden',
+          overflowY: textareaHeight >= 240 ? 'auto' : 'hidden', // Show scrollbar only when max height reached
         }}
-        rows={rows}
+        rows={1} // Start with 1 row, auto-expand will handle the rest
       />
       
       {/* Suggestions Dropdown - Rendered via Portal */}
