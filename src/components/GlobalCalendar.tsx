@@ -21,7 +21,7 @@ const GlobalCalendar: React.FC<GlobalCalendarProps> = ({ items, setItems, catego
   const [newEvent, setNewEvent] = useState({
     title: '',
     text: '',
-    categoryId: 'self-regulation',
+    categoryId: categories[0]?.id || '',
     startTime: '',
     endTime: '',
     location: '',
@@ -43,6 +43,13 @@ const GlobalCalendar: React.FC<GlobalCalendarProps> = ({ items, setItems, catego
   const filteredEvents = selectedCategory === 'all' 
     ? events 
     : events.filter(item => item.categoryId === selectedCategory);
+
+  // Update newEvent categoryId when categories are loaded
+  useEffect(() => {
+    if (categories.length > 0 && !newEvent.categoryId) {
+      setNewEvent(prev => ({ ...prev, categoryId: categories[0].id }));
+    }
+  }, [categories, newEvent.categoryId]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -143,7 +150,7 @@ const GlobalCalendar: React.FC<GlobalCalendarProps> = ({ items, setItems, catego
     setNewEvent({
       title: '',
       text: '',
-      categoryId: 'self-regulation',
+      categoryId: categories[0]?.id || '',
       startTime: '',
       endTime: '',
       location: '',

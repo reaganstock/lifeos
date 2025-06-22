@@ -91,6 +91,13 @@ const GlobalTodos: React.FC<GlobalTodosProps> = ({ items, setItems, categories }
     }
   });
 
+  // Update newTodo categoryId when categories are loaded
+  useEffect(() => {
+    if (categories.length > 0 && !newTodo.categoryId) {
+      setNewTodo(prev => ({ ...prev, categoryId: categories[0].id }));
+    }
+  }, [categories, newTodo.categoryId]);
+
   // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {

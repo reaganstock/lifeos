@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { RotateCcw, Plus, CheckCircle, X, Save, Filter, Calendar, Flame, Printer, Copy, Edit3, Trash2 } from 'lucide-react';
 import { Item, Category } from '../types';
 import { copyToClipboard, showCopyFeedback } from '../utils/clipboard';
@@ -51,6 +51,13 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, catego
   }, {} as Record<string, Item[]>);
 
   const frequencies: FrequencyType[] = ['daily', 'weekly', 'monthly', 'yearly'];
+
+  // Update newRoutine categoryId when categories are loaded
+  useEffect(() => {
+    if (categories.length > 0 && !newRoutine.categoryId) {
+      setNewRoutine(prev => ({ ...prev, categoryId: categories[0].id }));
+    }
+  }, [categories, newRoutine.categoryId]);
 
   const handleAddRoutine = () => {
     if (!newRoutine.title.trim()) return;

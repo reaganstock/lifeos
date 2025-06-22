@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FileText, Plus, Search, Mic, MicOff, Play, Pause, Camera, X, Edit3, Save, Maximize2, Trash2 } from 'lucide-react';
+import { StickyNote, Plus, Search, Mic, MicOff, Play, Pause, Camera, X, Edit3, Save, Maximize2, Trash2, Loader2 } from 'lucide-react';
 import { Item, Category } from '../types';
 import { voiceService, VoiceRecording } from '../services/voiceService';
 import { AIService } from '../services/aiService';
 import { chatService } from '../services/ChatService';
-import { storeAudioBlob, getAudioUrl } from '../utils/audioStorage';
 import AIAssistant from './AIAssistant';
 import { copyToClipboard, showCopyFeedback } from '../utils/clipboard';
+import { getAudioUrl } from '../utils/audioStorage';
 
 interface GlobalNotesProps {
   items: Item[];
@@ -46,12 +46,10 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
     transcription: '',
     images: [] as File[],
     isTranscribingImages: false,
-    autoTranscribeImages: false,
-    autoTranscribeVoice: false
+    autoTranscribeImages: true,
+    autoTranscribeVoice: true
   });
   const [editText, setEditText] = useState('');
-  const [editingTitle, setEditingTitle] = useState('');
-  const [editingContent, setEditingContent] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
   // Slash command state
@@ -63,27 +61,6 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
   
   const [selectedVoiceRecording, setSelectedVoiceRecording] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<number | null>(null);
-
-  // Helper function to start editing a note
-  const startEditingNote = (noteId: string) => {
-    const note = items.find(item => item.id === noteId);
-    if (note) {
-      setEditingTitle(note.title);
-      setEditingContent(note.text);
-      setEditingNoteId(noteId);
-    }
-  };
-
-  // Helper function to save the currently editing note
-  const saveEditingNote = () => {
-    if (editingNoteId) {
-      setItems(prevItems => prevItems.map(item => 
-        item.id === editingNoteId 
-          ? { ...item, title: editingTitle, text: editingContent, updatedAt: new Date() }
-          : item
-      ));
-    }
-  };
 
   // Slash commands
   const slashCommands = [
@@ -169,8 +146,6 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
         setFullscreenNote(null);
         setShowSlashMenu(false);
         setEditingNoteId(null);
-        setEditingTitle('');
-        setEditingContent('');
         setShowAIAssistant(false);
       }
       // Arrow keys for slash menu navigation
@@ -328,13 +303,14 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
         : `Note - ${new Date().toLocaleDateString()}`);
 
     if (editingNoteId) {
-      // Update existing note using local editing state
+      // Update existing note
       setItems(prevItems => prevItems.map(item => 
         item.id === editingNoteId 
           ? {
               ...item,
-              title: editingTitle || generatedTitle,
-              text: editingContent,
+              title: generatedTitle,
+              text: newNote.text,
+              categoryId: newNote.categoryId,
               updatedAt: new Date(),
             }
           : item
@@ -347,7 +323,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
       type: newNote.voice ? 'voiceNote' : 'note',
       title: generatedTitle,
       text: newNote.text || '', // Start with just the text content
-      attachment: undefined, // Will be set after storing audio
+      attachment: newNote.voice ? URL.createObjectURL(newNote.voice) : undefined,
       createdAt: new Date(),
       updatedAt: new Date(),
       metadata: {
@@ -363,9 +339,9 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
     // Add the note immediately
     setItems(prevItems => [...prevItems, note]);
     
-    // Handle audio storage for voice notes
-    if (newNote.voice) {
-      handleAudioStorage(note.id, newNote.voice, shouldTranscribe);
+    // Handle background voice transcription if needed
+    if (newNote.voice && shouldTranscribe) {
+      handleBackgroundTranscription(note.id, newNote.voice);
     }
     
     // Handle background image transcription if needed
@@ -384,8 +360,8 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
       transcription: '',
       images: [],
       isTranscribingImages: false,
-      autoTranscribeImages: false,
-      autoTranscribeVoice: false
+      autoTranscribeImages: true,
+      autoTranscribeVoice: true
     });
     setCurrentRecording(null);
     setShouldTranscribe(true);
@@ -433,53 +409,6 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
         }
         return item;
       }));
-    }
-  };
-
-  const handleAudioStorage = async (noteId: string, voiceBlob: Blob, shouldTranscribe: boolean) => {
-    try {
-      console.log('🎵 Storing audio for note:', noteId);
-      
-      // Store audio persistently and get the data URL
-      const audioUrl = await storeAudioBlob(noteId, voiceBlob, 0); // Duration will be updated later
-      
-      // Update the note with the persistent audio URL
-      setItems(prevItems => prevItems.map(item => {
-        if (item.id === noteId) {
-          return {
-            ...item,
-            attachment: audioUrl,
-            updatedAt: new Date()
-          };
-        }
-        return item;
-      }));
-
-      // Handle transcription if needed
-      if (shouldTranscribe) {
-        handleBackgroundTranscription(noteId, voiceBlob);
-      }
-
-      console.log('✅ Audio stored successfully for note:', noteId);
-    } catch (error) {
-      console.error('❌ Audio storage failed:', error);
-      // Fallback to blob URL
-      const fallbackUrl = URL.createObjectURL(voiceBlob);
-      setItems(prevItems => prevItems.map(item => {
-        if (item.id === noteId) {
-          return {
-            ...item,
-            attachment: fallbackUrl,
-            updatedAt: new Date()
-          };
-        }
-        return item;
-      }));
-
-      // Still try transcription even if storage failed
-      if (shouldTranscribe) {
-        handleBackgroundTranscription(noteId, voiceBlob);
-      }
     }
   };
 
@@ -695,8 +624,16 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
         audioRef.current.pause();
       }
       
+      // Get audio URL from localStorage first, fallback to provided URL
+      const storedAudioUrl = getAudioUrl(noteId, audioUrl);
+      
+      if (!storedAudioUrl) {
+        console.error('No audio URL available for note:', noteId);
+        return;
+      }
+      
       // Create new audio and play
-      const audio = new Audio(audioUrl);
+      const audio = new Audio(storedAudioUrl);
       audioRef.current = audio;
       
       audio.onended = () => {
@@ -704,7 +641,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
       };
       
       audio.onerror = () => {
-        console.error('Error playing audio');
+        console.error('Error playing audio for note:', noteId);
         setPlayingNote(null);
       };
       
@@ -773,8 +710,8 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
           <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-4xl font-bold bg-gradient-to-r from-orange-600 to-yellow-500 bg-clip-text text-transparent flex items-center">
-                  <FileText className="w-10 h-10 text-yellow-600 mr-4" />
+                <h1 className="text-4xl font-bold bg-gradient-to-r from-yellow-600 to-orange-500 bg-clip-text text-transparent flex items-center">
+                  <StickyNote className="w-10 h-10 text-yellow-600 mr-4" />
                   Notes
                 </h1>
                 <p className="text-gray-600 mt-2 text-lg">
@@ -784,7 +721,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
               <div className="flex space-x-3">
                 <button
                   onClick={() => setShowAddForm(true)}
-                  className="group relative overflow-hidden bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white px-8 py-4 rounded-2xl flex items-center transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
+                  className="group relative overflow-hidden bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white px-8 py-4 rounded-2xl flex items-center transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
                 >
                   <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
                   <Plus className="w-5 h-5 mr-3 relative z-10" />
@@ -823,7 +760,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                   className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all duration-300 text-gray-800"
                 >
                   <option value="all">All Categories</option>
-                  {categories.map(category => (
+                  {categories.map((category: Category) => (
                     <option key={category.id} value={category.id}>
                       {category.icon} {category.name}
                     </option>
@@ -851,7 +788,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
         {/* Revolutionary Notes Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {sortedNotes.map((note) => {
-            const category = categories.find(c => c.id === note.categoryId);
+            const category = categories.find((c: Category) => c.id === note.categoryId);
             const isExpanded = expandedNote === note.id;
             const isEditing = editingNote === note.id;
             const isVoiceNote = note.type === 'voiceNote';
@@ -921,7 +858,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                       autoTranscribeImages: true,
                       autoTranscribeVoice: true
                     });
-                    startEditingNote(note.id);
+                    setEditingNoteId(note.id);
                     setFullscreenCreate(true);
                   }
                 }}
@@ -963,7 +900,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                             )}
                           </button>
                           <span className="text-xs text-orange-600 font-medium">
-                            Voice Note
+                            {note.metadata?.isTranscribing ? 'Transcribing...' : 'Voice Note'}
                           </span>
                         </div>
                       )}
@@ -990,7 +927,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                             title="Copy ID for AI chat"
                           >
-                            <FileText className="w-4 h-4 text-gray-500" />
+                            <StickyNote className="w-4 h-4 text-gray-500" />
                           </button>
                           <button
                             onClick={(e) => {
@@ -1045,7 +982,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                                 autoTranscribeImages: true,
                                 autoTranscribeVoice: true
                               });
-                              startEditingNote(note.id);
+                              setEditingNoteId(note.id);
                               setFullscreenCreate(true);
                             }}
                             className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
@@ -1058,9 +995,9 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                               e.stopPropagation();
                               startEditing(note);
                             }}
-                            className="p-2 hover:bg-orange-100 rounded-lg transition-colors"
+                            className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
                           >
-                            <Edit3 className="w-4 h-4 text-orange-600" />
+                            <Edit3 className="w-4 h-4 text-yellow-600" />
                           </button>
                         </>
                       )}
@@ -1210,7 +1147,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                                     }}
                                     className="w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"
                                   >
-                                    <Trash2 className="w-4 h-4" />
+                                    <X className="w-4 h-4" />
                                   </button>
                                 </div>
                                 
@@ -1225,7 +1162,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                                       disabled={newNote.isTranscribingImages}
                                       className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white rounded-lg text-sm transition-colors font-medium shadow-lg"
                                     >
-                                      Extract Text
+                                      {newNote.isTranscribingImages ? 'Processing...' : 'Extract Text'}
                                     </button>
                                   </div>
                                 )}
@@ -1257,6 +1194,11 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                                   <span className="text-sm font-semibold text-orange-800">
                                     Voice Recording
                                 </span>
+                                  {note.metadata?.isTranscribing && (
+                                    <div className="text-xs text-orange-600 mt-1">
+                                      Processing audio...
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                               
@@ -1334,7 +1276,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
           <div className="text-center py-20">
             <div className="bg-white/60 backdrop-blur-xl rounded-3xl shadow-xl border border-white/30 p-12 max-w-md mx-auto">
               <div className="w-20 h-20 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                <FileText className="w-10 h-10 text-white" />
+                <StickyNote className="w-10 h-10 text-white" />
               </div>
               <h3 className="text-2xl font-bold text-gray-800 mb-4">No notes yet</h3>
               <p className="text-gray-600 mb-8 leading-relaxed">
@@ -1345,7 +1287,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
               </p>
               <button
                 onClick={() => setShowAddForm(true)}
-                className="bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white px-8 py-4 rounded-2xl transition-all duration-300 transform hover:scale-105 shadow-lg"
+                className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white px-8 py-4 rounded-2xl transition-all duration-300 transform hover:scale-105 shadow-lg"
               >
                 <Plus className="w-5 h-5 mr-3 inline" />
                 Create Your First Note
@@ -1360,7 +1302,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/30 max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col">
             {/* Header */}
-            <div className="bg-gradient-to-r from-orange-500 to-yellow-500 p-6 text-white flex-shrink-0">
+            <div className="bg-gradient-to-r from-yellow-500 to-orange-500 p-6 text-white flex-shrink-0">
               <div className="flex items-center justify-between">
                 <h3 className="text-2xl font-bold">New Note</h3>
                 <div className="flex items-center space-x-2">
@@ -1380,7 +1322,11 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                       }
                       className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white rounded-lg text-sm font-medium transition-colors shadow-lg"
                     >
-                      Extract Text
+                      {(selectedVoiceRecording && newNote.voiceRecordings.find(r => r.id === selectedVoiceRecording)?.isTranscribing) ||
+                       (selectedImage !== null && newNote.isTranscribingImages) 
+                        ? 'Processing...' 
+                        : 'Extract Text'
+                      }
                     </button>
                   )}
                   
@@ -1395,8 +1341,6 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                     onClick={() => {
                       setShowAddForm(false);
                       setEditingNoteId(null);
-        setEditingTitle('');
-        setEditingContent('');
                     }}
                     className="p-2 hover:bg-white/20 rounded-xl transition-colors"
                   >
@@ -1476,6 +1420,20 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                     </button>
                     </div>
 
+                    {/* Auto-transcribe Voice Checkbox */}
+                    <div className="flex items-center space-x-3 p-3 bg-white/60 rounded-xl border border-orange-300/50">
+                      <input
+                        type="checkbox"
+                        id="autoTranscribeVoice"
+                        checked={newNote.autoTranscribeVoice}
+                        onChange={(e) => setNewNote(prev => ({ ...prev, autoTranscribeVoice: e.target.checked }))}
+                        className="w-4 h-4 rounded text-orange-500 focus:ring-orange-500 border-orange-300"
+                      />
+                      <label htmlFor="autoTranscribeVoice" className="text-sm text-orange-800 font-medium flex items-center">
+                        <span className="mr-2">🤖</span>
+                        Auto-transcribe voice recordings when saving
+                      </label>
+                  </div>
                   
                     {/* Voice Recordings List */}
                   {newNote.voiceRecordings.length > 0 && (
@@ -1523,6 +1481,12 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                                     input.select();
                                   }}
                                 />
+                                {recording.isTranscribing && (
+                                  <div className="text-sm text-orange-600 mt-1 flex items-center">
+                                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                    Processing audio...
+                                  </div>
+                                )}
                                 {selectedVoiceRecording === recording.id && (
                                   <div className="text-xs text-orange-600 mt-1 flex items-center">
                                     <span className="mr-1">✨</span>
@@ -1564,9 +1528,16 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                         className="flex-1 px-6 py-4 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-xl flex items-center justify-center transition-all duration-300 shadow-lg hover:from-blue-600 hover:to-indigo-600 cursor-pointer transform hover:scale-[1.02] hover:shadow-xl"
                     >
                         <Camera className="w-5 h-5 mr-2" />
-                      <span className="font-semibold">
-                        {newNote.images.length > 0 ? 'Add More Images' : 'Choose Images'}
-                      </span>
+                      {newNote.isTranscribingImages ? (
+                        <>
+                            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                            <span className="font-semibold">Processing Images...</span>
+                        </>
+                      ) : (
+                          <span className="font-semibold">
+                            {newNote.images.length > 0 ? 'Add More Images' : 'Choose Images'}
+                          </span>
+                      )}
                     </label>
                   </div>
                   
@@ -1580,6 +1551,20 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                     multiple
                   />
                   
+                    {/* Auto-transcribe Images Checkbox */}
+                    <div className="flex items-center space-x-3 p-3 bg-white/60 rounded-xl border border-blue-300/50">
+                    <input
+                      type="checkbox"
+                      id="autoTranscribeImages"
+                      checked={newNote.autoTranscribeImages}
+                      onChange={(e) => setNewNote(prev => ({ ...prev, autoTranscribeImages: e.target.checked }))}
+                        className="w-4 h-4 rounded text-blue-500 focus:ring-blue-500 border-blue-300"
+                    />
+                      <label htmlFor="autoTranscribeImages" className="text-sm text-blue-800 font-medium flex items-center">
+                        <span className="mr-2">🤖</span>
+                      Auto-transcribe text from images when saving
+                    </label>
+                  </div>
 
                   {/* Image Previews */}
                   {newNote.images.length > 0 && (
@@ -1621,7 +1606,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                                 }}
                                 className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-600 transform hover:scale-110"
                           >
-                            <Trash2 className="w-3 h-3" />
+                            <X className="w-3 h-3" />
                           </button>
                               
                           <div className="absolute bottom-1 left-1 bg-black/50 text-white text-xs px-1 rounded">
@@ -1645,7 +1630,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                   onChange={(e) => setNewNote({ ...newNote, categoryId: e.target.value })}
                   className="w-full px-4 py-4 bg-gray-50/50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all duration-300"
                 >
-                  {categories.map(category => (
+                  {categories.map((category: Category) => (
                     <option key={category.id} value={category.id}>
                       {category.icon} {category.name}
                     </option>
@@ -1661,8 +1646,6 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                 onClick={() => {
                   setShowAddForm(false);
                   setEditingNoteId(null);
-        setEditingTitle('');
-        setEditingContent('');
                 }}
                 className="flex-1 px-6 py-3 bg-gray-100 text-gray-700 rounded-2xl hover:bg-gray-200 transition-all duration-300 font-semibold"
               >
@@ -1671,7 +1654,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
               <button
                 onClick={handleAddNote}
                 disabled={!newNote.text.trim() && !newNote.voice && !newNote.images.length}
-                className="flex-1 px-6 py-3 bg-gradient-to-r from-orange-500 to-yellow-500 text-white rounded-2xl hover:from-orange-600 hover:to-yellow-600 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 shadow-lg font-semibold"
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-2xl hover:from-yellow-600 hover:to-orange-600 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 shadow-lg font-semibold"
               >
                 Save Note
               </button>
@@ -1703,8 +1686,6 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                   onClick={() => {
                     setFullscreenCreate(false);
                     setEditingNoteId(null);
-        setEditingTitle('');
-        setEditingContent('');
                     setShowAIAssistant(false);
                   }}
                 className={`p-2 rounded-lg transition-colors ${
@@ -1750,7 +1731,11 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                     }
                     className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white rounded-lg text-sm font-medium transition-colors shadow-lg"
                     >
-                    Extract Text
+                    {(selectedVoiceRecording && newNote.voiceRecordings.find(r => r.id === selectedVoiceRecording)?.isTranscribing) ||
+                     (selectedImage !== null && newNote.isTranscribingImages) 
+                      ? 'Processing...' 
+                      : 'Extract Text'
+                    }
                     </button>
                 )}
 
@@ -1777,16 +1762,14 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                             if (editingNote) {
                               setFullscreenCreate(false);
                               setEditingNoteId(null);
-        setEditingTitle('');
-        setEditingContent('');
                               setShowAIAssistant(false);
                               startEditing(editingNote);
                             }
                           }}
-                          className="p-2 hover:bg-orange-100 rounded-lg transition-colors"
+                          className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
                           title="Edit in card view"
                         >
-                          <Edit3 className="w-5 h-5 text-orange-600" />
+                          <Edit3 className="w-5 h-5 text-yellow-600" />
                 </button>
                       </>
                     );
@@ -1807,7 +1790,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
               <button
                 onClick={handleAddNote}
                 disabled={!newNote.text.trim() && !newNote.voice && !newNote.images.length}
-                className="px-4 py-2 bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 disabled:from-gray-300 disabled:to-gray-400 text-white rounded-lg disabled:cursor-not-allowed transition-all"
+                className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 disabled:from-gray-300 disabled:to-gray-400 text-white rounded-lg disabled:cursor-not-allowed transition-all"
               >
                   {editingNoteId ? 'Update' : 'Save'}
               </button>
@@ -1820,11 +1803,18 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
               {/* Title Field */}
               <input
                 type="text"
-                value={editingNoteId ? editingTitle : newNote.title}
+                value={editingNoteId ? (() => {
+                  const editingNote = items.find(item => item.id === editingNoteId);
+                  return editingNote?.title || '';
+                })() : newNote.title}
                 onChange={(e) => {
                   if (editingNoteId) {
-                    // Update local editing state only - no Supabase updates
-                    setEditingTitle(e.target.value);
+                    // Update existing note title directly in items state
+                    setItems(prevItems => prevItems.map(item => 
+                      item.id === editingNoteId 
+                        ? { ...item, title: e.target.value, updatedAt: new Date() }
+                        : item
+                    ));
                   } else {
                     // Update new note title
                     setNewNote({ ...newNote, title: e.target.value });
@@ -1843,11 +1833,18 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
               <div className="space-y-6">
                 {/* Text Content */}
                 <textarea
-                  value={editingNoteId ? editingContent : newNote.text}
+                  value={editingNoteId ? (() => {
+                    const editingNote = items.find(item => item.id === editingNoteId);
+                    return editingNote?.text || '';
+                  })() : newNote.text}
                   onChange={(e) => {
                     if (editingNoteId) {
-                      // Update local editing state only - no Supabase updates
-                      setEditingContent(e.target.value);
+                      // Update existing note directly in items state
+                      setItems(prevItems => prevItems.map(item => 
+                        item.id === editingNoteId 
+                          ? { ...item, text: e.target.value, updatedAt: new Date() }
+                          : item
+                      ));
                     } else {
                       // Update new note
                       handleTextChange(e.target.value);
@@ -1899,7 +1896,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                               }}
                             className="w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <X className="w-4 h-4" />
                           </button>
                         </div>
                           
@@ -1914,7 +1911,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                                 disabled={newNote.isTranscribingImages}
                                 className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white rounded-lg text-sm transition-colors font-medium shadow-lg"
                               >
-                                Extract Text
+                                {newNote.isTranscribingImages ? 'Processing...' : 'Extract Text'}
                               </button>
                             </div>
                           )}
@@ -1967,47 +1964,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                         </div>
                       )}
 
-                      {/* Existing Voice Note Attachment (when editing existing voice note) */}
-                      {editingNoteId && (() => {
-                        const editingNote = items.find(item => item.id === editingNoteId);
-                        return editingNote?.type === 'voiceNote' && editingNote?.attachment ? (
-                          <div 
-                            className="relative p-4 rounded-xl border transition-all duration-300 bg-orange-50 border-orange-200"
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-4">
-                                <div className="w-4 h-4 bg-orange-500 rounded-full shadow-sm" />
-                                <span className="font-medium text-orange-800">
-                                  Voice Note
-                                </span>
-                              </div>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (editingNote.attachment) {
-                                    playVoiceNote(editingNote.id, editingNote.attachment);
-                                  }
-                                }}
-                                className="px-3 py-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-all duration-300 flex items-center space-x-2"
-                              >
-                                {playingNote === editingNote.id ? (
-                                  <>
-                                    <Pause className="w-4 h-4" />
-                                    <span>Pause</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Play className="w-4 h-4" />
-                                    <span>Play</span>
-                                  </>
-                                )}
-                              </button>
-                            </div>
-                          </div>
-                        ) : null;
-                      })()}
-
-                      {/* New Recordings */}
+                      {/* Existing Recordings */}
                       {newNote.voiceRecordings.map((recording, index) => (
                           <div 
                             key={recording.id} 
@@ -2046,6 +2003,11 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                                     input.select();
                                   }}
                                 />
+                                {recording.isTranscribing && (
+                                  <div className={`text-sm ${isDarkMode ? 'text-yellow-400' : 'text-yellow-600'} mt-1`}>
+                                    Processing audio...
+                                  </div>
+                                )}
                           </div>
                           
                             <button
@@ -2159,12 +2121,22 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
               onResize={setAiSidebarWidth}
               onToggleCollapse={() => setIsAiSidebarCollapsed(!isAiSidebarCollapsed)}
               // Pass note context for real-time editing
-              currentNoteContent={editingNoteId ? editingContent : newNote.text}
-              currentNoteTitle={editingNoteId ? editingTitle : newNote.title}
+              currentNoteContent={editingNoteId ? (() => {
+                const editingNote = items.find(item => item.id === editingNoteId);
+                return editingNote?.text || '';
+              })() : newNote.text}
+              currentNoteTitle={editingNoteId ? (() => {
+                const editingNote = items.find(item => item.id === editingNoteId);
+                return editingNote?.title || '';
+              })() : newNote.title}
               onUpdateNoteContent={(content) => {
                 if (editingNoteId) {
-                  // Update local editing state only - no Supabase updates
-                  setEditingContent(content);
+                  // Update existing note in real-time
+                  setItems(prevItems => prevItems.map(item => 
+                    item.id === editingNoteId 
+                      ? { ...item, text: content, updatedAt: new Date() }
+                      : item
+                  ));
                 } else {
                   // Update new note
                   setNewNote(prev => ({ ...prev, text: content }));
@@ -2172,8 +2144,12 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
               }}
               onUpdateNoteTitle={(title) => {
                 if (editingNoteId) {
-                  // Update local editing state only - no Supabase updates
-                  setEditingTitle(title);
+                  // Update existing note title in real-time
+                  setItems(prevItems => prevItems.map(item => 
+                    item.id === editingNoteId 
+                      ? { ...item, title: title, updatedAt: new Date() }
+                      : item
+                  ));
                 } else {
                   // Update new note title
                   setNewNote(prev => ({ ...prev, title }));

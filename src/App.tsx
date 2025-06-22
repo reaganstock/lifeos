@@ -17,14 +17,13 @@ import { ThemeProvider } from './contexts/ThemeContext';
 // Removed initialData import - users create their own categories
 import { useSupabaseData } from './hooks/useSupabaseData';
 import { shouldShowMigration, createMigrationManager, MigrationProgress } from './utils/migration';
-import { Item, Category } from './types';
+import { Item } from './types';
 import './App.css';
 
 function AppContent() {
   const { user, loading: authLoading, initialized: authInitialized } = useAuthContext();
   const {
     categories: supabaseCategories,
-    items: supabaseItems,
     loading: dataLoading,
     error: dataError,
     initialized: dataInitialized,
@@ -76,7 +75,6 @@ function AppContent() {
   const [migrationProgress, setMigrationProgress] = useState<MigrationProgress | null>(null);
   
   const showLanding = currentView === 'landing';
-  const [categories] = useState<Category[]>([]);
   const [notification, setNotification] = useState({
     isVisible: false,
     message: '',
@@ -99,78 +97,19 @@ function AppContent() {
   });
   const [isAiSidebarCollapsed, setIsAiSidebarCollapsed] = useState(false);
 
-  // Current items (either from localStorage or Supabase)
-  const items = user ? supabaseItems : localItems;
+  // ALWAYS use localStorage as primary data source for perfect UX
+  const items = localItems;
   
-  // Create a setItems function that works with both localStorage and Supabase
-  const setItems = user 
-    ? (updater: React.SetStateAction<Item[]>) => {
-        // For authenticated users, we need to handle updates through Supabase
-        const newItems = typeof updater === 'function' ? updater(supabaseItems) : updater;
-        
-        console.log('🔄 setItems called for authenticated user');
-        console.log('Current supabaseItems:', supabaseItems.length);
-        console.log('New items:', newItems.length);
-        
-        // Find what changed and update Supabase accordingly
-        const currentItems = supabaseItems;
-        
-        // Handle new items (items that don't exist in current or have temporary IDs)
-        const newItemsToCreate = newItems.filter(newItem => {
-          // Consider items with numeric string IDs as temporary (from Date.now())
-          const hasTemporaryId = /^\d+$/.test(newItem.id);
-          const existsInCurrent = currentItems.find(current => current.id === newItem.id);
-          return hasTemporaryId || !existsInCurrent;
-        });
-        
-        // Handle updated items (skip items with temporary IDs)
-        const itemsToUpdate = newItems.filter(newItem => {
-          const hasTemporaryId = /^\d+$/.test(newItem.id);
-          if (hasTemporaryId) return false;
-          
-          const current = currentItems.find(c => c.id === newItem.id);
-          return current && JSON.stringify(current) !== JSON.stringify(newItem);
-        });
-        
-        // Handle deleted items (don't consider temporary ID items as deletions)
-        const itemsToDelete = currentItems.filter(current => {
-          const existsInNew = newItems.find(newItem => newItem.id === current.id);
-          return !existsInNew;
-        });
-        
-        console.log('Items to create:', newItemsToCreate.length);
-        console.log('Items to update:', itemsToUpdate.length);
-        console.log('Items to delete:', itemsToDelete.length);
-        
-        // Execute Supabase operations asynchronously
-        (async () => {
-          try {
-            if (newItemsToCreate.length > 0) {
-              console.log('🆕 Creating new items:', newItemsToCreate);
-              await bulkCreateItems(newItemsToCreate);
-            }
-            
-            for (const item of itemsToUpdate) {
-              console.log('📝 Updating item:', item.id);
-              await updateItem(item.id, item);
-            }
-            
-            if (itemsToDelete.length > 0) {
-              console.log('🗑️ Deleting items:', itemsToDelete.map(item => item.id));
-              await bulkDeleteItems(itemsToDelete.map(item => item.id));
-            }
-            
-            // Items are now updated optimistically by the Supabase operations
-            // Real-time subscriptions provide backup consistency
-            console.log('✅ Items updated optimistically with real-time backup');
-            showNotification('Items updated successfully', 'success');
-          } catch (error) {
-            console.error('❌ Error updating items via Supabase:', error);
-            showNotification('Failed to update items', 'error');
-          }
-        })();
-      }
-    : setLocalItems; // Use localStorage for unauthenticated users
+  // Create a setItems function that prioritizes localStorage (no automatic Supabase sync)
+  const setItems = (updater: React.SetStateAction<Item[]>) => {
+    console.log('💾 setItems called - using localStorage for instant UX');
+    setLocalItems(updater);
+    
+    // Note: Supabase sync will happen through:
+    // 1. Manual "Update" button clicks (when user explicitly saves)
+    // 2. Hourly background sync (for cross-device sync)
+    // This ensures perfect real-time UX with correct category colors immediately
+  };
 
   // Check for migration on authentication
   useEffect(() => {
@@ -223,12 +162,11 @@ function AppContent() {
     }
   }, [authInitialized, user, showLanding]);
 
-  // Save localStorage items for unauthenticated users
+  // Save localStorage items (primary data source for all users)
   useEffect(() => {
-    if (!user) {
-      localStorage.setItem('lifeStructureItems', JSON.stringify(localItems));
-    }
-  }, [localItems, user]);
+    localStorage.setItem('lifeStructureItems', JSON.stringify(localItems));
+    console.log('💾 Saved', localItems.length, 'items to localStorage');
+  }, [localItems]);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -408,20 +346,20 @@ function AppContent() {
 
     switch (currentView) {
       case 'dashboard':
-        return <Dashboard onNavigateToCategory={handleNavigateToCategory} items={items} categories={user ? supabaseCategories : categories} />;
+        return <Dashboard onNavigateToCategory={handleNavigateToCategory} items={items} categories={supabaseCategories} />;
       
       case 'todos':
-        return <GlobalTodos items={items} setItems={setItems} categories={user ? supabaseCategories : categories} />;
+        return <GlobalTodos items={items} setItems={setItems} categories={supabaseCategories} />;
       case 'calendar':
-        return <GlobalCalendar items={items} setItems={setItems} categories={user ? supabaseCategories : categories} />;
+        return <GlobalCalendar items={items} setItems={setItems} categories={supabaseCategories} />;
       case 'life-categories':
         return <LifeCategoriesManager onNavigateToCategory={handleNavigateToCategory} />;
       case 'goals':
-        return <GlobalGoals items={items} setItems={setItems} categories={user ? supabaseCategories : categories} />;
+        return <GlobalGoals items={items} setItems={setItems} categories={supabaseCategories} />;
       case 'routines':
-        return <GlobalRoutines items={items} setItems={setItems} categories={user ? supabaseCategories : categories} />;
+        return <GlobalRoutines items={items} setItems={setItems} categories={supabaseCategories} />;
       case 'notes':
-        return <GlobalNotes items={items} setItems={setItems} categories={user ? supabaseCategories : categories} />;
+        return <GlobalNotes items={items} setItems={setItems} categories={supabaseCategories} />;
       case 'settings':
         return <Settings />;
       
@@ -432,7 +370,7 @@ function AppContent() {
             onBack={handleBackToDashboard}
             items={items}
             setItems={setItems}
-            categories={user ? supabaseCategories : categories}
+            categories={supabaseCategories}
             isGlobalAIAssistantOpen={showAIAssistant}
           />
         );
@@ -458,7 +396,7 @@ function AppContent() {
           onNavigateToCategory={handleNavigateToCategory}
           onNavigateToDashboard={handleBackToDashboard}
           onNavigateToGlobal={handleNavigateToGlobal}
-          categories={user ? supabaseCategories : categories}
+          categories={supabaseCategories}
         />
         
         {/* Main Content Area */}
@@ -488,7 +426,7 @@ function AppContent() {
           <AIAssistant
             isOpen={showAIAssistant}
             onClose={() => setShowAIAssistant(false)}
-            categories={user ? supabaseCategories : categories}
+            categories={supabaseCategories}
             items={items}
             onAddItem={handleAddItem}
             onRefreshItems={user ? refreshData : () => {}}

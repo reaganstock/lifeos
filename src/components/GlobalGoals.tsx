@@ -53,6 +53,13 @@ const GlobalGoals: React.FC<GlobalGoalsProps> = ({ items, setItems, categories }
     }
   });
 
+  // Update newGoal categoryId when categories are loaded
+  useEffect(() => {
+    if (categories.length > 0 && !newGoal.categoryId) {
+      setNewGoal(prev => ({ ...prev, categoryId: categories[0].id }));
+    }
+  }, [categories, newGoal.categoryId]);
+
   // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
