@@ -7,6 +7,7 @@ import { chatService } from '../services/ChatService';
 import AIAssistant from './AIAssistant';
 import { copyToClipboard, showCopyFeedback } from '../utils/clipboard';
 import { getAudioUrl } from '../utils/audioStorage';
+import { hybridSyncService } from '../services/hybridSyncService';
 
 interface GlobalNotesProps {
   items: Item[];
@@ -315,6 +316,13 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
             }
           : item
       ));
+      
+      // Trigger immediate sync after updating note (with small delay)
+      setTimeout(() => {
+        hybridSyncService.manualSync().catch(error => {
+          console.log('Background sync failed (note still saved locally):', error);
+        });
+      }, 500); // 500ms delay to ensure localStorage is updated
     } else {
       // Create new note
     const note: Item = {
@@ -348,6 +356,13 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
     if (newNote.images.length && newNote.autoTranscribeImages) {
       handleBackgroundImageTranscription(note.id, newNote.images);
       }
+      
+      // Trigger immediate sync after creating new note (with small delay)
+      setTimeout(() => {
+        hybridSyncService.manualSync().catch(error => {
+          console.log('Background sync failed (note still saved locally):', error);
+        });
+      }, 500); // 500ms delay to ensure localStorage is updated
     }
     
     // Reset form

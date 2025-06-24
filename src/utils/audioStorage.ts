@@ -6,6 +6,7 @@ export interface StoredAudioData {
   dataUrl: string;
   mimeType: string;
   duration: number;
+  timestamp: number; // Add timestamp for cleanup
 }
 
 /**
@@ -29,7 +30,8 @@ export async function storeAudioBlob(audioId: string, blob: Blob, duration: numb
     const audioData: StoredAudioData = {
       dataUrl,
       mimeType: blob.type,
-      duration
+      duration,
+      timestamp: Date.now()
     };
     
     localStorage.setItem(`audio_${audioId}`, JSON.stringify(audioData));
@@ -50,7 +52,15 @@ export function getStoredAudioData(audioId: string): StoredAudioData | null {
     const stored = localStorage.getItem(`audio_${audioId}`);
     if (!stored) return null;
     
-    return JSON.parse(stored) as StoredAudioData;
+    const audioData = JSON.parse(stored) as StoredAudioData;
+    
+    // Validate the stored data
+    if (!audioData.dataUrl || !audioData.dataUrl.startsWith('data:')) {
+      console.warn('⚠️ Invalid stored audio data for:', audioId);
+      return null;
+    }
+    
+    return audioData;
   } catch (error) {
     console.error('❌ Failed to retrieve audio:', error);
     return null;
@@ -70,10 +80,41 @@ export function getAudioUrl(audioId: string, fallbackBlobUrl?: string): string |
 }
 
 /**
+ * Check if audio is stored locally
+ */
+export function hasStoredAudio(audioId: string): boolean {
+  return getStoredAudioData(audioId) !== null;
+}
+
+/**
+ * Convert stored audio data URL back to blob
+ */
+export async function storedAudioToBlob(audioId: string): Promise<Blob | null> {
+  const storedData = getStoredAudioData(audioId);
+  if (!storedData) return null;
+  
+  try {
+    const response = await fetch(storedData.dataUrl);
+    return await response.blob();
+  } catch (error) {
+    console.error('❌ Failed to convert stored audio to blob:', error);
+    return null;
+  }
+}
+
+/**
  * Remove audio data from localStorage
  */
 export function removeStoredAudio(audioId: string): void {
   localStorage.removeItem(`audio_${audioId}`);
+}
+
+/**
+ * Get all stored audio IDs
+ */
+export function getStoredAudioIds(): string[] {
+  const keys = Object.keys(localStorage).filter(key => key.startsWith('audio_'));
+  return keys.map(key => key.replace('audio_', ''));
 }
 
 /**
@@ -85,15 +126,48 @@ export function cleanupOldAudio(maxAgeMs: number = 7 * 24 * 60 * 60 * 1000): voi
   
   keys.forEach(key => {
     try {
-      const audioId = key.replace('audio_', '');
-      const timestamp = parseInt(audioId);
+      const stored = localStorage.getItem(key);
+      if (!stored) return;
       
-      if (!isNaN(timestamp) && (now - timestamp) > maxAgeMs) {
+      const audioData = JSON.parse(stored) as StoredAudioData;
+      
+      if (audioData.timestamp && (now - audioData.timestamp) > maxAgeMs) {
         localStorage.removeItem(key);
-        console.log('🧹 Cleaned up old audio:', audioId);
+        console.log('🧹 Cleaned up old audio:', key.replace('audio_', ''));
       }
     } catch (error) {
       // Skip invalid entries
+      localStorage.removeItem(key);
     }
   });
+}
+
+/**
+ * Migrate notes with blob URLs to use localStorage storage
+ */
+export async function migrateNotesToLocalStorage(items: any[]): Promise<any[]> {
+  const migratedItems = [...items];
+  
+  for (const item of migratedItems) {
+    if (item.type === 'voiceNote' && item.attachment && item.attachment.startsWith('blob:')) {
+      try {
+        // Fetch the blob and store it properly
+        const response = await fetch(item.attachment);
+        const blob = await response.blob();
+        
+        const audioUrl = await storeAudioBlob(item.id, blob, 0);
+        
+        // Update the item
+        item.attachment = audioUrl;
+        if (!item.metadata) item.metadata = {};
+        item.metadata.audioStorageId = item.id;
+        
+        console.log('🔄 Migrated note to localStorage:', item.id);
+      } catch (error) {
+        console.error('❌ Failed to migrate note:', item.id, error);
+      }
+    }
+  }
+  
+  return migratedItems;
 }

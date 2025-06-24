@@ -6,6 +6,9 @@ import { AIService } from '../services/aiService';
 import { chatService } from '../services/ChatService';
 import AIAssistant from './AIAssistant';
 import { getAudioUrl } from '../utils/audioStorage';
+import { storeAudioBlob, getStoredAudioData } from '../utils/audioStorage';
+import { storeImageFiles, getImageUrls, hasStoredImages, storedImagesToFiles } from '../utils/imageStorage';
+import { hybridSyncService } from '../services/hybridSyncService';
 
 interface LocalCategoryNotesProps {
   categoryId: string;
@@ -323,7 +326,7 @@ const LocalCategoryNotes: React.FC<LocalCategoryNotesProps> = ({ categoryId, ite
   };
 
   const handleAddNote = () => {
-    if (!newNote.text.trim() && !newNote.voice && !newNote.images.length) return;
+    if (!newNote.text.trim() && !newNote.voice && !newNote.images.length && !newNote.voiceRecordings.length) return;
 
     const noteData: Partial<Item> = {
       id: editingNoteId || `note-${Date.now()}`,
@@ -336,36 +339,99 @@ const LocalCategoryNotes: React.FC<LocalCategoryNotesProps> = ({ categoryId, ite
       metadata: {}
     };
 
-    // Handle voice recordings
+    const noteId = noteData.id!;
+
+    // Handle voice recordings with proper storage
     if (newNote.voiceRecordings.length > 0) {
       const primaryRecording = newNote.voiceRecordings[0];
-      noteData.attachment = URL.createObjectURL(primaryRecording.blob);
-      noteData.metadata = {
+      
+      // Store audio in localStorage for persistence
+      storeAudioBlob(noteId, primaryRecording.blob, 0).then(audioUrl => {
+        const updatedNoteData = {
+          ...noteData,
+          attachment: audioUrl, // Use stored audio URL
+          metadata: {
         ...noteData.metadata,
-        transcription: primaryRecording.transcription
-      };
+            transcription: primaryRecording.transcription,
+            audioStorageId: noteId // Add storage ID for retrieval
+          }
+        };
+        
+        if (editingNoteId) {
+          // Update existing note
+          setItems(items.map(item => 
+            item.id === editingNoteId 
+              ? { ...item, ...updatedNoteData }
+              : item
+          ));
+        } else {
+          // Add new note
+          setItems([...items, updatedNoteData as Item]);
+        }
+        
+        // Trigger immediate sync after note is saved locally (with small delay)
+        setTimeout(() => {
+          hybridSyncService.manualSync().catch(error => {
+            console.log('Background sync failed (note still saved locally):', error);
+          });
+        }, 500); // 500ms delay to ensure localStorage is updated
+      });
     }
 
-    // Handle images
+    // Handle images with proper storage
     if (newNote.images.length > 0) {
-      const imageUrls = newNote.images.map(img => URL.createObjectURL(img));
-      noteData.metadata = {
-        ...noteData.metadata,
+      storeImageFiles(noteId, newNote.images).then(storedImageUrls => {
+                  const imageMetadata = {
         hasImage: true,
-        imageUrls: imageUrls
-      };
+            imageCount: storedImageUrls.length, // Store count instead of URLs
+            imageStorageId: noteId, // Add storage ID for retrieval
+            imageUrls: undefined // Clear legacy URLs to prevent duplicates
+          };
+        
+        // Update the note with image metadata
+        setTimeout(() => {
+          setItems(prevItems => prevItems.map(item => 
+            item.id === noteId 
+              ? { 
+                  ...item,
+                  metadata: {
+                    ...item.metadata,
+                    ...imageMetadata
+                  }
+                }
+              : item
+          ));
+          
+          // Trigger immediate sync after images are processed (with small delay)
+          setTimeout(() => {
+            hybridSyncService.manualSync().catch(error => {
+              console.log('Background sync failed (note still saved locally):', error);
+            });
+          }, 500); // 500ms delay to ensure localStorage is updated
+        }, 100);
+      });
     }
 
+    // Handle notes without voice or images
+    if (newNote.voiceRecordings.length === 0 && newNote.images.length === 0) {
     if (editingNoteId) {
-      // Update existing note
+        // Update existing note without voice/images
       setItems(items.map(item => 
         item.id === editingNoteId 
           ? { ...item, ...noteData }
           : item
       ));
     } else {
-      // Add new note
+        // Add new note without voice/images
       setItems([...items, noteData as Item]);
+      }
+      
+      // Trigger immediate sync for text-only notes (with small delay)
+      setTimeout(() => {
+        hybridSyncService.manualSync().catch(error => {
+          console.log('Background sync failed (note still saved locally):', error);
+        });
+      }, 500); // 500ms delay to ensure localStorage is updated
     }
 
     // Background transcription for voice notes
@@ -734,8 +800,32 @@ const LocalCategoryNotes: React.FC<LocalCategoryNotesProps> = ({ categoryId, ite
   };
 
   const openNoteForEditing = (note: Item) => {
-    // Convert existing note data back to editable format
-    if (note.type === 'voiceNote' && note.attachment) {
+    // Enhanced voice attachment recovery
+    if (note.type === 'voiceNote' && (note.attachment || note.metadata?.audioStorageId)) {
+      const audioStorageId = note.metadata?.audioStorageId || note.id;
+      const storedAudioData = getStoredAudioData(audioStorageId);
+      
+      if (storedAudioData) {
+        // Convert stored data URL back to blob
+        fetch(storedAudioData.dataUrl)
+          .then(response => response.blob())
+          .then(blob => {
+            const voiceRecording = {
+              id: Date.now().toString(),
+              blob: blob,
+              transcription: note.metadata?.transcription,
+              isTranscribing: false,
+              customTitle: note.title
+            };
+            setNewNote(prev => ({
+              ...prev,
+              voiceRecordings: [voiceRecording],
+              voice: blob
+            }));
+          })
+          .catch(err => console.error('Error converting stored audio:', err));
+      } else if (note.attachment) {
+        // Fallback to fetching from attachment URL
       fetch(note.attachment)
         .then(response => response.blob())
         .then(blob => {
@@ -754,8 +844,24 @@ const LocalCategoryNotes: React.FC<LocalCategoryNotesProps> = ({ categoryId, ite
         })
         .catch(err => console.error('Error converting voice attachment:', err));
     }
+    }
     
-    if (note.metadata?.imageUrls && note.metadata.imageUrls.length > 0) {
+    // Enhanced image recovery with localStorage support
+    if (note.metadata?.hasImage && note.metadata?.imageStorageId) {
+      const imageStorageId = note.metadata.imageStorageId;
+      
+      if (hasStoredImages(imageStorageId)) {
+        // Convert stored images back to File objects
+        storedImagesToFiles(imageStorageId)
+          .then(files => {
+            setNewNote(prev => ({
+              ...prev,
+              images: files
+            }));
+          })
+          .catch(err => console.error('Error converting stored images:', err));
+      } else if (note.metadata?.imageUrls && note.metadata.imageUrls.length > 0) {
+        // Fallback to fetching from image URLs (legacy support)
       Promise.all(
         note.metadata.imageUrls.map((url, index) => 
           fetch(url)
@@ -768,6 +874,7 @@ const LocalCategoryNotes: React.FC<LocalCategoryNotesProps> = ({ categoryId, ite
           images: files
         }));
       }).catch(err => console.error('Error converting image URLs:', err));
+      }
     }
     
     setNewNote({
@@ -867,7 +974,7 @@ const LocalCategoryNotes: React.FC<LocalCategoryNotesProps> = ({ categoryId, ite
                       {note.metadata?.hasImage && (
                         <div className="flex items-center space-x-2">
                           <span className="text-xs text-blue-600 font-medium">
-                            📷 {note.metadata.imageUrls?.length || 1} Image{(note.metadata.imageUrls?.length || 1) > 1 ? 's' : ''}
+                            📷 {note.metadata.imageCount || 1} Image{(note.metadata.imageCount || 1) > 1 ? 's' : ''}
                           </span>
                         </div>
                       )}
@@ -951,6 +1058,54 @@ const LocalCategoryNotes: React.FC<LocalCategoryNotesProps> = ({ categoryId, ite
                       <p className={`text-gray-600 text-sm ${isExpanded ? '' : 'line-clamp-4'}`}>
                         {note.text}
                       </p>
+                      
+                      {/* Enhanced Images Display */}
+                      {note.metadata?.hasImage && note.metadata?.imageStorageId && (
+                        <div className="mt-3 space-y-2">
+                          {(() => {
+                            const storageId = note.metadata.imageStorageId;
+                            const storedUrls = getImageUrls(storageId);
+                            const imageCount = note.metadata.imageCount || storedUrls.length;
+                            
+                            if (storedUrls.length === 0) return null;
+                            
+                            return (
+                              <>
+                                <div className={`grid gap-2 ${
+                                  storedUrls.length === 1 ? 'grid-cols-1' : 'grid-cols-2'
+                                }`}>
+                                  {storedUrls.slice(0, isExpanded ? undefined : 2).map((imageUrl, index) => (
+                                    <div key={index} className="relative group">
+                                      <img
+                                        src={imageUrl}
+                                        alt={`Note image ${index + 1}`}
+                                        className={`w-full object-cover rounded-lg shadow-sm transition-all duration-300 border border-gray-200 hover:shadow-md ${
+                                          isExpanded ? 'max-h-32' : 'h-20'
+                                        }`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          // Optional: Could open image in fullscreen here
+                                        }}
+                                        onError={(e) => {
+                                          console.warn('Failed to load stored image:', imageUrl);
+                                        }}
+                                      />
+                                      {/* Small overlay on hover */}
+                                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all duration-200 rounded-lg"></div>
+                                    </div>
+                                  ))}
+                                </div>
+                                {!isExpanded && storedUrls.length > 2 && (
+                                  <div className="text-xs text-center text-gray-500">
+                                    +{storedUrls.length - 2} more images
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      )}
+                      
                       {isExpanded && (
                         <div className="mt-4 text-xs text-gray-500">
                           {note.updatedAt instanceof Date && !isNaN(note.updatedAt.getTime())
@@ -1616,7 +1771,7 @@ const LocalCategoryNotes: React.FC<LocalCategoryNotesProps> = ({ categoryId, ite
                             </div>
                             
                             <button
-                              onClick={() => removeVoiceRecording(recording.id)}
+                              onClick={(e) => removeVoiceRecording(recording.id)}
                               disabled={recording.isTranscribing}
                               className="p-2 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white rounded-lg transition-colors"
                             >

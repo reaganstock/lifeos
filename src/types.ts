@@ -38,6 +38,9 @@ export interface Item {
     confidence?: number; // Transcription confidence score
     language?: string; // Detected language
     isVoiceNote?: boolean; // Flag for voice notes
+    audioStorageId?: string; // Storage ID for localStorage audio data
+    imageStorageId?: string; // Storage ID for localStorage image data
+    imageCount?: number; // Number of images stored
     uploadComplete?: boolean; // Flag for completed uploads
     uploadFailed?: boolean; // Flag for failed uploads
     uploadError?: string; // Error message for failed uploads

@@ -19,6 +19,9 @@ import { useSupabaseData } from './hooks/useSupabaseData';
 import { shouldShowMigration, createMigrationManager, MigrationProgress } from './utils/migration';
 import { Item } from './types';
 import './App.css';
+import { useHybridSync } from './hooks/useHybridSync';
+import { cleanupOldAudio } from './utils/audioStorage';
+import { cleanupOldImages } from './utils/imageStorage';
 
 function AppContent() {
   const { user, loading: authLoading, initialized: authInitialized } = useAuthContext();
@@ -272,6 +275,36 @@ function AppContent() {
       console.log('✅ Showing React app, current view:', currentView);
     }
   }, [showLanding, currentView]);
+
+  const { rehydrateVoiceNotes, syncStatus } = useHybridSync();
+
+  // Add this useEffect to handle post-refresh rehydration
+  useEffect(() => {
+    const handleVoiceNoteRehydration = async () => {
+      if (items.length > 0 && !syncStatus.rehydrated) {
+        console.log('🔄 App: Starting voice note rehydration after refresh...');
+        const rehydratedItems = await rehydrateVoiceNotes(items);
+        setItems(rehydratedItems);
+      }
+    };
+
+    handleVoiceNoteRehydration();
+  }, [items, syncStatus.rehydrated, rehydrateVoiceNotes]);
+
+  // Add periodic audio and image cleanup (run once every hour)
+  useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      console.log('🧹 Running periodic media cleanup...');
+      cleanupOldAudio(7 * 24 * 60 * 60 * 1000); // Clean up audio older than 7 days
+      cleanupOldImages(7 * 24 * 60 * 60 * 1000); // Clean up images older than 7 days
+    }, 60 * 60 * 1000); // Run every hour
+
+    // Run cleanup on app start as well
+    cleanupOldAudio(7 * 24 * 60 * 60 * 1000);
+    cleanupOldImages(7 * 24 * 60 * 60 * 1000);
+
+    return () => clearInterval(cleanupInterval);
+  }, []);
 
   const renderMainContent = () => {
     if (showLanding) {

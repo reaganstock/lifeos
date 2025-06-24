@@ -1,9 +1,12 @@
 import React from 'react';
-import { Cloud, CloudOff, Loader2, RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import { Cloud, CloudOff, Loader2, RefreshCw, Wifi, WifiOff, HardDrive } from 'lucide-react';
 import { useHybridSync } from '../hooks/useHybridSync';
+import { getStorageInfo } from '../utils/imageStorage';
+import { getStoredAudioData } from '../utils/audioStorage';
 
 const SyncStatusIndicator: React.FC = () => {
   const { syncStatus, manualSync, isOnline } = useHybridSync();
+  const storageInfo = getStorageInfo();
 
   const getSyncIcon = () => {
     if (!isOnline) return <WifiOff className="w-4 h-4" />;
@@ -19,14 +22,29 @@ const SyncStatusIndicator: React.FC = () => {
     return 'text-green-500';
   };
 
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
+  const getStorageColor = () => {
+    const usage = storageInfo.totalSize / (8 * 1024 * 1024); // 8MB max
+    if (usage > 0.8) return 'text-red-500';
+    if (usage > 0.6) return 'text-yellow-500';
+    return 'text-green-500';
+  };
+
   return (
-    <div className="flex items-center space-x-2 text-sm">
-      {/* Sync Status Icon */}
+    <div className="flex items-center space-x-4 text-sm">
+      {/* Sync Status */}
+      <div className="flex items-center space-x-2">
       <div className={`${getSyncColor()} transition-colors`}>
         {getSyncIcon()}
       </div>
       
-      {/* Status Text */}
       <div className="flex items-center space-x-2">
         {!isOnline ? (
           <span className="text-gray-500">Offline</span>
@@ -49,6 +67,22 @@ const SyncStatusIndicator: React.FC = () => {
           >
             <RefreshCw className="w-3 h-3 text-gray-500 hover:text-blue-500" />
           </button>
+          )}
+        </div>
+      </div>
+
+      {/* Storage Status */}
+      <div className="flex items-center space-x-2 border-l border-gray-200 pl-4">
+        <div className={`${getStorageColor()} transition-colors`}>
+          <HardDrive className="w-4 h-4" />
+        </div>
+        <span className="text-gray-600 text-xs">
+          {formatBytes(storageInfo.totalSize)} used
+        </span>
+        {storageInfo.totalImages > 0 && (
+          <span className="text-gray-500 text-xs">
+            ({storageInfo.totalImages} files)
+          </span>
         )}
       </div>
     </div>
