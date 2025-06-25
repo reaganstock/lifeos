@@ -107,7 +107,7 @@ async function makeNotionAPICall({ endpoint, method = 'GET', body, accessToken }
   }
   
   console.log(`✅ Notion API call successful: ${method} ${endpoint}`)
-  
+
   return new Response(
     JSON.stringify(data),
     { 

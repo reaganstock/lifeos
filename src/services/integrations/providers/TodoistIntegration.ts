@@ -7,6 +7,7 @@ import {
   BaseIntegration as IBaseIntegration
 } from '../types';
 import { IntegrationTokenService } from '../../integrationTokenService';
+import { supabase } from '../../../lib/supabase';
 // Types will be imported from the main app
 type Item = any;
 type ItemType = 'todo' | 'note' | 'event' | 'goal' | 'routine';
@@ -35,10 +36,16 @@ export class TodoistIntegration extends BaseIntegration {
   }
 
   async authenticate(): Promise<void> {
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw this.createError('NO_USER', 'User not authenticated');
+    }
+
     // Try to load token from secure storage first
-    const storedToken = await IntegrationTokenService.getToken('todoist');
+    const storedToken = await IntegrationTokenService.getToken(user.id, 'todoist');
     if (storedToken) {
-      console.log('🔐 Loaded Todoist token from secure storage');
+      console.log('🔐 Loaded Todoist token from Supabase');
       this.accessToken = storedToken.access_token;
     } else if (!this.accessToken) {
       throw this.createError('NO_TOKEN', 'Todoist API token is required');
@@ -52,11 +59,13 @@ export class TodoistIntegration extends BaseIntegration {
 
     // Store token securely if we have one and it's valid
     if (this.accessToken && !storedToken) {
-      await IntegrationTokenService.storeToken('todoist', {
+      await IntegrationTokenService.storeToken({
+        user_id: user.id,
+        provider: 'todoist',
         access_token: this.accessToken,
         token_type: 'Bearer'
       });
-      console.log('🔐 Stored Todoist token securely');
+      console.log('🔐 Stored Todoist token securely in Supabase');
     }
 
     this.setStatus('connected');

@@ -1,6 +1,7 @@
 import { BaseIntegration } from './base/BaseIntegration';
 import { TodoistIntegration } from './providers/TodoistIntegration';
 import { GoogleCalendarIntegration } from './providers/GoogleCalendarIntegration';
+import { MicrosoftCalendarIntegration } from './providers/MicrosoftCalendarIntegration';
 import { NotionIntegration } from './providers/NotionIntegration';
 import { YouTubeIntegration } from './providers/YouTubeIntegration';
 
@@ -15,6 +16,7 @@ import {
 } from './types';
 
 import { IntegrationTokenService } from '../integrationTokenService';
+import { supabase } from '../../lib/supabase';
 
 export class IntegrationManager {
   private integrations: Map<string, BaseIntegration> = new Map();
@@ -129,7 +131,7 @@ export class IntegrationManager {
   }
 
   private isProviderImplemented(provider: IntegrationProvider): boolean {
-    const implemented = ['todoist', 'google-calendar', 'notion', 'youtube'];
+    const implemented = ['todoist', 'google-calendar', 'microsoft-calendar', 'notion', 'youtube'];
     return implemented.includes(provider);
   }
 
@@ -159,6 +161,9 @@ export class IntegrationManager {
         break;
       case 'google-calendar':
         integration = new GoogleCalendarIntegration(baseConfig);
+        break;
+      case 'microsoft-calendar':
+        integration = new MicrosoftCalendarIntegration(baseConfig);
         break;
       case 'notion':
         integration = new NotionIntegration(baseConfig);
@@ -376,6 +381,27 @@ export class IntegrationManager {
     return GoogleCalendarIntegration.getOAuthUrl(clientId, redirectUri);
   }
 
+  static async getMicrosoftCalendarOAuthUrl(clientId: string, redirectUri: string): Promise<string> {
+    console.log('🔐 Generating Microsoft OAuth URL with PKCE...');
+    const { url, codeVerifier } = await MicrosoftCalendarIntegration.getOAuthUrl(clientId, redirectUri);
+    
+    console.log('🔐 Generated code verifier length:', codeVerifier.length);
+    console.log('🔐 Storing code verifier in sessionStorage...');
+    
+    // Store the code verifier for later use in token exchange (both session and local storage)
+    sessionStorage.setItem('microsoft_code_verifier', codeVerifier);
+    localStorage.setItem('microsoft_code_verifier', codeVerifier);
+    
+    // Verify it was stored
+    const storedSession = sessionStorage.getItem('microsoft_code_verifier');
+    const storedLocal = localStorage.getItem('microsoft_code_verifier');
+    console.log('🔐 Verification - sessionStorage:', storedSession ? 'Successfully stored' : 'Failed to store');
+    console.log('🔐 Verification - localStorage:', storedLocal ? 'Successfully stored' : 'Failed to store');
+    
+    console.log('🔗 Generated OAuth URL:', url.substring(0, 100) + '...');
+    return url;
+  }
+
   static getNotionOAuthUrl(): string {
     const config = IntegrationManager.OAUTH_CONFIGS.notion;
     return NotionIntegration.getOAuthUrl(config.clientId, config.redirectUri);
@@ -398,6 +424,34 @@ export class IntegrationManager {
     redirectUri: string
   ): Promise<{ access_token: string; refresh_token: string; expires_in: number }> {
     return GoogleCalendarIntegration.exchangeCodeForToken(code, clientId, clientSecret, redirectUri);
+  }
+
+  static async exchangeMicrosoftCode(
+    code: string, 
+    clientId: string, 
+    clientSecret: string, 
+    redirectUri: string
+  ): Promise<{ access_token: string; refresh_token: string; expires_in: number }> {
+    // Get the stored code verifier for PKCE - try both storages
+    let codeVerifier = sessionStorage.getItem('microsoft_code_verifier');
+    
+    if (!codeVerifier) {
+      codeVerifier = localStorage.getItem('microsoft_code_verifier');
+      console.log('🔐 Code verifier not in sessionStorage, trying localStorage:', codeVerifier ? 'Found' : 'Not found');
+    } else {
+      console.log('🔐 Retrieved code verifier from sessionStorage: Found');
+    }
+    
+    // Clean up the stored verifier from both storages
+    if (codeVerifier) {
+      sessionStorage.removeItem('microsoft_code_verifier');
+      localStorage.removeItem('microsoft_code_verifier');
+      console.log('🧹 Cleaned up stored code verifier from both storages');
+    } else {
+      console.log('❌ No code verifier found in either storage');
+    }
+    
+    return MicrosoftCalendarIntegration.exchangeCodeForToken(code, clientId, clientSecret, redirectUri, codeVerifier || undefined);
   }
 
   static async exchangeNotionCode(
@@ -441,51 +495,74 @@ export class IntegrationManager {
     }
   }
 
-  // Load existing integrations from stored tokens
+  // Load existing integrations from Supabase tokens
   private async loadExistingIntegrations(): Promise<void> {
-    const supportedProviders: IntegrationProvider[] = ['todoist', 'notion', 'google-calendar', 'youtube'];
-    console.log(`🔍 Checking for existing integrations for providers:`, supportedProviders);
-    
-    for (const provider of supportedProviders) {
-      try {
-        console.log(`🔍 Checking for stored ${provider} token...`);
-        const storedToken = await IntegrationTokenService.getToken(provider);
-        if (storedToken) {
-          console.log(`🔐 Found stored token for ${provider}, recreating integration...`, {
-            provider,
-            hasAccessToken: !!storedToken.access_token,
-            hasRefreshToken: !!storedToken.refresh_token,
-            workspaceName: storedToken.workspace_name
-          });
-          
-          // Create integration with stored token
-          const integrationId = await this.createIntegration(provider, {}, {
-            accessToken: storedToken.access_token || undefined,
-            refreshToken: storedToken.refresh_token || undefined,
-            apiKey: storedToken.access_token || undefined // For API key based providers like Todoist
-          });
-          
-          console.log(`🆔 Created integration with ID: ${integrationId}`);
-          
-          // Test the connection to ensure it's still valid
-          try {
-            await this.authenticateIntegration(integrationId);
-            console.log(`✅ Successfully reconnected ${provider} integration`);
-          } catch (error) {
-            console.warn(`⚠️ Failed to authenticate stored ${provider} integration:`, error);
-            // Remove the invalid integration
-            this.removeIntegration(integrationId);
-          }
-        } else {
-          console.log(`📝 No stored token found for ${provider}`);
-        }
-      } catch (error) {
-        console.warn(`⚠️ Failed to load ${provider} integration:`, error);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.log('👤 No authenticated user - skipping token loading');
+        return;
       }
+
+      console.log('🔍 Loading stored integration tokens from Supabase...');
+      const tokens = await IntegrationTokenService.getAllTokens(user.id);
+      
+      if (tokens.length === 0) {
+        console.log('📝 No stored integration tokens found');
+        return;
+      }
+
+      console.log(`🔑 Found ${tokens.length} stored integration tokens`);
+      
+      // Create integrations for each stored token (but don't authenticate yet)
+      const authenticationPromises: Promise<void>[] = [];
+      
+      for (const token of tokens) {
+        try {
+          console.log(`🔧 Restoring ${token.provider} integration...`);
+          
+          const integrationId = await this.createIntegration(
+            token.provider as IntegrationProvider,
+            {
+              name: this.configs.get(token.provider as IntegrationProvider)?.name || token.provider,
+              description: this.configs.get(token.provider as IntegrationProvider)?.description || ''
+            },
+            {
+              accessToken: token.access_token,
+              refreshToken: token.refresh_token || undefined
+            }
+          );
+
+          // Queue authentication for later (parallel processing)
+          const integration = this.getIntegration(integrationId);
+          if (integration) {
+            authenticationPromises.push(
+              integration.authenticate().then(() => {
+                console.log(`✅ Restored and authenticated ${token.provider} integration`);
+              }).catch(error => {
+                console.error(`❌ Failed to authenticate ${token.provider} integration:`, error);
+                integration.setStatus('error');
+              })
+            );
+          }
+        } catch (error) {
+          console.error(`❌ Failed to restore ${token.provider} integration:`, error);
+        }
+      }
+      
+      console.log(`🚀 Created ${tokens.length} integrations, authenticating in parallel...`);
+      
+      // Don't wait for authentication to complete - let it happen in background
+      Promise.all(authenticationPromises).then(() => {
+        const connectedCount = this.getConnectedIntegrations().length;
+        console.log(`🎉 Successfully authenticated ${connectedCount} integrations`);
+      }).catch(error => {
+        console.warn('⚠️ Some integrations failed to authenticate:', error);
+      });
+      
+    } catch (error) {
+      console.warn('⚠️ Failed to load integration tokens from Supabase:', error);
     }
-    
-    const loadedCount = this.integrations.size;
-    console.log(`🔗 Finished loading existing integrations. Total loaded: ${loadedCount}`);
   }
 }
 

@@ -83,6 +83,59 @@ export interface GoogleCalendarEvent {
   updated: string;
 }
 
+export interface MicrosoftCalendarEvent {
+  id: string;
+  subject: string;
+  body?: {
+    content: string;
+    contentType: 'text' | 'html';
+  };
+  start?: {
+    dateTime: string;
+    timeZone: string;
+  } | {
+    date: string;
+  };
+  end?: {
+    dateTime: string;
+    timeZone: string;
+  } | {
+    date: string;
+  };
+  location?: {
+    displayName: string;
+    address?: any;
+  };
+  isAllDay?: boolean;
+  organizer?: {
+    emailAddress: {
+      name: string;
+      address: string;
+    };
+  };
+  attendees?: Array<{
+    emailAddress: {
+      name: string;
+      address: string;
+    };
+    status: {
+      response: string;
+      time: string;
+    };
+  }>;
+  importance?: 'low' | 'normal' | 'high';
+  sensitivity?: 'normal' | 'personal' | 'private' | 'confidential';
+  showAs?: 'free' | 'tentative' | 'busy' | 'oof' | 'workingElsewhere' | 'unknown';
+  webLink?: string;
+  createdDateTime?: string;
+  lastModifiedDateTime?: string;
+  categories?: string[];
+  isOnlineMeeting?: boolean;
+  onlineMeeting?: {
+    joinUrl: string;
+  };
+}
+
 export interface NotionPage {
   id: string;
   title: string;

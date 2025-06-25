@@ -6,6 +6,8 @@ import {
   GoogleCalendarEvent,
   BaseIntegration as IBaseIntegration
 } from '../types';
+import { IntegrationTokenService } from '../../integrationTokenService';
+import { supabase } from '../../../lib/supabase';
 
 // Types will be imported from the main app
 type Item = any;
@@ -35,13 +37,37 @@ export class GoogleCalendarIntegration extends BaseIntegration {
   }
 
   async authenticate(): Promise<void> {
-    if (!this.accessToken) {
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw this.createError('NO_USER', 'User not authenticated');
+    }
+
+    // Try to load token from secure storage first
+    const storedToken = await IntegrationTokenService.getToken(user.id, 'google_calendar');
+    if (storedToken) {
+      console.log('🔐 Loaded Google Calendar token from Supabase');
+      this.accessToken = storedToken.access_token;
+      this.refreshToken = storedToken.refresh_token || undefined;
+    } else if (!this.accessToken) {
       throw this.createError('NO_TOKEN', 'Google Calendar access token is required');
     }
 
     const isValid = await this.testConnection();
     if (!isValid) {
       throw this.createError('INVALID_TOKEN', 'Invalid Google Calendar access token');
+    }
+
+    // Store token securely if we have one and it's valid
+    if (this.accessToken && !storedToken) {
+      await IntegrationTokenService.storeToken({
+        user_id: user.id,
+        provider: 'google_calendar',
+        access_token: this.accessToken,
+        refresh_token: this.refreshToken || null,
+        token_type: 'Bearer'
+      });
+      console.log('🔐 Stored Google Calendar token securely in Supabase');
     }
 
     this.setStatus('connected');
@@ -324,6 +350,30 @@ export class GoogleCalendarIntegration extends BaseIntegration {
       throw new Error(`OAuth exchange failed: ${response.statusText}`);
     }
 
-    return await response.json();
+    const result = await response.json();
+
+    // Store the token securely in Supabase
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const expiresAt = new Date(Date.now() + result.expires_in * 1000).toISOString();
+        
+        await IntegrationTokenService.storeToken({
+          user_id: user.id,
+          provider: 'google_calendar',
+          access_token: result.access_token,
+          refresh_token: result.refresh_token,
+          token_type: 'Bearer',
+          expires_at: expiresAt
+        });
+        console.log('🔐 Stored Google Calendar token securely in Supabase');
+      } else {
+        console.warn('⚠️ Cannot store token: User not authenticated');
+      }
+    } catch (error) {
+      console.error('⚠️ Failed to store token securely (but OAuth still succeeded):', error);
+    }
+
+    return result;
   }
 } 

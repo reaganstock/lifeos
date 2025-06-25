@@ -7,6 +7,7 @@ import {
   BaseIntegration as IBaseIntegration
 } from '../types';
 import { IntegrationTokenService } from '../../integrationTokenService';
+import { supabase } from '../../../lib/supabase';
 
 // Types will be imported from the main app
 type Item = any;
@@ -39,10 +40,16 @@ export class NotionIntegration extends BaseIntegration {
   }
 
   async authenticate(): Promise<void> {
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw this.createError('NO_USER', 'User not authenticated');
+    }
+
     // Try to load token from secure storage first
-    const storedToken = await IntegrationTokenService.getToken('notion');
+    const storedToken = await IntegrationTokenService.getToken(user.id, 'notion');
     if (storedToken) {
-      console.log('🔐 Loaded Notion token from secure storage');
+      console.log('🔐 Loaded Notion token from Supabase');
       this.accessToken = storedToken.access_token;
     } else if (!this.accessToken) {
       throw this.createError('NO_TOKEN', 'Notion integration token is required');
@@ -55,11 +62,13 @@ export class NotionIntegration extends BaseIntegration {
 
     // Store token securely if we have one and it's valid
     if (this.accessToken && !storedToken) {
-      await IntegrationTokenService.storeToken('notion', {
+      await IntegrationTokenService.storeToken({
+        user_id: user.id,
+        provider: 'notion',
         access_token: this.accessToken,
         token_type: 'Bearer'
       });
-      console.log('🔐 Stored Notion token securely');
+      console.log('🔐 Stored Notion token securely in Supabase');
     }
 
     this.setStatus('connected');
@@ -698,13 +707,20 @@ export class NotionIntegration extends BaseIntegration {
       
       // Store the token securely in Supabase
       try {
-        await IntegrationTokenService.storeToken('notion', {
-          access_token: result.access_token,
-          token_type: 'Bearer',
-          bot_id: result.bot_id,
-          workspace_name: result.workspace_name
-        });
-        console.log('🔐 Stored Notion token securely in Supabase');
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await IntegrationTokenService.storeToken({
+            user_id: user.id,
+            provider: 'notion',
+            access_token: result.access_token,
+            token_type: 'Bearer',
+            bot_id: result.bot_id,
+            workspace_name: result.workspace_name
+          });
+          console.log('🔐 Stored Notion token securely in Supabase');
+        } else {
+          console.warn('⚠️ Cannot store token: User not authenticated');
+        }
       } catch (error) {
         console.error('⚠️ Failed to store token securely (but OAuth still succeeded):', error);
       }

@@ -109,12 +109,31 @@ function AppContent() {
       const state = urlParams.get('state');
       
       if (code) {
+        // Prevent duplicate processing
+        const processedKey = `oauth_processed_${code.substring(0, 10)}`;
+        if (sessionStorage.getItem(processedKey)) {
+          console.log('🔗 OAuth code already processed, skipping...');
+          return;
+        }
+        
+        // Mark as being processed
+        sessionStorage.setItem(processedKey, 'true');
+        
         console.log('🔗 OAuth callback detected with code:', code.substring(0, 10) + '...');
+        console.log('🕐 Processing at:', new Date().toISOString());
         
         try {
           // Determine which provider based on URL or state
           const isNotionCallback = window.location.pathname.includes('/auth/notion/callback') || 
                                  window.location.search.includes('notion');
+          const isGoogleCallback = window.location.pathname.includes('/auth/google/callback') || 
+                                 window.location.search.includes('google') ||
+                                 state?.includes('google');
+          const isMicrosoftCallback = window.location.search.includes('microsoft') ||
+                                    state?.includes('microsoft') ||
+                                    // Microsoft OAuth doesn't always include identifiers, so check for typical Microsoft OAuth domains/patterns
+                                    (code && !isNotionCallback && !isGoogleCallback && 
+                                     (code.startsWith('M.') || code.includes('microsoftonline') || urlParams.get('session_state')));
           
           if (isNotionCallback) {
             console.log('🔗 Processing Notion OAuth callback...');
@@ -138,12 +157,66 @@ function AppContent() {
             // Set a flag to auto-connect when user opens integration manager
             sessionStorage.setItem('notion_auto_connect', 'true');
             
+          } else if (isGoogleCallback) {
+            console.log('🔗 Processing Google Calendar OAuth callback...');
+            
+            const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID!;
+            const clientSecret = process.env.REACT_APP_GOOGLE_CLIENT_SECRET!;
+            const redirectUri = `${window.location.origin}/oauth/callback`;
+            
+            // Exchange code for access token
+            const tokenResponse = await IntegrationManager.exchangeGoogleCode(code, clientId, clientSecret, redirectUri);
+            console.log('✅ Google Calendar token exchange successful');
+            
+            // Store the access token temporarily
+            sessionStorage.setItem('google_access_token', tokenResponse.access_token);
+            sessionStorage.setItem('google_refresh_token', tokenResponse.refresh_token);
+            
+            showNotification('✅ Successfully connected to Google Calendar', 'success');
+            
+            // Clean up URL and redirect back to app
+            window.history.replaceState({}, document.title, '/');
+            
+            // Set a flag to auto-connect when user opens integration manager
+            sessionStorage.setItem('google_auto_connect', 'true');
+
+          } else if (isMicrosoftCallback) {
+            console.log('🔗 Processing Microsoft Calendar OAuth callback...');
+            console.log('🔑 Using client ID:', process.env.REACT_APP_MICROSOFT_CLIENT_ID?.substring(0, 8) + '...');
+            console.log('🕐 Code received at:', new Date().toISOString());
+            
+            const clientId = process.env.REACT_APP_MICROSOFT_CLIENT_ID!;
+            const redirectUri = `${window.location.origin}/oauth/callback`;
+            
+            console.log('🔄 Starting token exchange immediately (PKCE flow - no client secret)...');
+            // Exchange code for access token using PKCE (no client secret for SPA)
+            const tokenResponse = await IntegrationManager.exchangeMicrosoftCode(code, clientId, '', redirectUri);
+            console.log('✅ Microsoft Calendar token exchange successful');
+            
+            // Store the access token temporarily
+            sessionStorage.setItem('microsoft_access_token', tokenResponse.access_token);
+            sessionStorage.setItem('microsoft_refresh_token', tokenResponse.refresh_token);
+            
+            showNotification('✅ Successfully connected to Microsoft Calendar', 'success');
+            
+            // Clean up URL and redirect back to app
+            window.history.replaceState({}, document.title, '/');
+            
+            // Set a flag to auto-connect when user opens integration manager
+            sessionStorage.setItem('microsoft_auto_connect', 'true');
+            
           } else {
             console.log('🔗 Unknown OAuth provider in callback');
           }
           
         } catch (error) {
           console.error('❌ OAuth callback failed:', error);
+          console.error('🕐 Error occurred at:', new Date().toISOString());
+          
+          // Clean up the processed flag on error so it can be retried
+          const processedKey = `oauth_processed_${code.substring(0, 10)}`;
+          sessionStorage.removeItem(processedKey);
+          
           showNotification(`❌ Authentication failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
           
           // Clean up URL even on error

@@ -36,8 +36,11 @@ export default function IntegrationManager({ isOpen, onClose, onImport, categori
       initializeAndLoadIntegrations();
       
       // Auto-connect if returning from OAuth
-      const shouldAutoConnect = sessionStorage.getItem('notion_auto_connect');
-      if (shouldAutoConnect === 'true') {
+      const shouldAutoConnectNotion = sessionStorage.getItem('notion_auto_connect');
+      const shouldAutoConnectGoogle = sessionStorage.getItem('google_auto_connect');
+      const shouldAutoConnectMicrosoft = sessionStorage.getItem('microsoft_auto_connect');
+      
+      if (shouldAutoConnectNotion === 'true') {
         console.log('🔗 Auto-connecting Notion after OAuth...');
         setSelectedProvider('notion');
         // Auto-trigger connection after setting provider
@@ -69,7 +72,87 @@ export default function IntegrationManager({ isOpen, onClose, onImport, categori
               console.log('✅ Notion auto-connection successful');
             }
           } catch (error) {
-            console.error('❌ Auto-connection failed:', error);
+            console.error('❌ Notion auto-connection failed:', error);
+            setIsConnecting(false);
+          }
+        }, 500);
+      } else if (shouldAutoConnectGoogle === 'true') {
+        console.log('🔗 Auto-connecting Google Calendar after OAuth...');
+        setSelectedProvider('google-calendar');
+        // Auto-trigger connection after setting provider
+        setTimeout(async () => {
+          try {
+            const storedAccessToken = sessionStorage.getItem('google_access_token');
+            const storedRefreshToken = sessionStorage.getItem('google_refresh_token');
+            if (storedAccessToken) {
+              setIsConnecting(true);
+              
+              const integrationId = await integrationManager.createIntegration(
+                'google-calendar',
+                {},
+                { 
+                  accessToken: storedAccessToken,
+                  refreshToken: storedRefreshToken || undefined
+                }
+              );
+
+              await integrationManager.authenticateIntegration(integrationId);
+              
+              // Clear stored tokens
+              sessionStorage.removeItem('google_access_token');
+              sessionStorage.removeItem('google_refresh_token');
+              sessionStorage.removeItem('google_auto_connect');
+              
+              // Reload and switch to connected tab
+              loadIntegrations();
+              setActiveTab('connected');
+              setSelectedProvider(null);
+              setIsConnecting(false);
+              
+              console.log('✅ Google Calendar auto-connection successful');
+            }
+          } catch (error) {
+            console.error('❌ Google Calendar auto-connection failed:', error);
+            setIsConnecting(false);
+          }
+        }, 500);
+      } else if (shouldAutoConnectMicrosoft === 'true') {
+        console.log('🔗 Auto-connecting Microsoft Calendar after OAuth...');
+        setSelectedProvider('microsoft-calendar');
+        // Auto-trigger connection after setting provider
+        setTimeout(async () => {
+          try {
+            const storedAccessToken = sessionStorage.getItem('microsoft_access_token');
+            const storedRefreshToken = sessionStorage.getItem('microsoft_refresh_token');
+            if (storedAccessToken) {
+              setIsConnecting(true);
+              
+              const integrationId = await integrationManager.createIntegration(
+                'microsoft-calendar',
+                {},
+                { 
+                  accessToken: storedAccessToken,
+                  refreshToken: storedRefreshToken || undefined
+                }
+              );
+
+              await integrationManager.authenticateIntegration(integrationId);
+              
+              // Clear stored tokens
+              sessionStorage.removeItem('microsoft_access_token');
+              sessionStorage.removeItem('microsoft_refresh_token');
+              sessionStorage.removeItem('microsoft_auto_connect');
+              
+              // Reload and switch to connected tab
+              loadIntegrations();
+              setActiveTab('connected');
+              setSelectedProvider(null);
+              setIsConnecting(false);
+              
+              console.log('✅ Microsoft Calendar auto-connection successful');
+            }
+          } catch (error) {
+            console.error('❌ Microsoft Calendar auto-connection failed:', error);
             setIsConnecting(false);
           }
         }, 500);
@@ -134,6 +217,34 @@ export default function IntegrationManager({ isOpen, onClose, onImport, categori
           sessionStorage.removeItem('notion_access_token');
           sessionStorage.removeItem('notion_workspace');
           sessionStorage.removeItem('notion_auto_connect');
+        }
+      } else if (selectedProvider === 'google-calendar') {
+        const storedAccessToken = sessionStorage.getItem('google_access_token');
+        const storedRefreshToken = sessionStorage.getItem('google_refresh_token');
+        
+        if (storedAccessToken) {
+          finalCredentials.accessToken = storedAccessToken;
+          finalCredentials.refreshToken = storedRefreshToken || undefined;
+          console.log('🔗 Using stored Google Calendar access token');
+          
+          // Clear the stored tokens after use
+          sessionStorage.removeItem('google_access_token');
+          sessionStorage.removeItem('google_refresh_token');
+          sessionStorage.removeItem('google_auto_connect');
+        }
+      } else if (selectedProvider === 'microsoft-calendar') {
+        const storedAccessToken = sessionStorage.getItem('microsoft_access_token');
+        const storedRefreshToken = sessionStorage.getItem('microsoft_refresh_token');
+        
+        if (storedAccessToken) {
+          finalCredentials.accessToken = storedAccessToken;
+          finalCredentials.refreshToken = storedRefreshToken || undefined;
+          console.log('🔗 Using stored Microsoft Calendar access token');
+          
+          // Clear the stored tokens after use
+          sessionStorage.removeItem('microsoft_access_token');
+          sessionStorage.removeItem('microsoft_refresh_token');
+          sessionStorage.removeItem('microsoft_auto_connect');
         }
       }
 
@@ -297,7 +408,7 @@ export default function IntegrationManager({ isOpen, onClose, onImport, categori
     }
   };
 
-  const getOAuthUrl = (provider: IntegrationProvider) => {
+  const getOAuthUrl = async (provider: IntegrationProvider): Promise<string | null> => {
     switch (provider) {
       case 'notion':
         return (integrationManager.constructor as any).getNotionOAuthUrl();
@@ -307,9 +418,13 @@ export default function IntegrationManager({ isOpen, onClose, onImport, categori
         const redirectUri = `${window.location.origin}/oauth/callback`;
         return (integrationManager.constructor as any).getTodoistOAuthUrl(clientId, redirectUri);
       case 'google-calendar':
-        const gcClientId = process.env.REACT_APP_CLIENT_ID || 'your-client-id';
+        const gcClientId = process.env.REACT_APP_GOOGLE_CLIENT_ID || 'your-client-id';
         const gcRedirectUri = `${window.location.origin}/oauth/callback`;
         return (integrationManager.constructor as any).getGoogleCalendarOAuthUrl(gcClientId, gcRedirectUri);
+      case 'microsoft-calendar':
+        const msClientId = process.env.REACT_APP_MICROSOFT_CLIENT_ID || 'your-client-id';
+        const msRedirectUri = `${window.location.origin}/oauth/callback`;
+        return await (integrationManager.constructor as any).getMicrosoftCalendarOAuthUrl(msClientId, msRedirectUri);
       default:
         return null;
     }
@@ -422,26 +537,30 @@ export default function IntegrationManager({ isOpen, onClose, onImport, categori
                       </div>
                     )}
 
-                    {['google-calendar', 'notion'].includes(selectedProvider) && (
+                    {['google-calendar', 'microsoft-calendar', 'notion'].includes(selectedProvider) && (
                       <div className="space-y-2">
                         <p className="text-sm text-gray-600 dark:text-gray-400">
                           This integration uses OAuth authentication.
                         </p>
-                        <a
-                          href={getOAuthUrl(selectedProvider) || '#'}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          onClick={async () => {
+                            const url = await getOAuthUrl(selectedProvider);
+                            if (url) {
+                              console.log('🔗 Opening OAuth URL:', url);
+                              window.open(url, '_blank', 'noopener,noreferrer');
+                            }
+                          }}
                           className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                         >
                           🔗 Authorize with {availableProviders.find(p => p.provider === selectedProvider)?.name}
-                        </a>
+                        </button>
                       </div>
                     )}
 
                     <div className="flex space-x-3">
                       <button
                         onClick={handleConnect}
-                        disabled={isConnecting || (!credentials.apiKey && !['google-calendar', 'notion'].includes(selectedProvider))}
+                        disabled={isConnecting || (!credentials.apiKey && !['google-calendar', 'microsoft-calendar', 'notion'].includes(selectedProvider))}
                         className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         {isConnecting ? '🔄 Connecting...' : '✅ Connect'}
