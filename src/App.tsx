@@ -22,6 +22,7 @@ import './App.css';
 import { useHybridSync } from './hooks/useHybridSync';
 import { cleanupOldAudio } from './utils/audioStorage';
 import { cleanupOldImages } from './utils/imageStorage';
+import { IntegrationManager } from './services/integrations/IntegrationManager';
 
 function AppContent() {
   const { user, loading: authLoading, initialized: authInitialized } = useAuthContext();
@@ -99,6 +100,60 @@ function AppContent() {
     return saved ? Math.min(parseInt(saved), window.innerWidth / 2) : Math.min(400, window.innerWidth / 2);
   });
   const [isAiSidebarCollapsed, setIsAiSidebarCollapsed] = useState(false);
+
+  // OAuth callback handling
+  useEffect(() => {
+    const handleOAuthCallback = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      const state = urlParams.get('state');
+      
+      if (code) {
+        console.log('🔗 OAuth callback detected with code:', code.substring(0, 10) + '...');
+        
+        try {
+          // Determine which provider based on URL or state
+          const isNotionCallback = window.location.pathname.includes('/auth/notion/callback') || 
+                                 window.location.search.includes('notion');
+          
+          if (isNotionCallback) {
+            console.log('🔗 Processing Notion OAuth callback...');
+            
+            // Exchange code for access token
+            const tokenResponse = await IntegrationManager.exchangeNotionCode(code);
+            console.log('✅ Notion token exchange successful:', {
+              workspace: tokenResponse.workspace_name,
+              bot_id: tokenResponse.bot_id
+            });
+            
+            // Store the access token temporarily
+            sessionStorage.setItem('notion_access_token', tokenResponse.access_token);
+            sessionStorage.setItem('notion_workspace', tokenResponse.workspace_name);
+            
+            showNotification(`✅ Successfully connected to Notion workspace: ${tokenResponse.workspace_name}`, 'success');
+            
+            // Clean up URL and redirect back to app
+            window.history.replaceState({}, document.title, '/');
+            
+            // Set a flag to auto-connect when user opens integration manager
+            sessionStorage.setItem('notion_auto_connect', 'true');
+            
+          } else {
+            console.log('🔗 Unknown OAuth provider in callback');
+          }
+          
+        } catch (error) {
+          console.error('❌ OAuth callback failed:', error);
+          showNotification(`❌ Authentication failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+          
+          // Clean up URL even on error
+          window.history.replaceState({}, document.title, '/');
+        }
+      }
+    };
+
+    handleOAuthCallback();
+  }, []);
 
   // ALWAYS use localStorage as primary data source for perfect UX
   const items = localItems;
@@ -278,6 +333,46 @@ function AppContent() {
 
   const { rehydrateVoiceNotes, syncStatus } = useHybridSync();
 
+  // Listen for localStorage changes from sync service
+  useEffect(() => {
+    const handleStorageSync = () => {
+      console.log('🔄 Sync detected - reloading localStorage data...');
+      const savedItems = localStorage.getItem('lifeStructureItems');
+      if (savedItems) {
+        try {
+          const parsedItems = JSON.parse(savedItems);
+          const formattedItems = parsedItems.map((item: any) => ({
+            ...item,
+            createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
+            updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
+            dueDate: item.dueDate ? new Date(item.dueDate) : undefined,
+            dateTime: item.dateTime ? new Date(item.dateTime) : undefined,
+            metadata: {
+              ...item.metadata,
+              eventDate: item.metadata?.eventDate ? new Date(item.metadata.eventDate) : undefined
+            }
+          }));
+          
+          console.log(`📊 Loaded ${formattedItems.length} items from localStorage after sync`);
+          setLocalItems(formattedItems);
+        } catch (error) {
+          console.error('Error parsing synced items:', error);
+        }
+      }
+    };
+
+    // Listen for storage events (sync updates)
+    window.addEventListener('storage', handleStorageSync);
+    
+    // Also listen for custom sync events
+    window.addEventListener('hybridSyncComplete', handleStorageSync);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageSync);
+      window.removeEventListener('hybridSyncComplete', handleStorageSync);
+    };
+  }, []);
+
   // Add this useEffect to handle post-refresh rehydration
   useEffect(() => {
     const handleVoiceNoteRehydration = async () => {
@@ -394,7 +489,7 @@ function AppContent() {
       case 'notes':
         return <GlobalNotes items={items} setItems={setItems} categories={supabaseCategories} />;
       case 'settings':
-        return <Settings />;
+        return <Settings items={items} setItems={setItems} categories={supabaseCategories} />;
       
       default:
         return (

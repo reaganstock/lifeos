@@ -30,6 +30,9 @@ export class GeminiService {
     deleteItem?: (id: string) => Promise<any>;
     bulkCreateItems?: (items: any[]) => Promise<any>;
     refreshData?: () => Promise<void>;
+    createCategory?: (category: any) => Promise<any>;
+    updateCategory?: (id: string, category: any) => Promise<any>;
+    deleteCategory?: (id: string) => Promise<any>;
   } = {};
 
   // Set Supabase callbacks for authenticated users
@@ -39,6 +42,9 @@ export class GeminiService {
     deleteItem?: (id: string) => Promise<any>;
     bulkCreateItems?: (items: any[]) => Promise<any>;
     refreshData?: () => Promise<void>;
+    createCategory?: (category: any) => Promise<any>;
+    updateCategory?: (id: string, category: any) => Promise<any>;
+    deleteCategory?: (id: string) => Promise<any>;
   }): void {
     this.supabaseCallbacks = callbacks;
     console.log('✅ GEMINI SERVICE: Supabase callbacks configured for authenticated user');
@@ -882,7 +888,48 @@ When you provide information about user's dashboard/items and they respond with 
 - "can you delete these?" = comprehensive deletion of all recently discussed items
 - Context carries across conversation - track what you've told the user, then honor comprehensive deletion requests
 - Example: If you say "You have 3 notes and 2 events" and user replies "can you delete these?" → Delete ALL notes AND events, not just one type
-- Be contextually intelligent - "these" refers to the full scope of what was recently discussed or displayed`;
+- Be contextually intelligent - "these" refers to the full scope of what was recently discussed or displayed
+
+🏗️ CATEGORY MANAGEMENT SYSTEM - FOUNDATIONAL CRITICAL:
+
+Categories are the FOUNDATION of the life management system. Handle with EXTREME CARE and comprehensive confirmation systems.
+
+WHEN TO CREATE CATEGORIES:
+- User explicitly requests "create a new category"
+- User mentions organizing life areas not covered by existing categories
+- User asks for category management or organization
+- User mentions specific life domains that need their own category
+
+CATEGORY CREATION PROTOCOL:
+1. ALWAYS confirm with user before creating categories
+2. Suggest appropriate icon and color based on category type
+3. Ask for description to clarify category purpose
+4. Use createCategory function with proper validation
+5. NEVER create categories without explicit user consent
+
+CATEGORY MODIFICATION PROTOCOL:
+1. Require EXPLICIT confirmation for all category changes
+2. For updates: Ask user to confirm each change (name, icon, color)
+3. For deletions: WARN about affecting all items in category
+4. ALWAYS offer migration options for items before deletion
+5. Use huge confirmation system for deletion: "Are you absolutely sure?"
+
+CATEGORY SAFETY RULES:
+- NEVER delete categories with items unless migration plan provided
+- ALWAYS validate category IDs exist before creating/updating items
+- Provide clear warnings about foundational impacts
+- Offer reorganization instead of deletion when appropriate
+
+CATEGORY INTELLIGENCE:
+- Suggest logical category names based on user's life areas
+- Recommend appropriate icons (💪 fitness, 💼 work, ❤️ relationships, etc.)
+- Choose colors that make sense (red for urgent, blue for work, green for health)
+- Group related categories logically
+
+EXAMPLES:
+"I want to create a Health & Fitness category" → Use createCategory with name="Health & Fitness", icon="💪", color="#10b981"
+"Change my work category color to red" → Use updateCategory with explicit confirmation
+"Delete my old hobby category" → Check for items, warn about impact, require confirmDeletion=true`;
   }
 
   getTools(categories: any[] = []) {
@@ -1446,6 +1493,104 @@ When you provide information about user's dashboard/items and they respond with 
           },
           required: ['title', 'daysOfWeek', 'time']
         }
+      },
+      {
+        name: 'createCategory',
+        description: 'Create a new life category. CRITICAL: Categories are foundational to the life management system. Use with huge confirmation system.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            name: {
+              type: 'STRING',
+              description: 'Name of the category (e.g., "Health & Fitness", "Career Development", "Relationships")'
+            },
+            icon: {
+              type: 'STRING',
+              description: 'Emoji icon for the category (e.g., "💪", "💼", "❤️", "🧠", "🎨")'
+            },
+            color: {
+              type: 'STRING',
+              description: 'Hex color code for the category (e.g., "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6")'
+            },
+            description: {
+              type: 'STRING',
+              description: 'Brief description of what this category encompasses'
+            }
+          },
+          required: ['name', 'icon', 'color']
+        }
+      },
+      {
+        name: 'updateCategory',
+        description: 'Update an existing category. CRITICAL: Categories are foundational - require explicit confirmation before changes.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            categoryId: {
+              type: 'STRING',
+              description: 'ID of the category to update'
+            },
+            name: {
+              type: 'STRING',
+              description: 'New name for the category'
+            },
+            icon: {
+              type: 'STRING',
+              description: 'New emoji icon for the category'
+            },
+            color: {
+              type: 'STRING',
+              description: 'New hex color code for the category'
+            },
+            description: {
+              type: 'STRING',
+              description: 'New description for the category'
+            }
+          },
+          required: ['categoryId']
+        }
+      },
+      {
+        name: 'deleteCategory',
+        description: 'Delete a category. CRITICAL: This will affect all items in the category. Requires explicit confirmation and migration plan.',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            categoryId: {
+              type: 'STRING',
+              description: 'ID of the category to delete'
+            },
+            migrateToCategoryId: {
+              type: 'STRING',
+              description: 'ID of category to move existing items to (required if category has items)'
+            },
+            confirmDeletion: {
+              type: 'BOOLEAN',
+              description: 'User must explicitly confirm deletion (required = true)'
+            }
+          },
+          required: ['categoryId', 'confirmDeletion']
+        }
+      },
+      {
+        name: 'reorganizeCategories',
+        description: 'Reorganize categories by order or grouping. Use for "reorganize my categories" or "change category order".',
+        parameters: {
+          type: 'OBJECT',
+          properties: {
+            categoryOrder: {
+              type: 'ARRAY',
+              items: { type: 'STRING' },
+              description: 'Array of category IDs in desired order'
+            },
+            groupingStrategy: {
+              type: 'STRING',
+              enum: ['priority', 'alphabetical', 'color', 'usage', 'custom'],
+              description: 'How to organize the categories'
+            }
+          },
+          required: ['groupingStrategy']
+        }
       }
     ];
   }
@@ -1493,6 +1638,14 @@ When you provide information about user's dashboard/items and they respond with 
         return await this.createItemWithConflictOverride(args);
       case 'createRecurringMultipleDays':
         return await this.createRecurringMultipleDays(args);
+      case 'createCategory':
+        return await this.createCategory(args);
+      case 'updateCategory':
+        return await this.updateCategory(args);
+      case 'deleteCategory':
+        return await this.deleteCategory(args);
+      case 'reorganizeCategories':
+        return await this.reorganizeCategories(args);
       default:
         throw new Error(`Function ${name} not implemented`);
     }
@@ -4786,12 +4939,6 @@ Please specify "delete this one" or "delete all" to proceed.`,
       if (canceledCategory === 'gym-calisthenics' || canceledCategory === 'cardio-running') {
         // If workout was canceled, find next available slot
         // const workoutEvents = filteredItems.filter(item =>  // TODO: Use for workout scheduling
-        const isWorkoutRelated = filteredItems.filter(item => 
-          item.type === 'event' && 
-          (item.categoryId === 'gym-calisthenics' || item.categoryId === 'cardio-running') &&
-          item.dateTime &&
-          new Date(item.dateTime) > canceledDateTime
-        );
         
         // Find the earliest available slot today or tomorrow
         const today = new Date();
@@ -4996,6 +5143,440 @@ Please specify "delete this one" or "delete all" to proceed.`,
     }
     
     return null;
+  }
+
+  // Category management functions
+  private async createCategory(args: any): Promise<any> {
+    console.log('🏗️ Creating category with args:', args);
+    
+    try {
+      // Validate required fields
+      if (!args.name || !args.icon || !args.color) {
+        return {
+          success: false,
+          function: 'createCategory',
+          result: {
+            message: 'Error: Category name, icon, and color are required.'
+          }
+        };
+      }
+
+      // Generate unique category ID
+      const categoryId = args.name.toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/\s+/g, '-')
+        .trim();
+      
+      const newCategory = {
+        id: categoryId,
+        name: args.name,
+        icon: args.icon,
+        color: args.color,
+        description: args.description || '',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      // Use Supabase if available, otherwise localStorage
+      if (this.supabaseCallbacks.createCategory) {
+        console.log('🔄 GEMINI SERVICE: Creating category via Supabase for authenticated user');
+        try {
+          const result = await this.supabaseCallbacks.createCategory(newCategory);
+          return {
+            success: true,
+            function: 'createCategory',
+            result: {
+              message: `✅ Created new category "${args.name}" ${args.icon}`,
+              category: result || newCategory,
+              created: 1
+            }
+          };
+        } catch (error) {
+          console.error('❌ GEMINI SERVICE: Supabase category creation failed:', error);
+          return {
+            success: false,
+            function: 'createCategory',
+            result: {
+              message: `❌ Failed to create category: ${error instanceof Error ? error.message : 'Unknown error'}`
+            }
+          };
+        }
+      } else {
+        // For localStorage mode, we'll store categories separately
+        console.log('🔄 GEMINI SERVICE: Creating category via localStorage for unauthenticated user');
+        const existingCategories = this.getStoredCategories();
+        
+        // Check for duplicate
+        const duplicate = existingCategories.find(cat => cat.id === categoryId || cat.name === args.name);
+        if (duplicate) {
+          return {
+            success: false,
+            function: 'createCategory',
+            result: {
+              message: `❌ Category "${args.name}" already exists.`
+            }
+          };
+        }
+
+        const updatedCategories = [...existingCategories, newCategory];
+        this.saveStoredCategories(updatedCategories);
+        
+        return {
+          success: true,
+          function: 'createCategory',
+          result: {
+            message: `✅ Created new category "${args.name}" ${args.icon}`,
+            category: newCategory,
+            created: 1
+          }
+        };
+      }
+    } catch (error) {
+      console.error('Error creating category:', error);
+      return {
+        success: false,
+        function: 'createCategory',
+        result: {
+          message: `❌ Error creating category: ${error instanceof Error ? error.message : 'Unknown error'}`
+        }
+      };
+    }
+  }
+
+  private async updateCategory(args: any): Promise<any> {
+    console.log('🔄 Updating category with args:', args);
+    
+    try {
+      if (!args.categoryId) {
+        return {
+          success: false,
+          function: 'updateCategory',
+          result: {
+            message: 'Error: Category ID is required for updates.'
+          }
+        };
+      }
+
+      // Use Supabase if available, otherwise localStorage
+      if (this.supabaseCallbacks.updateCategory) {
+        console.log('🔄 GEMINI SERVICE: Updating category via Supabase for authenticated user');
+        try {
+          const updateData = {
+            ...(args.name && { name: args.name }),
+            ...(args.icon && { icon: args.icon }),
+            ...(args.color && { color: args.color }),
+            ...(args.description !== undefined && { description: args.description }),
+            updatedAt: new Date()
+          };
+          
+          const result = await this.supabaseCallbacks.updateCategory(args.categoryId, updateData);
+          return {
+            success: true,
+            function: 'updateCategory',
+            result: {
+              message: `✅ Updated category "${args.name || args.categoryId}"`,
+              category: result,
+              updated: 1
+            }
+          };
+        } catch (error) {
+          console.error('❌ GEMINI SERVICE: Supabase category update failed:', error);
+          return {
+            success: false,
+            function: 'updateCategory',
+            result: {
+              message: `❌ Failed to update category: ${error instanceof Error ? error.message : 'Unknown error'}`
+            }
+          };
+        }
+      } else {
+        // For localStorage mode
+        console.log('🔄 GEMINI SERVICE: Updating category via localStorage for unauthenticated user');
+        const existingCategories = this.getStoredCategories();
+        const categoryIndex = existingCategories.findIndex(cat => cat.id === args.categoryId);
+        
+        if (categoryIndex === -1) {
+          return {
+            success: false,
+            function: 'updateCategory',
+            result: {
+              message: `❌ Category with ID "${args.categoryId}" not found.`
+            }
+          };
+        }
+
+        const updatedCategory = {
+          ...existingCategories[categoryIndex],
+          ...(args.name && { name: args.name }),
+          ...(args.icon && { icon: args.icon }),
+          ...(args.color && { color: args.color }),
+          ...(args.description !== undefined && { description: args.description }),
+          updatedAt: new Date()
+        };
+
+        existingCategories[categoryIndex] = updatedCategory;
+        this.saveStoredCategories(existingCategories);
+        
+        return {
+          success: true,
+          function: 'updateCategory',
+          result: {
+            message: `✅ Updated category "${updatedCategory.name}"`,
+            category: updatedCategory,
+            updated: 1
+          }
+        };
+      }
+    } catch (error) {
+      console.error('Error updating category:', error);
+      return {
+        success: false,
+        function: 'updateCategory',
+        result: {
+          message: `❌ Error updating category: ${error instanceof Error ? error.message : 'Unknown error'}`
+        }
+      };
+    }
+  }
+
+  private async deleteCategory(args: any): Promise<any> {
+    console.log('🗑️ Deleting category with args:', args);
+    
+    try {
+      if (!args.categoryId || !args.confirmDeletion) {
+        return {
+          success: false,
+          function: 'deleteCategory',
+          result: {
+            message: 'Error: Category ID and explicit confirmation are required for deletion.'
+          }
+        };
+      }
+
+      // Check for items in this category
+      const items = this.getStoredItems();
+      const categoryItems = items.filter(item => item.categoryId === args.categoryId);
+      
+      if (categoryItems.length > 0 && !args.migrateToCategoryId) {
+        return {
+          success: false,
+          function: 'deleteCategory',
+          result: {
+            message: `❌ Cannot delete category "${args.categoryId}" because it contains ${categoryItems.length} items. Please specify a category to migrate them to.`
+          }
+        };
+      }
+
+      // Migrate items if necessary
+      if (categoryItems.length > 0 && args.migrateToCategoryId) {
+        console.log(`🔄 Migrating ${categoryItems.length} items to category "${args.migrateToCategoryId}"`);
+        
+        const updatedItems = items.map(item => 
+          item.categoryId === args.categoryId 
+            ? { ...item, categoryId: args.migrateToCategoryId, updatedAt: new Date() }
+            : item
+        );
+        
+        this.saveStoredItems(updatedItems);
+      }
+
+      // Use Supabase if available, otherwise localStorage
+      if (this.supabaseCallbacks.deleteCategory) {
+        console.log('🔄 GEMINI SERVICE: Deleting category via Supabase for authenticated user');
+        try {
+          await this.supabaseCallbacks.deleteCategory(args.categoryId);
+          return {
+            success: true,
+            function: 'deleteCategory',
+            result: {
+              message: `✅ Deleted category "${args.categoryId}"${categoryItems.length > 0 ? ` and migrated ${categoryItems.length} items to "${args.migrateToCategoryId}"` : ''}`,
+              deleted: 1,
+              itemsMigrated: categoryItems.length
+            }
+          };
+        } catch (error) {
+          console.error('❌ GEMINI SERVICE: Supabase category deletion failed:', error);
+          return {
+            success: false,
+            function: 'deleteCategory',
+            result: {
+              message: `❌ Failed to delete category: ${error instanceof Error ? error.message : 'Unknown error'}`
+            }
+          };
+        }
+      } else {
+        // For localStorage mode
+        console.log('🔄 GEMINI SERVICE: Deleting category via localStorage for unauthenticated user');
+        const existingCategories = this.getStoredCategories();
+        const filteredCategories = existingCategories.filter(cat => cat.id !== args.categoryId);
+        
+        if (filteredCategories.length === existingCategories.length) {
+          return {
+            success: false,
+            function: 'deleteCategory',
+            result: {
+              message: `❌ Category with ID "${args.categoryId}" not found.`
+            }
+          };
+        }
+
+        this.saveStoredCategories(filteredCategories);
+        
+        return {
+          success: true,
+          function: 'deleteCategory',
+          result: {
+            message: `✅ Deleted category "${args.categoryId}"${categoryItems.length > 0 ? ` and migrated ${categoryItems.length} items to "${args.migrateToCategoryId}"` : ''}`,
+            deleted: 1,
+            itemsMigrated: categoryItems.length
+          }
+        };
+      }
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      return {
+        success: false,
+        function: 'deleteCategory',
+        result: {
+          message: `❌ Error deleting category: ${error instanceof Error ? error.message : 'Unknown error'}`
+        }
+      };
+    }
+  }
+
+  private async reorganizeCategories(args: any): Promise<any> {
+    console.log('🔄 Reorganizing categories with args:', args);
+    
+    try {
+      const categories = this.getStoredCategories();
+      let reorganizedCategories = [...categories];
+
+      switch (args.groupingStrategy) {
+        case 'alphabetical':
+          reorganizedCategories.sort((a, b) => a.name.localeCompare(b.name));
+          break;
+        case 'color':
+          reorganizedCategories.sort((a, b) => a.color.localeCompare(b.color));
+          break;
+        case 'usage':
+          // Sort by number of items in each category
+          const items = this.getStoredItems();
+          const categoryCounts = categories.map(cat => ({
+            ...cat,
+            itemCount: items.filter(item => item.categoryId === cat.id).length
+          }));
+          reorganizedCategories = categoryCounts
+            .sort((a, b) => b.itemCount - a.itemCount)
+            .map(({ itemCount, ...cat }) => cat);
+          break;
+        case 'custom':
+                     if (args.categoryOrder && Array.isArray(args.categoryOrder)) {
+             const orderMap = new Map(args.categoryOrder.map((id: string, index: number) => [id, index]));
+             reorganizedCategories.sort((a, b) => {
+               const orderA = orderMap.get(a.id) ?? 999;
+               const orderB = orderMap.get(b.id) ?? 999;
+               return (orderA as number) - (orderB as number);
+             });
+           }
+          break;
+        case 'priority':
+          // Keep current order but group by priority colors (red, orange, blue, green, etc.)
+          const priorityOrder = ['#ef4444', '#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#f97316'];
+          reorganizedCategories.sort((a, b) => {
+            const indexA = priorityOrder.indexOf(a.color);
+            const indexB = priorityOrder.indexOf(b.color);
+            return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
+          });
+          break;
+      }
+
+      // Add order property to categories
+      const categoriesWithOrder = reorganizedCategories.map((cat, index) => ({
+        ...cat,
+        order: index,
+        updatedAt: new Date()
+      }));
+
+      // Use Supabase if available, otherwise localStorage
+      if (this.supabaseCallbacks.updateCategory) {
+        console.log('🔄 GEMINI SERVICE: Reorganizing categories via Supabase for authenticated user');
+        try {
+          // Update each category with its new order
+          const updatePromises = categoriesWithOrder.map(cat => 
+            this.supabaseCallbacks.updateCategory!(cat.id, { order: cat.order, updatedAt: cat.updatedAt })
+          );
+          await Promise.all(updatePromises);
+          
+          return {
+            success: true,
+            function: 'reorganizeCategories',
+            result: {
+              message: `✅ Reorganized ${categories.length} categories by ${args.groupingStrategy}`,
+              categories: categoriesWithOrder,
+              strategy: args.groupingStrategy
+            }
+          };
+        } catch (error) {
+          console.error('❌ GEMINI SERVICE: Supabase category reorganization failed:', error);
+          return {
+            success: false,
+            function: 'reorganizeCategories',
+            result: {
+              message: `❌ Failed to reorganize categories: ${error instanceof Error ? error.message : 'Unknown error'}`
+            }
+          };
+        }
+      } else {
+        // For localStorage mode
+        console.log('🔄 GEMINI SERVICE: Reorganizing categories via localStorage for unauthenticated user');
+        this.saveStoredCategories(categoriesWithOrder);
+        
+        return {
+          success: true,
+          function: 'reorganizeCategories',
+          result: {
+            message: `✅ Reorganized ${categories.length} categories by ${args.groupingStrategy}`,
+            categories: categoriesWithOrder,
+            strategy: args.groupingStrategy
+          }
+        };
+      }
+    } catch (error) {
+      console.error('Error reorganizing categories:', error);
+      return {
+        success: false,
+        function: 'reorganizeCategories',
+        result: {
+          message: `❌ Error reorganizing categories: ${error instanceof Error ? error.message : 'Unknown error'}`
+        }
+      };
+    }
+  }
+
+  // Helper methods for category storage in localStorage
+  private getStoredCategories(): any[] {
+    try {
+      const stored = localStorage.getItem('lifeStructureCategories');
+      return stored ? JSON.parse(stored) : [];
+    } catch (error) {
+      console.error('Error reading categories from localStorage:', error);
+      return [];
+    }
+  }
+
+  private saveStoredCategories(categories: any[]): void {
+    try {
+      localStorage.setItem('lifeStructureCategories', JSON.stringify(categories));
+      console.log('💾 Saved', categories.length, 'categories to localStorage');
+      
+      // Dispatch custom event for real-time UI updates
+      window.dispatchEvent(new CustomEvent('categoriesModified', {
+        detail: { categories, timestamp: Date.now() }
+      }));
+      console.log('📡 Dispatched categoriesModified event for real-time updates');
+    } catch (error) {
+      console.error('❌ Failed to save categories:', error);
+    }
   }
 }
 

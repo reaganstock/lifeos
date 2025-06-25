@@ -169,6 +169,8 @@ class HybridSyncService {
             syncInProgress: false
           });
 
+          // Dispatch custom event to notify App component
+          window.dispatchEvent(new CustomEvent('hybridSyncComplete'));
           console.log('✅ Sync completed successfully');
           return; // Exit early after reset
         }
@@ -241,6 +243,8 @@ class HybridSyncService {
         syncInProgress: false
       });
 
+      // Dispatch custom event to notify App component
+      window.dispatchEvent(new CustomEvent('hybridSyncComplete'));
       console.log('✅ Sync completed successfully');
     } catch (error) {
       console.error('❌ Sync failed:', error);

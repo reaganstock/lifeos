@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Search, CalendarDays, MapPin, Clock, Target, Repeat, ChevronDown, ChevronUp, Calendar, Mic, MicOff, Play, Pause, Camera, Edit3, Save, X, MoreHorizontal, Maximize2, Trash2, CheckCircle, CheckCircle2, Circle, Star, Users, MessageSquare, Bookmark, Heart, Share, Eye, Loader2, FileText, RotateCcw, BowArrow, Link, ExternalLink, FolderOpen, Globe } from 'lucide-react';
+import { ArrowLeft, Plus, MapPin, Clock, Calendar, Mic, MicOff, Play, Pause, Camera, Edit3, Save, X, Maximize2, Trash2, CheckCircle, CheckCircle2, FileText, RotateCcw, BowArrow, Link, ExternalLink, FolderOpen, Globe, Brain } from 'lucide-react';
 import { Item, Category } from '../types';
 import { voiceService, VoiceRecording, TranscriptionResult } from '../services/voiceService';
 import LocalCategoryNotes from './LocalCategoryNotes';
+import CategoryKnowledge from './CategoryKnowledge';
+import { CategoryRAGService } from '../services/categoryRAG';
 
 interface CategoryPageProps {
   categoryId: string;
@@ -17,7 +19,7 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
   const [activeTab, setActiveTab] = useState<Item['type']>('todo');
   const [showAddModal, setShowAddModal] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
+
   const [currentRecording, setCurrentRecording] = useState<VoiceRecording | null>(null);
   const [shouldTranscribe, setShouldTranscribe] = useState(true);
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
@@ -72,6 +74,9 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
   
   // Track if AI Assistant is open (for hiding FAB)
   const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
+  
+  // Category Knowledge Modal
+  const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
 
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
@@ -1970,6 +1975,18 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
               </div>
               
               <div className="flex items-center space-x-3">
+                {/* Knowledge Chat Button */}
+                <button
+                  onClick={() => setShowKnowledgeModal(true)}
+                  className="p-3 bg-white/70 border border-gray-200/50 rounded-xl hover:bg-gray-50 transition-all duration-300 flex items-center space-x-2"
+                >
+                  <Brain className="w-5 h-5 text-purple-600" />
+                  <span className="text-sm font-medium text-gray-700">Knowledge</span>
+                  <span className="bg-purple-500 text-white text-xs rounded-full px-2 py-1">
+                    AI
+                  </span>
+                </button>
+                
                 {/* Context Links & Google Drive */}
                 <div className="relative">
                   <button
@@ -2595,6 +2612,17 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
           </div>
         );
       })()}
+
+      {/* Category Knowledge Modal */}
+      {showKnowledgeModal && (
+        <CategoryKnowledge
+          categoryId={categoryId}
+          category={category}
+          items={categoryItems}
+          contextLinks={contextLinks}
+          onClose={() => setShowKnowledgeModal(false)}
+        />
+      )}
     </div>
   );
 };

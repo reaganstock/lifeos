@@ -30,9 +30,67 @@ export const useHybridSync = () => {
         (window as any).debugSync = {
           manualSync: () => hybridSyncService.manualSync(),
           diagnoseSync: () => hybridSyncService.diagnoseSync(),
-          manualSyncWithDiagnostics: () => hybridSyncService.manualSyncWithDiagnostics()
+          manualSyncWithDiagnostics: () => hybridSyncService.manualSyncWithDiagnostics(),
+          forceReloadFromSupabase: async () => {
+            console.log('🔄 Forcing reload from Supabase...');
+            
+            // SAFETY: Backup current localStorage first
+            const currentItems = localStorage.getItem('lifeStructureItems');
+            const currentCategories = localStorage.getItem('lifeStructureCategories');
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            
+            if (currentItems) {
+              localStorage.setItem(`backup_items_${timestamp}`, currentItems);
+              console.log(`💾 Backed up current items to: backup_items_${timestamp}`);
+            }
+            if (currentCategories) {
+              localStorage.setItem(`backup_categories_${timestamp}`, currentCategories);
+              console.log(`💾 Backed up current categories to: backup_categories_${timestamp}`);
+            }
+            
+            // Clear sync metadata to trigger first-sync behavior
+            localStorage.removeItem('lifeOS_sync_metadata');
+            await hybridSyncService.manualSync();
+            console.log('✅ Forced reload complete');
+            
+            // Add recovery function to window for emergency use
+            (window as any).debugSync.recoverFromBackup = (backupTimestamp: string) => {
+              const backupItems = localStorage.getItem(`backup_items_${backupTimestamp}`);
+              const backupCategories = localStorage.getItem(`backup_categories_${backupTimestamp}`);
+              
+              if (backupItems) {
+                localStorage.setItem('lifeStructureItems', backupItems);
+                console.log('✅ Restored items from backup');
+              }
+              if (backupCategories) {
+                localStorage.setItem('lifeStructureCategories', backupCategories);
+                console.log('✅ Restored categories from backup');
+              }
+              
+              // Trigger reload
+              window.location.reload();
+            };
+            
+            console.log(`🛟 Recovery available: window.debugSync.recoverFromBackup('${timestamp}')`);
+          },
+          safeSyncToSupabase: async () => {
+            console.log('🔄 Safe sync: uploading all local data to Supabase first...');
+            
+            // Force upload ALL local items to Supabase (no content matching)
+            const localItems = JSON.parse(localStorage.getItem('lifeStructureItems') || '[]');
+            const localCategories = JSON.parse(localStorage.getItem('lifeStructureCategories') || '[]');
+            
+            console.log(`📤 Uploading ${localItems.length} items and ${localCategories.length} categories to Supabase...`);
+            
+            // This will force sync all local items regardless of content matching
+            localStorage.setItem('force_upload_all', 'true');
+            await hybridSyncService.manualSync();
+            localStorage.removeItem('force_upload_all');
+            
+            console.log('✅ Safe sync complete - all local data preserved in Supabase');
+          }
         };
-        console.log('🔧 Debug sync methods available: window.debugSync');
+        console.log('🔧 Debug sync methods available: window.debugSync (includes forceReloadFromSupabase)');
       } catch (error) {
         console.error('Failed to initialize sync:', error);
         setSyncStatus(prev => ({

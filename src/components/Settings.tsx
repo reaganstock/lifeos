@@ -1,14 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { Moon, Sun, Settings as SettingsIcon, LogOut, User, Shield, Database, Bell, Globe, HelpCircle, Zap } from 'lucide-react';
+import { Moon, Sun, Settings as SettingsIcon, LogOut, User, Shield, Database, Bell, Globe, HelpCircle, Zap, Link } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuthContext } from './AuthProvider';
+import IntegrationManager from './IntegrationManager';
+import { Item } from '../types';
 
-const Settings: React.FC = () => {
+interface SettingsProps {
+  items: Item[];
+  setItems: React.Dispatch<React.SetStateAction<Item[]>>;
+  categories?: Array<{ id: string; name: string; icon: string; color: string }>;
+}
+
+const Settings: React.FC<SettingsProps> = ({ items, setItems, categories = [] }) => {
   const { isDarkMode, toggleDarkMode } = useTheme();
   const { user, signOut } = useAuthContext();
   
   // Auto-approve setting state
   const [autoApprove, setAutoApprove] = useState(false);
+  
+  // Integration Manager state
+  const [showIntegrationManager, setShowIntegrationManager] = useState(false);
   
   // Load auto-approve setting from localStorage
   useEffect(() => {
@@ -169,6 +180,19 @@ const Settings: React.FC = () => {
             <div className="space-y-3">
               <div className="flex items-center justify-between py-2">
                 <div>
+                  <p className="font-medium text-gray-900 dark:text-white">Third-Party Integrations</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">Connect Todoist, Google Calendar, Notion, YouTube & more</p>
+                </div>
+                <button 
+                  onClick={() => setShowIntegrationManager(true)}
+                  className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-colors flex items-center space-x-2"
+                >
+                  <Link className="w-4 h-4" />
+                  <span>Manage</span>
+                </button>
+              </div>
+              <div className="flex items-center justify-between py-2">
+                <div>
                   <p className="font-medium text-gray-900 dark:text-white">Export Data</p>
                   <p className="text-sm text-gray-600 dark:text-gray-300">Download your data as backup</p>
                 </div>
@@ -225,6 +249,38 @@ const Settings: React.FC = () => {
           </div>
         </div>
       </div>
+      
+      {/* Integration Manager Modal */}
+      <IntegrationManager 
+        isOpen={showIntegrationManager}
+        onClose={() => setShowIntegrationManager(false)}
+        categories={categories}
+        onImport={(results) => {
+          console.log('Integration import results:', results);
+          // Reload items from localStorage to reflect the imported data
+          const savedItems = localStorage.getItem('lifeStructureItems');
+          if (savedItems) {
+            try {
+              const parsedItems = JSON.parse(savedItems);
+              const refreshedItems = parsedItems.map((item: any) => ({
+                ...item,
+                createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
+                updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
+                dueDate: item.dueDate ? new Date(item.dueDate) : undefined,
+                dateTime: item.dateTime ? new Date(item.dateTime) : undefined,
+                metadata: {
+                  ...item.metadata,
+                  eventDate: item.metadata?.eventDate ? new Date(item.metadata.eventDate) : undefined
+                }
+              }));
+              setItems(refreshedItems);
+              console.log('🔄 Refreshed React state with', refreshedItems.length, 'items from localStorage');
+            } catch (error) {
+              console.error('Error refreshing items from localStorage:', error);
+            }
+          }
+        }}
+      />
     </div>
   );
 };

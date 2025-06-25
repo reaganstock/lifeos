@@ -165,6 +165,156 @@ export type Database = {
           },
         ]
       }
+      content_embeddings: {
+        Row: {
+          chunk_index: number
+          content: string
+          content_source_id: string
+          created_at: string | null
+          embedding: string | null
+          id: string
+          metadata: Json | null
+          user_id: string
+        }
+        Insert: {
+          chunk_index?: number
+          content: string
+          content_source_id: string
+          created_at?: string | null
+          embedding?: string | null
+          id?: string
+          metadata?: Json | null
+          user_id: string
+        }
+        Update: {
+          chunk_index?: number
+          content?: string
+          content_source_id?: string
+          created_at?: string | null
+          embedding?: string | null
+          id?: string
+          metadata?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_embeddings_content_source_id_fkey"
+            columns: ["content_source_id"]
+            isOneToOne: false
+            referencedRelation: "content_sources"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_embeddings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      content_sources: {
+        Row: {
+          category_id: string
+          created_at: string | null
+          extracted_content: string | null
+          id: string
+          metadata: Json | null
+          title: string
+          type: string
+          updated_at: string | null
+          url: string
+          user_id: string
+        }
+        Insert: {
+          category_id: string
+          created_at?: string | null
+          extracted_content?: string | null
+          id?: string
+          metadata?: Json | null
+          title: string
+          type: string
+          updated_at?: string | null
+          url: string
+          user_id: string
+        }
+        Update: {
+          category_id?: string
+          created_at?: string | null
+          extracted_content?: string | null
+          id?: string
+          metadata?: Json | null
+          title?: string
+          type?: string
+          updated_at?: string | null
+          url?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_sources_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_sources_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      integration_tokens: {
+        Row: {
+          access_token: string
+          bot_id: string | null
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          provider: string
+          refresh_token: string | null
+          scope: string | null
+          token_type: string | null
+          updated_at: string | null
+          user_id: string
+          workspace_id: string | null
+          workspace_name: string | null
+        }
+        Insert: {
+          access_token: string
+          bot_id?: string | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          provider: string
+          refresh_token?: string | null
+          scope?: string | null
+          token_type?: string | null
+          updated_at?: string | null
+          user_id: string
+          workspace_id?: string | null
+          workspace_name?: string | null
+        }
+        Update: {
+          access_token?: string
+          bot_id?: string | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          provider?: string
+          refresh_token?: string | null
+          scope?: string | null
+          token_type?: string | null
+          updated_at?: string | null
+          user_id?: string
+          workspace_id?: string | null
+          workspace_name?: string | null
+        }
+        Relationships: []
+      }
       item_embeddings: {
         Row: {
           content: string
@@ -213,6 +363,9 @@ export type Database = {
       items: {
         Row: {
           attachment: string | null
+          audio_duration: number | null
+          audio_public_url: string | null
+          audio_storage_path: string | null
           category_id: string | null
           completed: boolean | null
           created_at: string | null
@@ -228,6 +381,9 @@ export type Database = {
         }
         Insert: {
           attachment?: string | null
+          audio_duration?: number | null
+          audio_public_url?: string | null
+          audio_storage_path?: string | null
           category_id?: string | null
           completed?: boolean | null
           created_at?: string | null
@@ -243,6 +399,9 @@ export type Database = {
         }
         Update: {
           attachment?: string | null
+          audio_duration?: number | null
+          audio_public_url?: string | null
+          audio_storage_path?: string | null
           category_id?: string | null
           completed?: boolean | null
           created_at?: string | null
@@ -360,6 +519,22 @@ export type Database = {
       l2_normalize: {
         Args: { "": string } | { "": unknown } | { "": unknown }
         Returns: string
+      }
+      search_content_embeddings: {
+        Args: {
+          query_embedding: string
+          match_threshold?: number
+          match_count?: number
+          category_filter?: string
+        }
+        Returns: {
+          id: string
+          content: string
+          similarity: number
+          content_source_id: string
+          chunk_index: number
+          metadata: Json
+        }[]
       }
       sparsevec_out: {
         Args: { "": unknown }
@@ -518,7 +693,7 @@ export const Constants = {
   },
 } as const
 
-// Helper types for lifeOS AI
+// Table type shortcuts
 export type Profile = Tables<'profiles'>
 export type Category = Tables<'categories'>
 export type Item = Tables<'items'>
@@ -526,9 +701,12 @@ export type ChatSession = Tables<'chat_sessions'>
 export type ChatMessage = Tables<'chat_messages'>
 export type ItemEmbedding = Tables<'item_embeddings'>
 export type ApiUsage = Tables<'api_usage'>
+export type IntegrationToken = Tables<'integration_tokens'>
 
+// Insert type shortcuts
 export type CategoryInsert = TablesInsert<'categories'>
 export type ItemInsert = TablesInsert<'items'>
 export type ChatSessionInsert = TablesInsert<'chat_sessions'>
 export type ChatMessageInsert = TablesInsert<'chat_messages'>
-export type ApiUsageInsert = TablesInsert<'api_usage'> 
+export type ApiUsageInsert = TablesInsert<'api_usage'>
+export type IntegrationTokenInsert = TablesInsert<'integration_tokens'> 
