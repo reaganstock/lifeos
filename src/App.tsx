@@ -130,10 +130,12 @@ function AppContent() {
                                  window.location.search.includes('google') ||
                                  state?.includes('google');
           const isMicrosoftCallback = window.location.search.includes('microsoft') ||
-                                    state?.includes('microsoft') ||
-                                    // Microsoft OAuth doesn't always include identifiers, so check for typical Microsoft OAuth domains/patterns
-                                    (code && !isNotionCallback && !isGoogleCallback && 
-                                     (code.startsWith('M.') || code.includes('microsoftonline') || urlParams.get('session_state')));
+                                    state?.includes('microsoft');
+          const isOneNoteCallback = window.location.search.includes('onenote') ||
+                                  state?.includes('onenote');
+          // General Microsoft OAuth for cases where we can't distinguish between Calendar and OneNote
+          const isGeneralMicrosoftCallback = (code && !isNotionCallback && !isGoogleCallback && !isMicrosoftCallback && !isOneNoteCallback &&
+                                           (code.startsWith('M.') || code.includes('microsoftonline') || urlParams.get('session_state')));
           
           if (isNotionCallback) {
             console.log('🔗 Processing Notion OAuth callback...');
@@ -182,6 +184,57 @@ function AppContent() {
 
           } else if (isMicrosoftCallback) {
             console.log('🔗 Processing Microsoft Calendar OAuth callback...');
+            console.log('🔑 Using client ID:', process.env.REACT_APP_MICROSOFT_CLIENT_ID?.substring(0, 8) + '...');
+            console.log('🕐 Code received at:', new Date().toISOString());
+            
+            const clientId = process.env.REACT_APP_MICROSOFT_CLIENT_ID!;
+            const redirectUri = `${window.location.origin}/oauth/callback`;
+            
+            console.log('🔄 Starting token exchange immediately (PKCE flow - no client secret)...');
+            // Exchange code for access token using PKCE (no client secret for SPA)
+            const tokenResponse = await IntegrationManager.exchangeMicrosoftCode(code, clientId, '', redirectUri);
+            console.log('✅ Microsoft Calendar token exchange successful');
+            
+            // Store the access token temporarily
+            sessionStorage.setItem('microsoft_access_token', tokenResponse.access_token);
+            sessionStorage.setItem('microsoft_refresh_token', tokenResponse.refresh_token);
+            
+            showNotification('✅ Successfully connected to Microsoft Calendar', 'success');
+            
+            // Clean up URL and redirect back to app
+            window.history.replaceState({}, document.title, '/');
+            
+            // Set a flag to auto-connect when user opens integration manager
+            sessionStorage.setItem('microsoft_auto_connect', 'true');
+            
+          } else if (isOneNoteCallback) {
+            console.log('🔗 Processing OneNote OAuth callback...');
+            console.log('🔑 Using client ID:', process.env.REACT_APP_MICROSOFT_CLIENT_ID?.substring(0, 8) + '...');
+            console.log('🕐 Code received at:', new Date().toISOString());
+            
+            const clientId = process.env.REACT_APP_MICROSOFT_CLIENT_ID!;
+            const redirectUri = `${window.location.origin}/oauth/callback`;
+            
+            console.log('🔄 Starting OneNote token exchange immediately (PKCE flow - no client secret)...');
+            // Exchange code for access token using PKCE (no client secret for SPA)
+            const tokenResponse = await IntegrationManager.exchangeOneNoteCode(code, clientId, '', redirectUri);
+            console.log('✅ OneNote token exchange successful');
+            
+            // Store the access token temporarily
+            sessionStorage.setItem('onenote_access_token', tokenResponse.access_token);
+            sessionStorage.setItem('onenote_refresh_token', tokenResponse.refresh_token);
+            
+            showNotification('✅ Successfully connected to OneNote', 'success');
+            
+            // Clean up URL and redirect back to app
+            window.history.replaceState({}, document.title, '/');
+            
+            // Set a flag to auto-connect when user opens integration manager
+            sessionStorage.setItem('onenote_auto_connect', 'true');
+            
+          } else if (isGeneralMicrosoftCallback) {
+            // For general Microsoft OAuth, default to Microsoft Calendar for backward compatibility
+            console.log('🔗 Processing general Microsoft OAuth callback (defaulting to Calendar)...');
             console.log('🔑 Using client ID:', process.env.REACT_APP_MICROSOFT_CLIENT_ID?.substring(0, 8) + '...');
             console.log('🕐 Code received at:', new Date().toISOString());
             

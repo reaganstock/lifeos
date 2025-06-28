@@ -39,6 +39,7 @@ export default function IntegrationManager({ isOpen, onClose, onImport, categori
       const shouldAutoConnectNotion = sessionStorage.getItem('notion_auto_connect');
       const shouldAutoConnectGoogle = sessionStorage.getItem('google_auto_connect');
       const shouldAutoConnectMicrosoft = sessionStorage.getItem('microsoft_auto_connect');
+      const shouldAutoConnectOneNote = sessionStorage.getItem('onenote_auto_connect');
       
       if (shouldAutoConnectNotion === 'true') {
         console.log('🔗 Auto-connecting Notion after OAuth...');
@@ -156,6 +157,46 @@ export default function IntegrationManager({ isOpen, onClose, onImport, categori
             setIsConnecting(false);
           }
         }, 500);
+      } else if (shouldAutoConnectOneNote === 'true') {
+        console.log('🔗 Auto-connecting OneNote after OAuth...');
+        setSelectedProvider('onenote');
+        // Auto-trigger connection after setting provider
+        setTimeout(async () => {
+          try {
+            const storedAccessToken = sessionStorage.getItem('onenote_access_token');
+            const storedRefreshToken = sessionStorage.getItem('onenote_refresh_token');
+            if (storedAccessToken) {
+              setIsConnecting(true);
+              
+              const integrationId = await integrationManager.createIntegration(
+                'onenote',
+                {},
+                { 
+                  accessToken: storedAccessToken,
+                  refreshToken: storedRefreshToken || undefined
+                }
+              );
+
+              await integrationManager.authenticateIntegration(integrationId);
+              
+              // Clear stored tokens
+              sessionStorage.removeItem('onenote_access_token');
+              sessionStorage.removeItem('onenote_refresh_token');
+              sessionStorage.removeItem('onenote_auto_connect');
+              
+              // Reload and switch to connected tab
+              loadIntegrations();
+              setActiveTab('connected');
+              setSelectedProvider(null);
+              setIsConnecting(false);
+              
+              console.log('✅ OneNote auto-connection successful');
+            }
+          } catch (error) {
+            console.error('❌ OneNote auto-connection failed:', error);
+            setIsConnecting(false);
+          }
+        }, 500);
       }
     }
   }, [isOpen]);
@@ -245,6 +286,20 @@ export default function IntegrationManager({ isOpen, onClose, onImport, categori
           sessionStorage.removeItem('microsoft_access_token');
           sessionStorage.removeItem('microsoft_refresh_token');
           sessionStorage.removeItem('microsoft_auto_connect');
+        }
+      } else if (selectedProvider === 'onenote') {
+        const storedAccessToken = sessionStorage.getItem('onenote_access_token');
+        const storedRefreshToken = sessionStorage.getItem('onenote_refresh_token');
+        
+        if (storedAccessToken) {
+          finalCredentials.accessToken = storedAccessToken;
+          finalCredentials.refreshToken = storedRefreshToken || undefined;
+          console.log('🔗 Using stored OneNote access token');
+          
+          // Clear the stored tokens after use
+          sessionStorage.removeItem('onenote_access_token');
+          sessionStorage.removeItem('onenote_refresh_token');
+          sessionStorage.removeItem('onenote_auto_connect');
         }
       }
 
@@ -425,6 +480,10 @@ export default function IntegrationManager({ isOpen, onClose, onImport, categori
         const msClientId = process.env.REACT_APP_MICROSOFT_CLIENT_ID || 'your-client-id';
         const msRedirectUri = `${window.location.origin}/oauth/callback`;
         return await (integrationManager.constructor as any).getMicrosoftCalendarOAuthUrl(msClientId, msRedirectUri);
+      case 'onenote':
+        const oneNoteClientId = process.env.REACT_APP_MICROSOFT_CLIENT_ID || 'your-client-id';
+        const oneNoteRedirectUri = `${window.location.origin}/oauth/callback`;
+        return await (integrationManager.constructor as any).getOneNoteOAuthUrl(oneNoteClientId, oneNoteRedirectUri);
       default:
         return null;
     }
@@ -522,7 +581,7 @@ export default function IntegrationManager({ isOpen, onClose, onImport, categori
                   </h3>
                   
                   <div className="space-y-4">
-                    {['todoist', 'youtube'].includes(selectedProvider) && (
+                    {['todoist'].includes(selectedProvider) && (
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           API Key
@@ -537,7 +596,18 @@ export default function IntegrationManager({ isOpen, onClose, onImport, categori
                       </div>
                     )}
 
-                    {['google-calendar', 'microsoft-calendar', 'notion'].includes(selectedProvider) && (
+                    {selectedProvider === 'youtube' && (
+                      <div className="space-y-2">
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          YouTube integration is ready to use! No API key required.
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-500">
+                          Simply click Connect to start importing video transcripts.
+                        </p>
+                      </div>
+                    )}
+
+                    {['google-calendar', 'microsoft-calendar', 'onenote', 'notion'].includes(selectedProvider) && (
                       <div className="space-y-2">
                         <p className="text-sm text-gray-600 dark:text-gray-400">
                           This integration uses OAuth authentication.
@@ -560,7 +630,7 @@ export default function IntegrationManager({ isOpen, onClose, onImport, categori
                     <div className="flex space-x-3">
                       <button
                         onClick={handleConnect}
-                        disabled={isConnecting || (!credentials.apiKey && !['google-calendar', 'microsoft-calendar', 'notion'].includes(selectedProvider))}
+                        disabled={isConnecting || (!credentials.apiKey && !['google-calendar', 'microsoft-calendar', 'onenote', 'notion', 'youtube'].includes(selectedProvider))}
                         className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         {isConnecting ? '🔄 Connecting...' : '✅ Connect'}

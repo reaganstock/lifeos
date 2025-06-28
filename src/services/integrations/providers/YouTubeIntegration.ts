@@ -13,9 +13,13 @@ type ItemType = 'todo' | 'note' | 'event' | 'goal' | 'routine';
 
 export class YouTubeIntegration extends BaseIntegration {
   private readonly youtubeApiUrl = 'https://www.googleapis.com/youtube/v3';
+  // Use environment variable for API key (secure approach)
+  private readonly embeddedApiKey = process.env.REACT_APP_YOUTUBE_API_KEY || '';
 
   constructor(config: IBaseIntegration) {
     super(config);
+    // Use embedded API key from environment variable
+    this.accessToken = this.embeddedApiKey;
   }
 
   getCapabilities(): IntegrationCapabilities {
@@ -35,13 +39,15 @@ export class YouTubeIntegration extends BaseIntegration {
   }
 
   async authenticate(): Promise<void> {
-    if (!this.accessToken) {
-      throw this.createError('NO_TOKEN', 'YouTube API key is required');
+    // Check if API key is configured
+    if (!this.accessToken || this.accessToken === '') {
+      throw this.createError('NO_API_KEY', 'YouTube API key not configured. Please set REACT_APP_YOUTUBE_API_KEY in your .env file.');
     }
 
+    // Using embedded API key, so authentication is automatic
     const isValid = await this.testConnection();
     if (!isValid) {
-      throw this.createError('INVALID_TOKEN', 'Invalid YouTube API key');
+      throw this.createError('INVALID_API_KEY', 'YouTube API key is not working. Please check your API key configuration.');
     }
 
     this.setStatus('connected');
@@ -58,8 +64,30 @@ export class YouTubeIntegration extends BaseIntegration {
 
   async testConnection(): Promise<boolean> {
     try {
-      await this.makeRequest<any>(`${this.youtubeApiUrl}/search?part=snippet&maxResults=1&key=${this.accessToken}`);
-      return true;
+      if (!this.accessToken) {
+        console.error('YouTube API key not configured');
+        return false;
+      }
+      
+      const url = `${this.youtubeApiUrl}/search?part=snippet&maxResults=1&key=${this.accessToken}`;
+      
+      // Use direct fetch to avoid any base class issues
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('YouTube API error:', response.status, errorText);
+        return false;
+      }
+      
+      const data = await response.json();
+      return data?.kind === 'youtube#searchListResponse';
     } catch (error) {
       console.error('YouTube connection test failed:', error);
       return false;
@@ -85,7 +113,149 @@ export class YouTubeIntegration extends BaseIntegration {
   }
 
   // YouTube-specific methods
-  async getVideoTranscript(videoUrl: string): Promise<YouTubeTranscript> {
+  private async getVideoTranscript(videoId: string): Promise<Array<{ text: string; start: number; duration: number }> | null> {
+    console.log(`🔍 Attempting to get transcript for video: ${videoId}`);
+    
+    try {
+      // Method 1: Try to get transcript through YouTube's internal API
+      const transcript = await this.getTranscriptFromInternalAPI(videoId);
+      if (transcript && transcript.length > 0) {
+        console.log(`✅ Successfully extracted transcript using internal API for video: ${videoId}`);
+        return transcript;
+      }
+    } catch (error) {
+      console.warn('Internal API failed:', error);
+    }
+
+    try {
+      // Method 2: Try to extract transcript from video page HTML
+      const transcript = await this.getTranscriptFromVideoPage(videoId);
+      if (transcript && transcript.length > 0) {
+        console.log(`✅ Successfully extracted transcript from video page for video: ${videoId}`);
+        return transcript;
+      }
+    } catch (error) {
+      console.warn('Video page extraction failed:', error);
+    }
+
+    console.log(`❌ No transcript available for video: ${videoId}`);
+    return null;
+  }
+
+  private async getTranscriptFromInternalAPI(videoId: string): Promise<Array<{ text: string; start: number; duration: number }>> {
+    // First, get the video page to extract necessary parameters
+    const videoPageUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    
+    try {
+      // Use a CORS proxy to fetch the video page
+      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(videoPageUrl)}`;
+      const response = await fetch(proxyUrl);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch video page: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      const html = data.contents;
+      
+      // Extract the necessary parameters from the page
+      const playerResponseMatch = html.match(/"playerResponse":"([^"]+)"/);
+      if (!playerResponseMatch) {
+        throw new Error('Could not find playerResponse in video page');
+      }
+      
+      const playerResponseStr = playerResponseMatch[1].replace(/\\"/g, '"').replace(/\\u0026/g, '&');
+      const playerResponse = JSON.parse(playerResponseStr);
+      
+      // Look for captions in the player response
+      const captions = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+      if (!captions || captions.length === 0) {
+        throw new Error('No captions found in player response');
+      }
+      
+      // Find English captions (prefer manual over auto-generated)
+      let captionTrack = captions.find((track: any) => 
+        track.languageCode === 'en' && track.kind !== 'asr'
+      );
+      
+      if (!captionTrack) {
+        // Fallback to auto-generated English captions
+        captionTrack = captions.find((track: any) => 
+          track.languageCode === 'en'
+        );
+      }
+      
+      if (!captionTrack) {
+        // Fallback to any available captions
+        captionTrack = captions[0];
+      }
+      
+      // Fetch the transcript from the caption URL
+      const transcriptUrl = captionTrack.baseUrl;
+      const transcriptProxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(transcriptUrl)}`;
+      
+      const transcriptResponse = await fetch(transcriptProxyUrl);
+      if (!transcriptResponse.ok) {
+        throw new Error(`Failed to fetch transcript: ${transcriptResponse.status}`);
+      }
+      
+      const transcriptData = await transcriptResponse.json();
+      const transcriptXml = transcriptData.contents;
+      
+      // Parse the XML transcript
+      return this.parseTranscriptXml(transcriptXml);
+      
+    } catch (error) {
+      throw new Error(`Internal API extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async getTranscriptFromVideoPage(videoId: string): Promise<Array<{ text: string; start: number; duration: number }>> {
+    try {
+      // Alternative approach: try different CORS proxy
+      const videoPageUrl = `https://www.youtube.com/watch?v=${videoId}`;
+      const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(videoPageUrl)}`;
+      
+      const response = await fetch(proxyUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch video page: ${response.status}`);
+      }
+      
+      const html = await response.text();
+      
+      // Look for transcript data in the HTML
+      const scriptTags = html.match(/<script[^>]*>[\s\S]*?<\/script>/g) || [];
+      
+      for (const script of scriptTags) {
+        if (script.includes('captionTracks')) {
+          // Extract caption tracks from the script
+          const captionTracksMatch = script.match(/"captionTracks":(\[.*?\])/);
+          if (captionTracksMatch) {
+            const captionTracks = JSON.parse(captionTracksMatch[1]);
+            
+            if (captionTracks.length > 0) {
+              // Use the first available caption track
+              const transcriptUrl = captionTracks[0].baseUrl;
+              const transcriptProxyUrl = `https://corsproxy.io/?${encodeURIComponent(transcriptUrl)}`;
+              
+              const transcriptResponse = await fetch(transcriptProxyUrl);
+              if (transcriptResponse.ok) {
+                const transcriptXml = await transcriptResponse.text();
+                return this.parseTranscriptXml(transcriptXml);
+              }
+            }
+          }
+        }
+      }
+      
+      throw new Error('No transcript data found in video page');
+      
+    } catch (error) {
+      throw new Error(`Video page extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  async importVideoTranscript(videoUrl: string, categoryId?: string): Promise<any> {
     const videoId = this.extractVideoId(videoUrl);
     if (!videoId) {
       throw this.createError('INVALID_URL', 'Invalid YouTube video URL');
@@ -95,78 +265,80 @@ export class YouTubeIntegration extends BaseIntegration {
       // Get video metadata
       const videoData = await this.getVideoMetadata(videoId);
       
-      // Get transcript using multiple methods
-      let transcript: Array<{ text: string; start: number; duration: number }> = [];
+      // Try to get transcript (will return null due to API limitations)
+      const transcriptData = await this.getVideoTranscript(videoId);
       
-      try {
-        // Try to get official transcript first
-        transcript = await this.getOfficialTranscript(videoId);
-      } catch (error) {
-        try {
-          // Fallback to auto-generated captions
-          transcript = await this.getAutoGeneratedCaptions(videoId);
-        } catch (captionError) {
-          // Fallback to third-party transcript extraction
-          transcript = await this.getTranscriptFromThirdParty(videoId);
-        }
+      let transcriptText: string;
+      
+      if (transcriptData && transcriptData.length > 0) {
+        // We successfully got transcript data! Format it properly
+        const transcriptSegments = transcriptData.map(segment => 
+          `[${Math.floor(segment.start / 60)}:${(segment.start % 60).toFixed(0).padStart(2, '0')}] ${segment.text}`
+        ).join('\n');
+        
+        transcriptText = `📺 **Video imported from YouTube**
+
+**Title:** ${videoData.title}
+**Channel:** ${videoData.channelTitle}
+**Duration:** ${Math.floor(this.parseDuration(videoData.duration) / 60)}:${(this.parseDuration(videoData.duration) % 60).toString().padStart(2, '0')}
+**Views:** ${parseInt(videoData.viewCount || '0').toLocaleString()}
+**Published:** ${new Date(videoData.publishedAt).toLocaleDateString()}
+
+**Description:**
+${videoData.description || 'No description available'}
+
+## 📝 Full Transcript
+
+${transcriptSegments}
+
+🔗 **Watch:** https://www.youtube.com/watch?v=${videoId}`;
+      } else {
+        // Create rich metadata content since transcript is not available
+        transcriptText = `📺 **Video imported from YouTube**
+
+**Title:** ${videoData.title}
+**Channel:** ${videoData.channelTitle}
+**Duration:** ${Math.floor(this.parseDuration(videoData.duration) / 60)}:${(this.parseDuration(videoData.duration) % 60).toString().padStart(2, '0')}
+**Views:** ${parseInt(videoData.viewCount || '0').toLocaleString()}
+**Published:** ${new Date(videoData.publishedAt).toLocaleDateString()}
+
+**Description:**
+${videoData.description || 'No description available'}
+
+⚠️ **Transcript not available:** This video either doesn't have captions enabled or the transcript extraction failed.
+
+💡 **Tip:** You can manually add your notes about this video below.
+
+🔗 **Watch:** https://www.youtube.com/watch?v=${videoId}`;
       }
 
+      // Return the item object that can be imported into the app
       return {
-        videoId,
-        title: videoData.title,
-        description: videoData.description,
-        duration: this.parseDuration(videoData.duration),
-        author: videoData.channelTitle,
-        transcript,
+        id: `youtube-${videoId}`,
+        type: 'note',
+        title: `YouTube: ${videoData.title}`,
+        description: `Go to https://www.youtube.com/watch?v=${videoId} to watch this video`,
+        content: transcriptText,
+        categoryId: categoryId || 'YouTube',
+        tags: ['youtube', 'video', 'imported'],
         metadata: {
+          source: 'YouTube',
+          videoId,
+          url: `https://www.youtube.com/watch?v=${videoId}`,
           publishedAt: videoData.publishedAt,
           viewCount: parseInt(videoData.viewCount || '0'),
-          language: 'en' // Default, would need detection
-        }
+          channelTitle: videoData.channelTitle,
+          duration: this.parseDuration(videoData.duration)
+        },
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
     } catch (error) {
       throw this.createError(
-        'TRANSCRIPT_FAILED',
-        `Failed to get YouTube transcript: ${error instanceof Error ? error.message : 'Unknown error'}`
+        'IMPORT_FAILED',
+        `Failed to import YouTube video: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
-  }
-
-  async importVideoTranscript(videoUrl: string, categoryId?: string): Promise<Item> {
-    const transcriptData = await this.getVideoTranscript(videoUrl);
-    
-    // Convert transcript to readable format
-    const transcriptText = transcriptData.transcript
-      .map(segment => segment.text)
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    // Create structured content
-    const content = this.formatTranscriptContent(transcriptData, transcriptText);
-
-    const item = {
-      id: `youtube-${transcriptData.videoId}`,
-      type: 'note' as ItemType,
-      title: `YouTube: ${transcriptData.title}`,
-      description: transcriptData.description || '',
-      content,
-      categoryId: categoryId || 'imported-youtube',
-      tags: ['youtube', 'transcript', 'video'],
-      metadata: {
-        source: 'youtube',
-        originalId: transcriptData.videoId,
-        videoUrl: `https://www.youtube.com/watch?v=${transcriptData.videoId}`,
-        author: transcriptData.author,
-        duration: transcriptData.duration,
-        publishedAt: transcriptData.metadata.publishedAt,
-        viewCount: transcriptData.metadata.viewCount
-      },
-      createdAt: new Date(),
-      updatedAt: new Date()
-    } as Item;
-
-    return item;
   }
 
   private extractVideoId(url: string): string | null {
@@ -195,56 +367,41 @@ export class YouTubeIntegration extends BaseIntegration {
     };
   }
 
-  private async getOfficialTranscript(videoId: string): Promise<Array<{ text: string; start: number; duration: number }>> {
-    // This would require YouTube Data API v3 captions endpoint
-    // Note: This requires OAuth and specific permissions
-    const response = await this.makeRequest<{ items: any[] }>(
-      `${this.youtubeApiUrl}/captions?part=snippet&videoId=${videoId}&key=${this.accessToken}`
-    );
 
-    if (!response.items || response.items.length === 0) {
-      throw new Error('No captions available');
+
+  private parseTranscriptXml(xmlContent: string): Array<{ text: string; start: number; duration: number }> {
+    const segments: Array<{ text: string; start: number; duration: number }> = [];
+    
+    // Parse XML manually since we don't have a DOM parser in this environment
+    const textMatches = xmlContent.match(/<text[^>]*start="([^"]*)"[^>]*dur="([^"]*)"[^>]*>([^<]*)<\/text>/g);
+    
+    if (!textMatches) {
+      throw new Error('Invalid transcript XML format');
     }
-
-    // Get the first English caption track
-    const captionTrack = response.items.find(item => 
-      item.snippet.language === 'en' || item.snippet.language === 'en-US'
-    ) || response.items[0];
-
-    // Download caption content (this requires OAuth)
-    const captionContent = await this.makeRequest<string>(
-      `${this.youtubeApiUrl}/captions/${captionTrack.id}?key=${this.accessToken}`
-    );
-
-    return this.parseCaptionContent(captionContent);
-  }
-
-  private async getAutoGeneratedCaptions(videoId: string): Promise<Array<{ text: string; start: number; duration: number }>> {
-    // Fallback method using auto-generated captions
-    // This is a simplified implementation
-    throw new Error('Auto-generated captions not implemented');
-  }
-
-  private async getTranscriptFromThirdParty(videoId: string): Promise<Array<{ text: string; start: number; duration: number }>> {
-    // Use the youtube-transcript-api library approach
-    try {
-      // This would use a service like the one we researched
-      const response = await fetch(`https://youtube-transcript-api.onrender.com/transcript/${videoId}`);
+    
+    textMatches.forEach(match => {
+      const startMatch = match.match(/start="([^"]*)"/);
+      const durMatch = match.match(/dur="([^"]*)"/);
+      const textMatch = match.match(/>([^<]*)</);
       
-      if (!response.ok) {
-        throw new Error('Third-party transcript service failed');
+      if (startMatch && durMatch && textMatch) {
+        const start = parseFloat(startMatch[1]);
+        const duration = parseFloat(durMatch[1]);
+        const text = textMatch[1]
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .trim();
+        
+        if (text) {
+          segments.push({ text, start, duration });
+        }
       }
-
-      const data = await response.json();
-      
-      return data.transcript?.map((item: any) => ({
-        text: item.text,
-        start: parseFloat(item.start),
-        duration: parseFloat(item.dur || '0')
-      })) || [];
-    } catch (error) {
-      throw new Error('No transcript available for this video');
-    }
+    });
+    
+    return segments;
   }
 
   private parseCaptionContent(content: string): Array<{ text: string; start: number; duration: number }> {
@@ -296,30 +453,6 @@ export class YouTubeIntegration extends BaseIntegration {
     const seconds = parseInt(match[3] || '0');
     
     return hours * 3600 + minutes * 60 + seconds;
-  }
-
-  private formatTranscriptContent(transcriptData: YouTubeTranscript, transcriptText: string): string {
-    const sections = [
-      `# ${transcriptData.title}`,
-      '',
-      `**Author:** ${transcriptData.author}`,
-      `**Duration:** ${Math.floor(transcriptData.duration / 60)}:${(transcriptData.duration % 60).toString().padStart(2, '0')}`,
-      `**Published:** ${new Date(transcriptData.metadata.publishedAt).toLocaleDateString()}`,
-      `**Views:** ${transcriptData.metadata.viewCount?.toLocaleString() || 'Unknown'}`,
-      '',
-      '## Description',
-      transcriptData.description || 'No description available.',
-      '',
-      '## Transcript',
-      transcriptText,
-      '',
-      '## Timestamped Segments',
-      ...transcriptData.transcript.map(segment => 
-        `**${Math.floor(segment.start / 60)}:${(segment.start % 60).toFixed(0).padStart(2, '0')}** - ${segment.text}`
-      )
-    ];
-
-    return sections.join('\n');
   }
 
   // Batch import multiple videos
@@ -375,5 +508,56 @@ export class YouTubeIntegration extends BaseIntegration {
   protected getAuthHeaders(): Record<string, string> {
     // YouTube API uses key parameter instead of Authorization header for API key
     return {};
+  }
+
+  private parseVTTContent(vttContent: string): Array<{ text: string; start: number; duration: number }> {
+    const segments: Array<{ text: string; start: number; duration: number }> = [];
+    const lines = vttContent.split('\n');
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      // Look for timestamp lines (format: "00:00:00.000 --> 00:00:05.000")
+      if (line.includes(' --> ')) {
+        const [startTime, endTime] = line.split(' --> ');
+        const start = this.parseVTTTimestamp(startTime);
+        const end = this.parseVTTTimestamp(endTime);
+        const duration = end - start;
+        
+        // Next non-empty line should be the text
+        let textLines: string[] = [];
+        for (let j = i + 1; j < lines.length; j++) {
+          const textLine = lines[j].trim();
+          if (textLine === '') {
+            break; // Empty line marks end of this caption
+          }
+          if (!textLine.includes(' --> ')) {
+            // Remove VTT formatting tags like <c.colorname>text</c>
+            const cleanText = textLine.replace(/<[^>]*>/g, '');
+            textLines.push(cleanText);
+          }
+        }
+        
+        if (textLines.length > 0) {
+          segments.push({
+            text: textLines.join(' ').trim(),
+            start,
+            duration
+          });
+        }
+      }
+    }
+    
+    return segments;
+  }
+
+  private parseVTTTimestamp(timestamp: string): number {
+    // Parse VTT timestamp format: "00:01:23.456" to seconds
+    const parts = timestamp.split(':');
+    const seconds = parseFloat(parts.pop() || '0');
+    const minutes = parseInt(parts.pop() || '0');
+    const hours = parseInt(parts.pop() || '0');
+    
+    return hours * 3600 + minutes * 60 + seconds;
   }
 } 

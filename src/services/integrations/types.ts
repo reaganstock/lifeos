@@ -5,6 +5,7 @@ export type IntegrationProvider =
   | 'microsoft-calendar' 
   | 'apple-calendar'
   | 'evernote' 
+  | 'onenote'
   | 'notion' 
   | 'apple-notes' 
   | 'youtube';
@@ -160,6 +161,44 @@ export interface EvernoteNote {
     source?: string;
     sourceURL?: string;
   };
+}
+
+export interface OneNoteNote {
+  id: string;
+  title: string;
+  content?: string;
+  contentUrl?: string;
+  createdDateTime: string;
+  lastModifiedDateTime: string;
+  sectionId?: string;
+  sectionName?: string;
+  pageUrl?: string;
+  links?: {
+    oneNoteClientUrl?: {
+      href: string;
+    };
+    oneNoteWebUrl?: {
+      href: string;
+    };
+  };
+}
+
+export interface OneNoteSection {
+  id: string;
+  displayName: string;
+  createdDateTime: string;
+  lastModifiedDateTime: string;
+  pagesUrl: string;
+  notebookId?: string;
+}
+
+export interface OneNoteNotebook {
+  id: string;
+  displayName: string;
+  createdDateTime: string;
+  lastModifiedDateTime: string;
+  sectionsUrl: string;
+  sectionGroupsUrl: string;
 }
 
 export interface YouTubeTranscript {

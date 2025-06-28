@@ -2,6 +2,7 @@ import { BaseIntegration } from './base/BaseIntegration';
 import { TodoistIntegration } from './providers/TodoistIntegration';
 import { GoogleCalendarIntegration } from './providers/GoogleCalendarIntegration';
 import { MicrosoftCalendarIntegration } from './providers/MicrosoftCalendarIntegration';
+import { OneNoteIntegration } from './providers/OneNoteIntegration';
 import { NotionIntegration } from './providers/NotionIntegration';
 import { YouTubeIntegration } from './providers/YouTubeIntegration';
 
@@ -70,9 +71,9 @@ export class IntegrationManager {
       name: 'YouTube',
       description: 'Import video transcripts from YouTube',
       icon: '📺',
-      authType: 'api_key',
+      color: '#FF0000',
       website: 'https://youtube.com',
-      setupInstructions: 'Get a YouTube Data API key from Google Cloud Console'
+      setupInstructions: 'YouTube integration is ready to use - no API key required! Just connect and start importing video transcripts.'
     });
 
     this.configs.set('microsoft-calendar', {
@@ -100,6 +101,15 @@ export class IntegrationManager {
       authType: 'oauth',
       website: 'https://evernote.com',
       setupInstructions: 'Authorize access to your Evernote account'
+    });
+
+    this.configs.set('onenote', {
+      name: 'OneNote',
+      description: 'Import notes from Microsoft OneNote',
+      icon: '📔',
+      authType: 'oauth',
+      website: 'https://onenote.com',
+      setupInstructions: 'Authorize access to your OneNote account'
     });
 
     this.configs.set('apple-notes', {
@@ -131,7 +141,7 @@ export class IntegrationManager {
   }
 
   private isProviderImplemented(provider: IntegrationProvider): boolean {
-    const implemented = ['todoist', 'google-calendar', 'microsoft-calendar', 'notion', 'youtube'];
+    const implemented = ['todoist', 'google-calendar', 'microsoft-calendar', 'onenote', 'notion', 'youtube'];
     return implemented.includes(provider);
   }
 
@@ -164,6 +174,9 @@ export class IntegrationManager {
         break;
       case 'microsoft-calendar':
         integration = new MicrosoftCalendarIntegration(baseConfig);
+        break;
+      case 'onenote':
+        integration = new OneNoteIntegration(baseConfig);
         break;
       case 'notion':
         integration = new NotionIntegration(baseConfig);
@@ -402,6 +415,28 @@ export class IntegrationManager {
     return url;
   }
 
+  static async getOneNoteOAuthUrl(clientId: string, redirectUri: string): Promise<string> {
+    console.log('🔐 Generating OneNote OAuth URL with PKCE...');
+    const { url, codeVerifier } = await OneNoteIntegration.getOAuthUrl(clientId, redirectUri);
+    
+    console.log('🔐 Generated OneNote code verifier length:', codeVerifier.length);
+    console.log('🔐 Storing OneNote code verifier in sessionStorage...');
+    
+    // Store the code verifier for later use in token exchange (both session and local storage)
+    // Use the same storage key as Microsoft Calendar since they share the same OAuth flow
+    sessionStorage.setItem('microsoft_code_verifier', codeVerifier);
+    localStorage.setItem('microsoft_code_verifier', codeVerifier);
+    
+    // Verify it was stored
+    const storedSession = sessionStorage.getItem('microsoft_code_verifier');
+    const storedLocal = localStorage.getItem('microsoft_code_verifier');
+    console.log('🔐 OneNote - Verification - sessionStorage:', storedSession ? 'Successfully stored' : 'Failed to store');
+    console.log('🔐 OneNote - Verification - localStorage:', storedLocal ? 'Successfully stored' : 'Failed to store');
+    
+    console.log('🔗 Generated OneNote OAuth URL:', url.substring(0, 100) + '...');
+    return url;
+  }
+
   static getNotionOAuthUrl(): string {
     const config = IntegrationManager.OAUTH_CONFIGS.notion;
     return NotionIntegration.getOAuthUrl(config.clientId, config.redirectUri);
@@ -454,6 +489,34 @@ export class IntegrationManager {
     return MicrosoftCalendarIntegration.exchangeCodeForToken(code, clientId, clientSecret, redirectUri, codeVerifier || undefined);
   }
 
+  static async exchangeOneNoteCode(
+    code: string, 
+    clientId: string, 
+    clientSecret: string, 
+    redirectUri: string
+  ): Promise<{ access_token: string; refresh_token: string; expires_in: number }> {
+    // OneNote uses same Microsoft OAuth flow as Microsoft Calendar, including PKCE
+    let codeVerifier = sessionStorage.getItem('microsoft_code_verifier');
+    
+    if (!codeVerifier) {
+      codeVerifier = localStorage.getItem('microsoft_code_verifier');
+      console.log('🔐 OneNote - Code verifier not in sessionStorage, trying localStorage:', codeVerifier ? 'Found' : 'Not found');
+    } else {
+      console.log('🔐 OneNote - Retrieved code verifier from sessionStorage: Found');
+    }
+    
+    // Clean up the stored verifier from both storages
+    if (codeVerifier) {
+      sessionStorage.removeItem('microsoft_code_verifier');
+      localStorage.removeItem('microsoft_code_verifier');
+      console.log('🧹 OneNote - Cleaned up stored code verifier from both storages');
+    } else {
+      console.log('❌ OneNote - No code verifier found in either storage');
+    }
+    
+    return OneNoteIntegration.exchangeCodeForToken(code, clientId, clientSecret, redirectUri, codeVerifier || undefined);
+  }
+
   static async exchangeNotionCode(
     code: string
   ): Promise<{ access_token: string; bot_id: string; workspace_name: string }> {
@@ -495,6 +558,14 @@ export class IntegrationManager {
     }
   }
 
+  // Helper function to normalize provider names
+  private normalizeProviderName(provider: string): IntegrationProvider {
+    // Convert from storage format (underscores) to type format (hyphens)
+    const normalized = provider.replace(/_/g, '-') as IntegrationProvider;
+    console.log(`🔄 Normalized provider "${provider}" -> "${normalized}"`);
+    return normalized;
+  }
+
   // Load existing integrations from Supabase tokens
   private async loadExistingIntegrations(): Promise<void> {
     try {
@@ -521,11 +592,14 @@ export class IntegrationManager {
         try {
           console.log(`🔧 Restoring ${token.provider} integration...`);
           
+          // Normalize provider name to match TypeScript types
+          const normalizedProvider = this.normalizeProviderName(token.provider);
+          
           const integrationId = await this.createIntegration(
-            token.provider as IntegrationProvider,
+            normalizedProvider,
             {
-              name: this.configs.get(token.provider as IntegrationProvider)?.name || token.provider,
-              description: this.configs.get(token.provider as IntegrationProvider)?.description || ''
+              name: this.configs.get(normalizedProvider)?.name || normalizedProvider,
+              description: this.configs.get(normalizedProvider)?.description || ''
             },
             {
               accessToken: token.access_token,
