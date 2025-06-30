@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Moon, Sun, Settings as SettingsIcon, LogOut, User, Shield, Database, Bell, Globe, HelpCircle, Zap, Link } from 'lucide-react';
+import { Moon, Sun, LogOut, User, Database, Zap, Link } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuthContext } from './AuthProvider';
 import IntegrationManager from './IntegrationManager';
@@ -20,6 +20,33 @@ const Settings: React.FC<SettingsProps> = ({ items, setItems, categories = [] })
   
   // Integration Manager state
   const [showIntegrationManager, setShowIntegrationManager] = useState(false);
+  
+  // Profile settings state
+  const [showProfileSettings, setShowProfileSettings] = useState(false);
+  const [profileData, setProfileData] = useState({
+    displayName: user?.email?.split('@')[0] || '',
+    email: user?.email || '',
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    language: 'en',
+    notifications: true
+  });
+  
+  // Security settings state
+  const [showSecuritySettings, setShowSecuritySettings] = useState(false);
+  const [securitySettings, setSecuritySettings] = useState({
+    twoFactorEnabled: false,
+    sessionTimeout: 30, // minutes
+    dataEncryption: true,
+    activityLogging: true
+  });
+  
+  // Data export/import state
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
+  
+  // Help & Support state
+  const [showHelpModal, setShowHelpModal] = useState(false);
   
   // Load auto-approve setting from localStorage
   useEffect(() => {
@@ -48,25 +75,195 @@ const Settings: React.FC<SettingsProps> = ({ items, setItems, categories = [] })
     }
   };
 
+  // Profile settings functionality
+  const handleProfileUpdate = () => {
+    try {
+      localStorage.setItem('lifely_profile', JSON.stringify(profileData));
+      alert('Profile updated successfully!');
+      setShowProfileSettings(false);
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      alert('Failed to update profile. Please try again.');
+    }
+  };
+
+  // Security settings functionality
+  const handleSecurityUpdate = () => {
+    try {
+      localStorage.setItem('lifely_security', JSON.stringify(securitySettings));
+      alert('Security settings updated successfully!');
+      setShowSecuritySettings(false);
+    } catch (error) {
+      console.error('Error updating security settings:', error);
+      alert('Failed to update security settings. Please try again.');
+    }
+  };
+
+  // Data export functionality
+  const handleDataExport = async () => {
+    setIsExporting(true);
+    setExportProgress(0);
+    
+    try {
+      // Simulate progress
+      const progressInterval = setInterval(() => {
+        setExportProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + 10;
+        });
+      }, 200);
+
+      // Get all data from localStorage
+      const allData = {
+        items: JSON.parse(localStorage.getItem('lifeStructureItems') || '[]'),
+        categories: JSON.parse(localStorage.getItem('lifeStructureCategories') || '[]'),
+        settings: {
+          autoApprove: JSON.parse(localStorage.getItem('georgetownAI_autoApprove') || 'false'),
+          profile: JSON.parse(localStorage.getItem('lifely_profile') || '{}'),
+          security: JSON.parse(localStorage.getItem('lifely_security') || '{}')
+        },
+        chatSessions: JSON.parse(localStorage.getItem('georgetownAI_chatSessions') || '[]'),
+        exportDate: new Date().toISOString(),
+        version: '2.0'
+      };
+
+      // Create and download file
+      const dataStr = JSON.stringify(allData, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+      
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `lifely-backup-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      setExportProgress(100);
+      setTimeout(() => {
+        setIsExporting(false);
+        setExportProgress(0);
+        alert('Data exported successfully!');
+      }, 500);
+
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      alert('Failed to export data. Please try again.');
+      setIsExporting(false);
+      setExportProgress(0);
+    }
+  };
+
+  // Data import functionality
+  const handleDataImport = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      setIsImporting(true);
+      try {
+        const text = await file.text();
+        const importedData = JSON.parse(text);
+
+        // Validate data structure
+        if (!importedData.items || !Array.isArray(importedData.items)) {
+          throw new Error('Invalid backup file format');
+        }
+
+        const confirmImport = window.confirm(
+          `This will replace all your current data with the backup from ${new Date(importedData.exportDate).toLocaleDateString()}. Are you sure?`
+        );
+
+        if (confirmImport) {
+          // Import all data
+          if (importedData.items) {
+            localStorage.setItem('lifeStructureItems', JSON.stringify(importedData.items));
+            setItems(importedData.items);
+          }
+          if (importedData.categories) {
+            localStorage.setItem('lifeStructureCategories', JSON.stringify(importedData.categories));
+          }
+          if (importedData.settings) {
+            if (importedData.settings.autoApprove !== undefined) {
+              localStorage.setItem('georgetownAI_autoApprove', JSON.stringify(importedData.settings.autoApprove));
+              setAutoApprove(importedData.settings.autoApprove);
+            }
+            if (importedData.settings.profile) {
+              localStorage.setItem('lifely_profile', JSON.stringify(importedData.settings.profile));
+              setProfileData(importedData.settings.profile);
+            }
+            if (importedData.settings.security) {
+              localStorage.setItem('lifely_security', JSON.stringify(importedData.settings.security));
+              setSecuritySettings(importedData.settings.security);
+            }
+          }
+          if (importedData.chatSessions) {
+            localStorage.setItem('georgetownAI_chatSessions', JSON.stringify(importedData.chatSessions));
+          }
+
+          alert('Data imported successfully! Please refresh the page to see all changes.');
+        }
+      } catch (error) {
+        console.error('Error importing data:', error);
+        alert('Failed to import data. Please check the file format and try again.');
+      } finally {
+        setIsImporting(false);
+      }
+    };
+    input.click();
+  };
+
+  // Load saved settings on component mount
+  useEffect(() => {
+    try {
+      const savedProfile = localStorage.getItem('lifely_profile');
+      if (savedProfile) {
+        setProfileData(JSON.parse(savedProfile));
+      }
+
+      const savedSecurity = localStorage.getItem('lifely_security');
+      if (savedSecurity) {
+        setSecuritySettings(JSON.parse(savedSecurity));
+      }
+    } catch (error) {
+      console.error('Error loading saved settings:', error);
+    }
+  }, []);
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 dark:from-gray-900 dark:via-slate-900 dark:to-indigo-950/30">
-      <div className="p-6 max-w-4xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-lifeos-50 via-lifeos-100 to-lifeos-200 dark:from-lifeos-dark dark:via-gray-900 dark:to-lifeos-dark/80 relative overflow-hidden">
+      {/* Ambient background effects similar to landing page */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-gradient-to-r from-lifeos-primary/10 to-lifeos-secondary/10 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute bottom-1/3 right-1/4 w-24 h-24 bg-gradient-to-r from-lifeos-secondary/10 to-lifeos-primary/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
+        <div className="absolute top-1/2 right-1/3 w-16 h-16 bg-gradient-to-r from-lifeos-primary/10 to-lifeos-secondary/10 rounded-full blur-2xl animate-pulse" style={{animationDelay: '4s'}}></div>
+      </div>
+      <div className="p-6 max-w-4xl mx-auto relative z-10">
         {/* Header */}
         <div className="mb-8">
-          <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-2xl shadow-lg border border-white/30 dark:border-gray-700/30 p-6">
+          <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-3xl border border-white/20 dark:border-gray-700/30 p-8 shadow-2xl hover:bg-white/80 dark:hover:bg-gray-800/80 hover:shadow-3xl hover:scale-[1.02] transition-all duration-500">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                  <SettingsIcon className="w-6 h-6 text-white" />
+                <div className="w-12 h-12 bg-gradient-to-br from-lifeos-primary to-lifeos-secondary rounded-xl flex items-center justify-center">
+                  <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
+                  </svg>
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
-                  <p className="text-gray-600 dark:text-gray-300">Customize your Life Structure experience</p>
+                  <h1 className="text-2xl font-bold text-lifeos-dark dark:text-white">Settings</h1>
+                  <p className="text-lifeos-gray-400 dark:text-gray-300">Customize your Lifely experience</p>
                 </div>
               </div>
               {user && (
                 <div className="text-right">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">{user.email}</p>
+                  <p className="text-sm font-medium text-lifeos-dark dark:text-white">{user.email}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">Premium Account</p>
                 </div>
               )}
@@ -75,24 +272,24 @@ const Settings: React.FC<SettingsProps> = ({ items, setItems, categories = [] })
         </div>
 
         {/* Settings Grid */}
-        <div className="grid gap-6">
+        <div className="grid gap-8">
           {/* Appearance */}
-          <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-2xl shadow-lg border border-white/30 dark:border-gray-700/30 p-6">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
-                {isDarkMode ? <Moon className="w-4 h-4 text-purple-600 dark:text-purple-400" /> : <Sun className="w-4 h-4 text-purple-600 dark:text-purple-400" />}
+          <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-3xl border border-white/20 dark:border-gray-700/30 p-8 shadow-2xl hover:bg-white/80 dark:hover:bg-gray-800/80 hover:shadow-3xl hover:scale-[1.02] transition-all duration-500 group cursor-pointer">
+            <div className="flex items-center space-x-3 mb-6">
+              <div className="w-12 h-12 bg-gradient-to-br from-lifeos-primary to-lifeos-secondary rounded-2xl flex items-center justify-center group-hover:scale-110 group-hover:rotate-6 transition-all duration-300">
+                {isDarkMode ? <Moon className="w-6 h-6 text-white" /> : <Sun className="w-6 h-6 text-white" />}
               </div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Appearance</h2>
+              <h2 className="text-xl font-bold text-lifeos-dark dark:text-white group-hover:text-lifeos-primary transition-colors duration-300">Appearance</h2>
             </div>
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-medium text-gray-900 dark:text-white">Dark Mode</p>
-                <p className="text-sm text-gray-600 dark:text-gray-300">Toggle between light and dark themes</p>
+                <p className="font-medium text-lifeos-dark dark:text-white">Dark Mode</p>
+                <p className="text-sm text-lifeos-gray-400 dark:text-gray-300">Toggle between light and dark themes</p>
               </div>
               <button
                 onClick={toggleDarkMode}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  isDarkMode ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'
+                  isDarkMode ? 'bg-lifeos-primary' : 'bg-gray-200 dark:bg-gray-700'
                 }`}
               >
                 <span
@@ -105,23 +302,23 @@ const Settings: React.FC<SettingsProps> = ({ items, setItems, categories = [] })
           </div>
 
           {/* AI Assistant */}
-          <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-2xl shadow-lg border border-white/30 dark:border-gray-700/30 p-6">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
-                <Zap className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+          <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-3xl border border-white/20 dark:border-gray-700/30 p-8 shadow-2xl hover:bg-white/80 dark:hover:bg-gray-800/80 hover:shadow-3xl hover:scale-[1.02] transition-all duration-500 group cursor-pointer">
+            <div className="flex items-center space-x-3 mb-6">
+              <div className="w-12 h-12 bg-gradient-to-br from-lifeos-primary to-lifeos-secondary rounded-2xl flex items-center justify-center group-hover:scale-110 group-hover:rotate-6 transition-all duration-300">
+                <Zap className="w-6 h-6 text-white" />
               </div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">AI Assistant</h2>
+              <h2 className="text-xl font-bold text-lifeos-dark dark:text-white group-hover:text-lifeos-primary transition-colors duration-300">AI Assistant</h2>
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between py-2">
                 <div>
-                  <p className="font-medium text-gray-900 dark:text-white">Auto-approve Functions</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">Automatically execute safe AI function calls without manual approval</p>
+                  <p className="font-medium text-lifeos-dark dark:text-white">Auto-approve Functions</p>
+                  <p className="text-sm text-lifeos-gray-400 dark:text-gray-300">Automatically execute safe AI function calls without manual approval</p>
                 </div>
                 <button
                   onClick={toggleAutoApprove}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    autoApprove ? 'bg-purple-600' : 'bg-gray-200 dark:bg-gray-700'
+                    autoApprove ? 'bg-lifeos-primary' : 'bg-gray-200 dark:bg-gray-700'
                   }`}
                 >
                   <span
@@ -131,38 +328,44 @@ const Settings: React.FC<SettingsProps> = ({ items, setItems, categories = [] })
                   />
                 </button>
               </div>
-              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
-                <p className="text-xs text-blue-600 dark:text-blue-400">
-                  <strong>Note:</strong> When enabled, the AI will automatically execute safe operations like creating items, updating content, and generating schedules. Destructive operations like deletions will still require manual approval.
+              <div className="bg-lifeos-50 dark:bg-lifeos-primary/20 rounded-lg p-3">
+                <p className="text-xs text-lifeos-primary dark:text-lifeos-primary">
+                  <strong>Note:</strong> When enabled, Lifely will automatically execute safe operations like creating items, updating content, and generating schedules. Destructive operations like deletions will still require manual approval.
                 </p>
               </div>
             </div>
           </div>
 
           {/* Account */}
-          <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-2xl shadow-lg border border-white/30 dark:border-gray-700/30 p-6">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
-                <User className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+          <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-3xl border border-white/20 dark:border-gray-700/30 p-8 shadow-2xl hover:bg-white/80 dark:hover:bg-gray-800/80 hover:shadow-3xl hover:scale-[1.02] transition-all duration-500 group cursor-pointer">
+            <div className="flex items-center space-x-3 mb-6">
+              <div className="w-12 h-12 bg-gradient-to-br from-lifeos-primary to-lifeos-secondary rounded-2xl flex items-center justify-center group-hover:scale-110 group-hover:rotate-6 transition-all duration-300">
+                <User className="w-6 h-6 text-white" />
               </div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Account</h2>
+              <h2 className="text-xl font-bold text-lifeos-dark dark:text-white group-hover:text-lifeos-primary transition-colors duration-300">Account</h2>
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between py-2">
                 <div>
-                  <p className="font-medium text-gray-900 dark:text-white">Profile Settings</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">Update your personal information</p>
+                  <p className="font-medium text-lifeos-dark dark:text-white">Profile Settings</p>
+                  <p className="text-sm text-lifeos-gray-400 dark:text-gray-300">Update your personal information</p>
                 </div>
-                <button className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                <button 
+                  onClick={() => setShowProfileSettings(true)}
+                  className="px-6 py-3 bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 rounded-xl font-medium hover:from-lifeos-50 hover:to-lifeos-100 hover:text-lifeos-primary transition-all duration-300 hover:scale-105 hover:shadow-lg"
+                >
                   Configure
                 </button>
               </div>
               <div className="flex items-center justify-between py-2">
                 <div>
-                  <p className="font-medium text-gray-900 dark:text-white">Security & Privacy</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">Manage your security settings</p>
+                  <p className="font-medium text-lifeos-dark dark:text-white">Security & Privacy</p>
+                  <p className="text-sm text-lifeos-gray-400 dark:text-gray-300">Manage your security settings</p>
                 </div>
-                <button className="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                <button 
+                  onClick={() => setShowSecuritySettings(true)}
+                  className="px-6 py-3 bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 rounded-xl font-medium hover:from-lifeos-50 hover:to-lifeos-100 hover:text-lifeos-primary transition-all duration-300 hover:scale-105 hover:shadow-lg"
+                >
                   Configure
                 </button>
               </div>
@@ -170,22 +373,22 @@ const Settings: React.FC<SettingsProps> = ({ items, setItems, categories = [] })
           </div>
 
           {/* Data & Sync */}
-          <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-2xl shadow-lg border border-white/30 dark:border-gray-700/30 p-6">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="w-8 h-8 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
-                <Database className="w-4 h-4 text-green-600 dark:text-green-400" />
+          <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-3xl border border-white/20 dark:border-gray-700/30 p-8 shadow-2xl hover:bg-white/80 dark:hover:bg-gray-800/80 hover:shadow-3xl hover:scale-[1.02] transition-all duration-500 group cursor-pointer">
+            <div className="flex items-center space-x-3 mb-6">
+              <div className="w-12 h-12 bg-gradient-to-br from-lifeos-primary to-lifeos-secondary rounded-2xl flex items-center justify-center group-hover:scale-110 group-hover:rotate-6 transition-all duration-300">
+                <Database className="w-6 h-6 text-white" />
               </div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Data & Sync</h2>
+              <h2 className="text-xl font-bold text-lifeos-dark dark:text-white group-hover:text-lifeos-primary transition-colors duration-300">Data & Sync</h2>
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between py-2">
                 <div>
-                  <p className="font-medium text-gray-900 dark:text-white">Third-Party Integrations</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">Connect Todoist, Google Calendar, Notion, YouTube & more</p>
+                  <p className="font-medium text-lifeos-dark dark:text-white">Third-Party Integrations</p>
+                  <p className="text-sm text-lifeos-gray-400 dark:text-gray-300">Connect Todoist, Google Calendar, Notion, YouTube & more</p>
                 </div>
                 <button 
                   onClick={() => setShowIntegrationManager(true)}
-                  className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-colors flex items-center space-x-2"
+                  className="px-4 py-2 bg-gradient-to-r from-lifeos-primary to-lifeos-secondary text-white rounded-lg hover:from-lifeos-primary hover:to-lifeos-secondary transition-all duration-300 hover:scale-105 hover:shadow-lg flex items-center space-x-2"
                 >
                   <Link className="w-4 h-4" />
                   <span>Manage</span>
@@ -193,20 +396,28 @@ const Settings: React.FC<SettingsProps> = ({ items, setItems, categories = [] })
               </div>
               <div className="flex items-center justify-between py-2">
                 <div>
-                  <p className="font-medium text-gray-900 dark:text-white">Export Data</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">Download your data as backup</p>
+                  <p className="font-medium text-lifeos-dark dark:text-white">Export Data</p>
+                  <p className="text-sm text-lifeos-gray-400 dark:text-gray-300">Download your data as backup</p>
                 </div>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                  Export
+                <button 
+                  onClick={handleDataExport}
+                  disabled={isExporting}
+                  className="px-6 py-3 bg-gradient-to-r from-lifeos-primary to-lifeos-secondary text-white rounded-xl font-medium hover:from-lifeos-primary hover:to-lifeos-secondary transition-all duration-300 hover:scale-105 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isExporting ? `Exporting... ${exportProgress}%` : 'Export'}
                 </button>
               </div>
               <div className="flex items-center justify-between py-2">
                 <div>
-                  <p className="font-medium text-gray-900 dark:text-white">Import Data</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">Restore from backup file</p>
+                  <p className="font-medium text-lifeos-dark dark:text-white">Import Data</p>
+                  <p className="text-sm text-lifeos-gray-400 dark:text-gray-300">Restore from backup file</p>
                 </div>
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                  Import
+                <button 
+                  onClick={handleDataImport}
+                  disabled={isImporting}
+                  className="px-6 py-3 bg-gradient-to-r from-lifeos-primary to-lifeos-secondary text-white rounded-xl font-medium hover:from-lifeos-primary hover:to-lifeos-secondary transition-all duration-300 hover:scale-105 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isImporting ? 'Importing...' : 'Import'}
                 </button>
               </div>
             </div>
@@ -214,20 +425,20 @@ const Settings: React.FC<SettingsProps> = ({ items, setItems, categories = [] })
 
           {/* Sign Out */}
           {user && (
-            <div className="bg-red-50 dark:bg-red-900/20 backdrop-blur-xl rounded-2xl shadow-lg border border-red-200 dark:border-red-800/30 p-6">
+            <div className="bg-red-50/60 dark:bg-red-900/20 backdrop-blur-sm rounded-3xl border border-red-200/50 dark:border-red-700/30 p-8 shadow-2xl hover:bg-red-50/80 dark:hover:bg-red-900/30 hover:shadow-3xl hover:scale-[1.02] transition-all duration-500 group cursor-pointer">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center">
-                    <LogOut className="w-4 h-4 text-red-600 dark:text-red-400" />
+                  <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-red-600 rounded-2xl flex items-center justify-center group-hover:scale-110 group-hover:rotate-6 transition-all duration-300">
+                    <LogOut className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <p className="font-medium text-gray-900 dark:text-white">Sign Out</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">Sign out of your account</p>
+                    <p className="font-bold text-lg text-lifeos-dark dark:text-white group-hover:text-red-600 transition-colors duration-300">Sign Out</p>
+                    <p className="text-lifeos-gray-400 dark:text-gray-300">Sign out of your account</p>
                   </div>
                 </div>
                 <button
                   onClick={handleSignOut}
-                  className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  className="px-8 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl font-medium hover:from-red-600 hover:to-red-700 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:-translate-y-0.5"
                 >
                   Sign Out
                 </button>
@@ -237,13 +448,18 @@ const Settings: React.FC<SettingsProps> = ({ items, setItems, categories = [] })
         </div>
 
         {/* Footer */}
-        <div className="mt-8 text-center">
-          <div className="inline-flex items-center space-x-3 bg-white/60 dark:bg-gray-800/60 backdrop-blur-xl rounded-xl px-4 py-3 border border-white/30 dark:border-gray-700/30">
-            <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-              <SettingsIcon className="w-3 h-3 text-white" />
+        <div className="mt-12 text-center">
+          <div className="inline-flex items-center space-x-4 bg-white/60 backdrop-blur-sm rounded-3xl px-8 py-4 border border-white/20 shadow-xl hover:bg-white/80 hover:shadow-2xl hover:scale-105 transition-all duration-500 group cursor-pointer">
+            <div className="w-6 h-6 bg-gradient-to-br from-lifeos-primary to-lifeos-secondary rounded-full flex items-center justify-center">
+              <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
+              </svg>
             </div>
-            <span className="text-sm text-gray-600 dark:text-gray-300">Life Structure v2.0</span>
-            <button className="text-sm text-blue-600 dark:text-blue-400 hover:underline">
+            <span className="text-sm text-lifeos-gray-400 dark:text-gray-300">Lifely v2.0</span>
+            <button 
+              onClick={() => setShowHelpModal(true)}
+              className="text-sm font-medium text-lifeos-primary hover:text-lifeos-secondary transition-all duration-300 hover:scale-105 hover:translate-x-1"
+            >
               Help & Support
             </button>
           </div>
@@ -281,6 +497,250 @@ const Settings: React.FC<SettingsProps> = ({ items, setItems, categories = [] })
           }
         }}
       />
+
+      {/* Profile Settings Modal */}
+      {showProfileSettings && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-3xl p-8 max-w-md w-full shadow-2xl">
+            <h3 className="text-2xl font-bold text-lifeos-dark dark:text-white mb-6">Profile Settings</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-lifeos-gray-400 dark:text-gray-300 mb-2">
+                  Display Name
+                </label>
+                <input
+                  type="text"
+                  value={profileData.displayName}
+                  onChange={(e) => setProfileData(prev => ({ ...prev, displayName: e.target.value }))}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-lifeos-dark dark:text-white focus:ring-2 focus:ring-lifeos-primary focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-lifeos-gray-400 dark:text-gray-300 mb-2">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={profileData.email}
+                  onChange={(e) => setProfileData(prev => ({ ...prev, email: e.target.value }))}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-lifeos-dark dark:text-white focus:ring-2 focus:ring-lifeos-primary focus:border-transparent"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-lifeos-gray-400 dark:text-gray-300 mb-2">
+                  Timezone
+                </label>
+                <select
+                  value={profileData.timezone}
+                  onChange={(e) => setProfileData(prev => ({ ...prev, timezone: e.target.value }))}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-lifeos-dark dark:text-white focus:ring-2 focus:ring-lifeos-primary focus:border-transparent"
+                >
+                  <option value="America/New_York">Eastern Time</option>
+                  <option value="America/Chicago">Central Time</option>
+                  <option value="America/Denver">Mountain Time</option>
+                  <option value="America/Los_Angeles">Pacific Time</option>
+                  <option value="Europe/London">London</option>
+                  <option value="Europe/Paris">Paris</option>
+                  <option value="Asia/Tokyo">Tokyo</option>
+                </select>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-lifeos-gray-400 dark:text-gray-300">Notifications</span>
+                <button
+                  onClick={() => setProfileData(prev => ({ ...prev, notifications: !prev.notifications }))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    profileData.notifications ? 'bg-lifeos-primary' : 'bg-gray-200 dark:bg-gray-700'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      profileData.notifications ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+            
+            <div className="flex space-x-3 mt-8">
+              <button
+                onClick={handleProfileUpdate}
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-lifeos-primary to-lifeos-secondary text-white rounded-xl font-medium hover:from-lifeos-primary hover:to-lifeos-secondary transition-all duration-300 hover:scale-105 hover:shadow-lg"
+              >
+                Save Changes
+              </button>
+              <button
+                onClick={() => setShowProfileSettings(false)}
+                className="px-6 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-all duration-300"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Security Settings Modal */}
+      {showSecuritySettings && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-3xl p-8 max-w-md w-full shadow-2xl">
+            <h3 className="text-2xl font-bold text-lifeos-dark dark:text-white mb-6">Security & Privacy</h3>
+            
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-lifeos-dark dark:text-white">Two-Factor Authentication</p>
+                  <p className="text-sm text-lifeos-gray-400 dark:text-gray-300">Add extra security to your account</p>
+                </div>
+                <button
+                  onClick={() => setSecuritySettings(prev => ({ ...prev, twoFactorEnabled: !prev.twoFactorEnabled }))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    securitySettings.twoFactorEnabled ? 'bg-lifeos-primary' : 'bg-gray-200 dark:bg-gray-700'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      securitySettings.twoFactorEnabled ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-lifeos-gray-400 dark:text-gray-300 mb-2">
+                  Session Timeout (minutes)
+                </label>
+                <select
+                  value={securitySettings.sessionTimeout}
+                  onChange={(e) => setSecuritySettings(prev => ({ ...prev, sessionTimeout: parseInt(e.target.value) }))}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-lifeos-dark dark:text-white focus:ring-2 focus:ring-lifeos-primary focus:border-transparent"
+                >
+                  <option value={15}>15 minutes</option>
+                  <option value={30}>30 minutes</option>
+                  <option value={60}>1 hour</option>
+                  <option value={240}>4 hours</option>
+                  <option value={480}>8 hours</option>
+                </select>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-lifeos-dark dark:text-white">Data Encryption</p>
+                  <p className="text-sm text-lifeos-gray-400 dark:text-gray-300">Encrypt sensitive data locally</p>
+                </div>
+                <button
+                  onClick={() => setSecuritySettings(prev => ({ ...prev, dataEncryption: !prev.dataEncryption }))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    securitySettings.dataEncryption ? 'bg-lifeos-primary' : 'bg-gray-200 dark:bg-gray-700'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      securitySettings.dataEncryption ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-lifeos-dark dark:text-white">Activity Logging</p>
+                  <p className="text-sm text-lifeos-gray-400 dark:text-gray-300">Log user actions for security</p>
+                </div>
+                <button
+                  onClick={() => setSecuritySettings(prev => ({ ...prev, activityLogging: !prev.activityLogging }))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    securitySettings.activityLogging ? 'bg-lifeos-primary' : 'bg-gray-200 dark:bg-gray-700'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      securitySettings.activityLogging ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+            
+            <div className="flex space-x-3 mt-8">
+              <button
+                onClick={handleSecurityUpdate}
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-lifeos-primary to-lifeos-secondary text-white rounded-xl font-medium hover:from-lifeos-primary hover:to-lifeos-secondary transition-all duration-300 hover:scale-105 hover:shadow-lg"
+              >
+                Save Changes
+              </button>
+              <button
+                onClick={() => setShowSecuritySettings(false)}
+                className="px-6 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-all duration-300"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Help & Support Modal */}
+      {showHelpModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-3xl p-8 max-w-lg w-full shadow-2xl">
+            <h3 className="text-2xl font-bold text-lifeos-dark dark:text-white mb-6">Help & Support</h3>
+            
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <div className="p-4 bg-lifeos-50 dark:bg-lifeos-primary/10 rounded-xl">
+                  <h4 className="font-semibold text-lifeos-dark dark:text-white mb-2">📚 Getting Started</h4>
+                  <p className="text-sm text-lifeos-gray-400 dark:text-gray-300">
+                    Check out our comprehensive guides to get the most out of Lifely.
+                  </p>
+                </div>
+                
+                <div className="p-4 bg-lifeos-50 dark:bg-lifeos-primary/10 rounded-xl">
+                  <h4 className="font-semibold text-lifeos-dark dark:text-white mb-2">💬 Community Support</h4>
+                  <p className="text-sm text-lifeos-gray-400 dark:text-gray-300">
+                    Join our Discord community for tips, tricks, and peer support.
+                  </p>
+                </div>
+                
+                <div className="p-4 bg-lifeos-50 dark:bg-lifeos-primary/10 rounded-xl">
+                  <h4 className="font-semibold text-lifeos-dark dark:text-white mb-2">🐛 Report Issues</h4>
+                  <p className="text-sm text-lifeos-gray-400 dark:text-gray-300">
+                    Found a bug? Report it on our GitHub repository or contact support.
+                  </p>
+                </div>
+                
+                <div className="p-4 bg-lifeos-50 dark:bg-lifeos-primary/10 rounded-xl">
+                  <h4 className="font-semibold text-lifeos-dark dark:text-white mb-2">✨ Feature Requests</h4>
+                  <p className="text-sm text-lifeos-gray-400 dark:text-gray-300">
+                    Have an idea? We'd love to hear it! Submit feature requests through our feedback portal.
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex flex-col space-y-3">
+                <button className="w-full px-6 py-3 bg-gradient-to-r from-lifeos-primary to-lifeos-secondary text-white rounded-xl font-medium hover:from-lifeos-primary hover:to-lifeos-secondary transition-all duration-300 hover:scale-105 hover:shadow-lg">
+                  Visit Documentation
+                </button>
+                <button className="w-full px-6 py-3 bg-gray-100 dark:bg-gray-700 text-lifeos-dark dark:text-white rounded-xl font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-300">
+                  Contact Support
+                </button>
+              </div>
+            </div>
+            
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setShowHelpModal(false)}
+                className="px-6 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-all duration-300"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
