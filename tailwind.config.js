@@ -11,6 +11,28 @@ module.exports = {
           50: '#eff6ff',
           500: '#3b82f6',
           600: '#2563eb',
+        },
+        // Custom Lifely brand colors
+        lifeos: {
+          // Light theme colors
+          50: '#f0f9ff',
+          100: '#e0f2fe', 
+          200: '#bae6fd',
+          300: '#7dd3fc',
+          400: '#38bdf8',
+          500: '#0ea5e9', // primary
+          600: '#0284c7', // secondary
+          700: '#0369a1',
+          800: '#075985',
+          900: '#0c4a6e',
+          // Brand-specific colors
+          primary: '#0ea5e9',
+          secondary: '#0284c7',
+          dark: '#0f172a',
+          light: '#f0f9ff',
+          gray: {
+            400: '#94a3b8',
+          }
         }
       }
     },
