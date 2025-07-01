@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   User, Send, Image, Plus, X, Minimize2, 
   Sun, Moon, ChevronLeft, ChevronRight, Edit3, 
-  Zap, MessagesSquare, Mic, MicOff, ChevronDown, Sparkles, Square, Paperclip
+  Zap, MessagesSquare, Mic, MicOff, ChevronDown, Square
 } from 'lucide-react';
 import { chatService } from '../services/ChatService';
 import { voiceService, VoiceService } from '../services/voiceService';
@@ -139,6 +139,8 @@ interface AIAssistantProps {
   isCollapsed?: boolean;
   onResize?: (width: number) => void;
   onToggleCollapse?: () => void;
+  // Props for inline mode (onboarding)
+  inlineMode?: boolean;
   // Props for note editing context
   currentNoteContent?: string;
   currentNoteTitle?: string;
@@ -169,6 +171,8 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   isCollapsed,
   onResize,
   onToggleCollapse,
+  // Props for inline mode (onboarding)
+  inlineMode,
   // Props for note editing context
   currentNoteContent,
   currentNoteTitle,
@@ -179,31 +183,24 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
 }) => {
   
   // Configure AI services with Supabase callbacks for authenticated users
+  // Memoize supabase callbacks configuration to prevent constant re-renders
+  const hasSupabaseCallbacks = !!supabaseCallbacks;
+  const callbacksRef = useRef(supabaseCallbacks);
+  
   useEffect(() => {
-    if (supabaseCallbacks) {
-      console.log('✅ AIAssistant: Configuring geminiService with Supabase callbacks for authenticated user');
+    // Only reconfigure if the presence of callbacks changes, not the object itself
+    if (hasSupabaseCallbacks && supabaseCallbacks) {
+      console.log('✅ AIAssistant: Configuring services with Supabase callbacks');
+      callbacksRef.current = supabaseCallbacks;
       geminiService.setSupabaseCallbacks(supabaseCallbacks);
-      console.log('✅ AIAssistant: Configuring openaiRealtimeService with Supabase callbacks for authenticated user');
       openaiRealtimeService.setSupabaseCallbacks(supabaseCallbacks);
-    } else {
-      console.log('✅ AIAssistant: Clearing geminiService Supabase callbacks for unauthenticated user');
+    } else if (!hasSupabaseCallbacks) {
+      console.log('✅ AIAssistant: Clearing service Supabase callbacks');
+      callbacksRef.current = undefined;
       geminiService.clearSupabaseCallbacks();
-      console.log('✅ AIAssistant: Clearing openaiRealtimeService Supabase callbacks for unauthenticated user');
       openaiRealtimeService.clearSupabaseCallbacks();
     }
-  }, [supabaseCallbacks]);
-
-  // IMMEDIATE DEBUG - Check what props we're getting
-  useEffect(() => {
-    console.log('🚨 AIAssistant PROPS DEBUG:');
-    console.log('🚨 currentNoteContent:', currentNoteContent);
-    console.log('🚨 currentNoteTitle:', currentNoteTitle);
-    console.log('🚨 onUpdateNoteContent exists?', !!onUpdateNoteContent);
-    console.log('🚨 onUpdateNoteTitle exists?', !!onUpdateNoteTitle);
-    console.log('🚨 currentView:', currentView);
-    console.log('🚨 isSidebarMode:', isSidebarMode);
-    console.log('🚨 supabaseCallbacks exists?', !!supabaseCallbacks);
-  }, [currentNoteContent, currentNoteTitle, onUpdateNoteContent, onUpdateNoteTitle, currentView, isSidebarMode, supabaseCallbacks]);
+  }, [hasSupabaseCallbacks]); // Only depend on boolean presence, not the object
 
   const [inputMessage, setInputMessage] = useState('');
   const [showSessions, setShowSessions] = useState(false);
@@ -282,36 +279,48 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
           aiFeedback: aiFeedback
         });
         
-        // Trigger data refresh with aggressive timing for Supabase
-        if (result.itemsModified) {
-          // Immediate refresh
+        // FORCE immediate real-time refresh for ALL successful function executions
+        console.log('✅ FORCE: Function executed successfully - triggering immediate refresh');
+        
+        // IMMEDIATE: Force localStorage reload and trigger multiple refresh strategies
+        setTimeout(() => {
+          console.log('🔄 FORCE: Immediate localStorage refresh triggered');
+          
+          // Strategy 1: Direct refresh call
           onRefreshItems();
           
-          // Add visual feedback and additional refreshes
+          // Strategy 2: Force page data reload by dispatching storage event
+          window.dispatchEvent(new StorageEvent('storage', {
+            key: 'lifeStructureItems',
+            newValue: localStorage.getItem('lifeStructureItems'),
+            url: window.location.href
+          }));
+          
+          // Strategy 3: Custom refresh event
+          window.dispatchEvent(new CustomEvent('forceDataRefresh', {
+            detail: { 
+              timestamp: Date.now(), 
+              source: 'ai_function',
+              functionName: functionCall.name,
+              immediate: true
+            }
+          }));
+          
+          // Strategy 4: Additional refresh call after short delay
           setTimeout(() => {
             onRefreshItems();
-            // Add a flash animation to indicate refresh
-            const bodyElement = document.body;
-            bodyElement.style.transition = 'background-color 0.2s ease';
-            bodyElement.style.backgroundColor = isDarkMode ? 'rgba(34, 197, 94, 0.1)' : 'rgba(34, 197, 94, 0.05)';
-            setTimeout(() => {
-              bodyElement.style.backgroundColor = '';
-              setTimeout(() => {
-                bodyElement.style.transition = '';
-              }, 200);
-            }, 150);
-            
-            // Triple refresh for Supabase data consistency
-            setTimeout(() => {
-              onRefreshItems();
-            }, 300);
-            
-            // Final refresh to ensure categories are loaded
-            setTimeout(() => {
-              onRefreshItems();
-            }, 600);
+            console.log('🔄 FORCE: Secondary refresh completed');
           }, 100);
-        }
+          
+        }, 50); // Small delay to ensure localStorage write completed
+        
+        // Visual feedback
+        const bodyElement = document.body;
+        bodyElement.style.transition = 'background-color 0.1s ease';
+        bodyElement.style.backgroundColor = isDarkMode ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.1)';
+        setTimeout(() => {
+          bodyElement.style.backgroundColor = '';
+        }, 300);
 
         // SIMPLIFIED AGENTIC MODE: No automatic continuation - user controls when to stop
         console.log('🤖 Function executed successfully in agentic mode. Waiting for user input or stop command.');
@@ -350,13 +359,14 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
     }
   };
   
-  // Stop agentic mode - ONLY stop processing, don't change mode
+  // Switch to Ask mode and stop any processing
   const stopAgenticMode = () => {
+    setIsAgenticMode(false);
     setIsAIThinking(false);
     setIsCallingFunction(false);
     setCurrentFunctionName(null);
     chatService.setProcessing(false);
-    console.log('🛑 Agentic processing stopped (mode unchanged)');
+    console.log('🛑 Switched to Ask mode and stopped processing');
   };
 
   
@@ -1830,26 +1840,48 @@ User message: ${messageWithContext}`;
             // No system message clutter - AI will explain in follow-up
           }
 
-          // If items were modified, refresh the UI with animation
-          if (response.itemsModified) {
-            console.log('✅ Items modified, calling onRefreshItems');
+          // FORCE immediate real-time updates when functions execute
+          if (response.pendingFunctionCall || (response.functionResults && response.functionResults.length > 0) || response.itemsModified) {
+            console.log('✅ Function executed - FORCING immediate UI refresh');
+            
+            // IMMEDIATE: Force localStorage reload with multiple strategies
             setTimeout(() => {
+              console.log('🔄 FORCE: Response-based localStorage refresh triggered');
+              
+              // Strategy 1: Direct refresh call
               onRefreshItems();
-              // Force a second refresh to ensure colors and UI update properly
+              
+              // Strategy 2: Force page data reload by dispatching storage event
+              window.dispatchEvent(new StorageEvent('storage', {
+                key: 'lifeStructureItems',
+                newValue: localStorage.getItem('lifeStructureItems'),
+                url: window.location.href
+              }));
+              
+              // Strategy 3: Custom immediate refresh event
+              window.dispatchEvent(new CustomEvent('forceDataRefresh', {
+                detail: { 
+                  timestamp: Date.now(), 
+                  source: 'ai_response',
+                  immediate: true
+                }
+              }));
+              
+              // Strategy 4: Backup refresh
               setTimeout(() => {
                 onRefreshItems();
-              }, 200);
-              // Add subtle refresh indicator
-              const bodyElement = document.body;
-              bodyElement.style.transition = 'background-color 0.2s ease';
-              bodyElement.style.backgroundColor = isDarkMode ? 'rgba(34, 197, 94, 0.1)' : 'rgba(34, 197, 94, 0.05)';
-              setTimeout(() => {
-                bodyElement.style.backgroundColor = '';
-                setTimeout(() => {
-                  bodyElement.style.transition = '';
-                }, 200);
-              }, 150);
-            }, 100);
+                console.log('🔄 FORCE: Response-based secondary refresh completed');
+              }, 100);
+              
+            }, 50);
+            
+            // Visual confirmation
+            const bodyElement = document.body;
+            bodyElement.style.transition = 'background-color 0.1s ease';
+            bodyElement.style.backgroundColor = isDarkMode ? 'rgba(34, 197, 94, 0.1)' : 'rgba(34, 197, 94, 0.05)';
+            setTimeout(() => {
+              bodyElement.style.backgroundColor = '';
+            }, 200);
           }
 
           // Add AI response with image acknowledgment if needed
@@ -1867,18 +1899,43 @@ User message: ${messageWithContext}`;
       }
       
     } catch (error) {
-      console.error('AI processing error:', error);
-      await chatService.addMessage('assistant', "I had trouble processing that request. Could you try rephrasing it?");
+      console.error('💥 AI processing error details:', error);
+      console.error('💥 Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+      console.error('💥 Error message:', error instanceof Error ? error.message : String(error));
+      
+      // More specific error message
+      let errorMessage = "I had trouble processing that request. ";
+      if (error instanceof Error) {
+        if (error.message.includes('API key')) {
+          errorMessage += "Please check your API key configuration.";
+        } else if (error.message.includes('network') || error.message.includes('fetch')) {
+          errorMessage += "There seems to be a network issue. Please try again.";
+        } else if (error.message.includes('rate limit')) {
+          errorMessage += "I'm being rate limited. Please wait a moment and try again.";
+        } else {
+          errorMessage += `Error: ${error.message}`;
+        }
+      } else {
+        errorMessage += "Please try rephrasing your request.";
+      }
+      
+      await chatService.addMessage('assistant', errorMessage);
     } finally {
       chatService.setProcessing(false);
       setIsAIThinking(false);
       setIsCallingFunction(false);
       setCurrentFunctionName(null);
       
-      // Always refresh UI after AI processing completes
-      setTimeout(() => {
-        onRefreshItems();
-      }, 500);
+      // Always refresh UI after AI processing completes - immediate for better UX
+      onRefreshItems();
+      
+      // Additional refresh for authenticated users to ensure Supabase sync
+      if (callbacksRef.current?.refreshData) {
+        console.log('🔄 Triggering Supabase data refresh');
+        callbacksRef.current.refreshData().catch(err => 
+          console.warn('⚠️ Supabase refresh failed:', err)
+        );
+      }
     }
   };
 
@@ -2075,7 +2132,9 @@ User message: ${messageWithContext}`;
           className="w-full h-full flex items-center justify-center cursor-pointer hover:scale-110 transition-transform"
           onClick={() => onToggleCollapse?.()}
         >
-          <Sparkles className={`w-8 h-8 ${isDarkMode ? 'text-white' : 'text-gray-800'}`} />
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#2B7FFF" className="w-8 h-8">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
         </div>
       ) : (
         // Full panel
@@ -2089,12 +2148,14 @@ User message: ${messageWithContext}`;
             <div className="flex items-center space-x-3 relative z-10">
               <div className="relative">
                 <div className="p-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 shadow-lg">
-                  <Sparkles className="w-6 h-6 text-white" />
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffffff" className="w-6 h-6">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                  </svg>
                 </div>
               </div>
               <div>
                 <h2 className={`font-bold text-lg ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-                  Life AI
+                  Lifely AI
                 </h2>
                 <p className={`text-xs ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                   Personal Agent
@@ -2761,10 +2822,12 @@ User message: ${messageWithContext}`;
               <div className="flex items-center justify-center h-full relative z-10">
                 <div className="text-center">
                   <div className="relative mb-6">
-                    <Sparkles className={`w-16 h-16 mx-auto ${isDarkMode ? 'text-gray-400' : 'text-gray-400'}`} />
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#9CA3AF" className="w-16 h-16 mx-auto">
+                      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                    </svg>
                   </div>
                   <h3 className={`text-xl font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-                    Life AI Assistant
+                    Lifely AI Assistant
                   </h3>
                   <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                     Ready to help you organize and optimize your life!
@@ -2801,7 +2864,7 @@ User message: ${messageWithContext}`;
                   <div className="flex justify-start relative z-10">
                     <div className="flex items-start space-x-3">
                       <div className="p-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 shadow-lg">
-                        <Sparkles className="w-5 h-5 text-white" />
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffffff" className="w-5 h-5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
                       </div>
                       <div 
                         className="p-4 rounded-2xl backdrop-blur-sm border shadow-lg"
@@ -3260,7 +3323,7 @@ const MessageBubble: React.FC<{
         <div className="flex items-start space-x-3 mb-4">
           <div className="relative">
             <div className="p-2 rounded-xl shadow-lg bg-gradient-to-br from-gray-600 to-gray-700">
-              <Sparkles className="w-5 h-5 text-white" />
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffffff" className="w-5 h-5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
             </div>
           </div>
           
@@ -3342,7 +3405,7 @@ const MessageBubble: React.FC<{
           <div className="flex items-start space-x-3">
             <div className="relative">
               <div className="p-2 rounded-xl shadow-lg bg-gradient-to-br from-gray-600 to-gray-700">
-                <Sparkles className="w-5 h-5 text-white" />
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffffff" className="w-5 h-5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
               </div>
             </div>
             
@@ -3383,7 +3446,7 @@ const MessageBubble: React.FC<{
               : 'bg-gradient-to-br from-gray-600 to-gray-700'
           }`}
         >
-          {isUser ? <User className="w-5 h-5 text-white" /> : <Sparkles className="w-5 h-5 text-white" />}
+          {isUser ? <User className="w-5 h-5 text-white" /> : <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffffff" className="w-5 h-5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>}
         </div>
       </div>
       

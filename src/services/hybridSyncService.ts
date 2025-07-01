@@ -10,7 +10,7 @@ interface SyncMetadata {
 class HybridSyncService {
   private syncInterval: NodeJS.Timeout | null = null;
   private isInitialized: boolean = false; // Track initialization state
-  private readonly SYNC_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes for better responsiveness
+  private readonly SYNC_INTERVAL_MS = 30 * 1000; // 30 seconds for seamless localStorage feel with cloud backup
   private readonly STORAGE_KEYS = {
     ITEMS: 'lifeStructureItems',
     CATEGORIES: 'lifeStructureCategories', 
@@ -89,6 +89,49 @@ class HybridSyncService {
   async manualSync(): Promise<void> {
     console.log('🔧 Manual sync triggered');
     await this.performSync();
+  }
+
+  /**
+   * Emergency backup to Edge Function - for critical data protection
+   */
+  async emergencyBackup(): Promise<void> {
+    console.log('🚨 Emergency backup triggered');
+    try {
+      const localItems = this.getLocalItems();
+      const localCategories = this.getLocalCategories();
+
+      const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+      const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
+      
+      if (!supabaseUrl || !supabaseKey) {
+        console.warn('⚠️ Emergency backup not available - Edge Function unavailable');
+        return;
+      }
+
+      const { data: { session } } = await supabaseService.getSupabase().auth.getSession();
+      if (!session) {
+        console.warn('⚠️ Emergency backup failed - no auth session');
+        return;
+      }
+
+      await fetch(`${supabaseUrl}/functions/v1/lifeOS-background-sync`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+          'apikey': supabaseKey
+        },
+        body: JSON.stringify({
+          action: 'backup_localStorage',
+          items: localItems,
+          categories: localCategories
+        })
+      });
+
+      console.log('✅ Emergency backup complete');
+    } catch (error) {
+      console.error('❌ Emergency backup failed:', error);
+    }
   }
 
   /**
@@ -253,11 +296,67 @@ class HybridSyncService {
   }
 
   /**
-   * Push only new items to Supabase (simplified version)
+   * Push only new items to Supabase using optimized Edge Function for better performance
    */
   private async pushNewItemsToSupabase(newItems: Item[], localCategories: Category[]): Promise<void> {
     try {
-      console.log(`📤 Pushing ${newItems.length} new items to Supabase...`);
+      console.log(`🚀 Using background sync Edge Function for ${newItems.length} items and ${localCategories.length} categories...`);
+
+      // Get Supabase URL and user token
+      const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+      const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
+      
+      if (!supabaseUrl || !supabaseKey) {
+        console.warn('⚠️ Edge Function sync not available, falling back to direct Supabase...');
+        return this.fallbackDirectSync(newItems, localCategories);
+      }
+
+      // Get user auth token
+      const { data: { session } } = await supabaseService.getSupabase().auth.getSession();
+      if (!session) {
+        console.warn('⚠️ No auth session, falling back to direct Supabase...');
+        return this.fallbackDirectSync(newItems, localCategories);
+      }
+
+      // Call the background sync Edge Function
+      const response = await fetch(`${supabaseUrl}/functions/v1/lifeOS-background-sync`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+          'apikey': supabaseKey
+        },
+        body: JSON.stringify({
+          action: 'full_sync',
+          items: newItems,
+          categories: localCategories,
+          force: false
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.warn(`⚠️ Edge Function sync failed (${response.status}), falling back:`, error);
+        return this.fallbackDirectSync(newItems, localCategories);
+      }
+
+      const result = await response.json();
+      console.log(`✅ Edge Function sync complete:`, result);
+      console.log(`📊 Items: ${result.items?.synced || 0} synced, ${result.items?.skipped || 0} skipped`);
+      console.log(`📂 Categories: ${result.categories?.synced || 0} synced, ${result.categories?.skipped || 0} skipped`);
+      
+    } catch (error) {
+      console.warn('⚠️ Edge Function sync error, falling back to direct Supabase:', error);
+      return this.fallbackDirectSync(newItems, localCategories);
+    }
+  }
+
+  /**
+   * Fallback direct sync method (original implementation)
+   */
+  private async fallbackDirectSync(newItems: Item[], localCategories: Category[]): Promise<void> {
+    try {
+      console.log(`📤 Direct Supabase sync: ${newItems.length} items, ${localCategories.length} categories...`);
 
       // Handle categories first
       const existingCategories = await supabaseService.getCategories();
@@ -274,7 +373,7 @@ class HybridSyncService {
         }
       }
 
-      // Create new items
+      // Create new items  
       let itemsCreated = 0;
       for (const item of newItems) {
         try {
@@ -297,10 +396,10 @@ class HybridSyncService {
         }
       }
 
-      console.log(`📊 Successfully created ${itemsCreated}/${newItems.length} new items`);
+      console.log(`📊 Direct sync complete: ${itemsCreated}/${newItems.length} items created`);
       
     } catch (error) {
-      console.error('❌ Failed to push new items to Supabase:', error);
+      console.error('❌ Direct sync failed:', error);
       throw error;
     }
   }

@@ -493,9 +493,13 @@ function AppContent() {
     // Also listen for custom sync events
     window.addEventListener('hybridSyncComplete', handleStorageSync);
     
+    // Listen for immediate AI function refresh events
+    window.addEventListener('forceDataRefresh', handleStorageSync);
+    
     return () => {
       window.removeEventListener('storage', handleStorageSync);
       window.removeEventListener('hybridSyncComplete', handleStorageSync);
+      window.removeEventListener('forceDataRefresh', handleStorageSync);
     };
   }, []);
 
@@ -544,17 +548,8 @@ function AppContent() {
       );
     }
 
-    // Show loading while data is being fetched (for authenticated users)
-    if (user && (!dataInitialized || dataLoading)) {
-      return (
-        <div className="flex items-center justify-center h-full">
-          <div className="text-center">
-            <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-gray-600 dark:text-gray-400">Loading your data...</p>
-          </div>
-        </div>
-      );
-    }
+    // For localStorage-first approach: Show UI immediately, let Supabase sync in background
+    // No blocking data loading - localStorage provides instant experience
 
     // Show error if data loading failed
     if (user && dataError) {

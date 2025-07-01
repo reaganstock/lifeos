@@ -1,4 +1,5 @@
 import { Item } from '../types';
+import { AIDebugHelper } from '../utils/debugHelper';
 // Removed categories import - using dynamic categories from context
 
 // Gemini API Configuration
@@ -48,6 +49,38 @@ export class GeminiService {
   }): void {
     this.supabaseCallbacks = callbacks;
     console.log('✅ GEMINI SERVICE: Supabase callbacks configured for authenticated user');
+  }
+
+  // Debug function to test basic function calling
+  async testFunctionCalling(): Promise<void> {
+    console.group('🧪 TESTING FUNCTION CALLING');
+    
+    try {
+      console.log('📊 Current items count:', this.currentItems.length);
+      console.log('🔧 Testing createItem function...');
+      
+      const testArgs = {
+        title: 'Debug Test Item',
+        text: 'This is a test item created for debugging',
+        type: 'todo',
+        categoryId: 'academics',
+        completed: false
+      };
+      
+      const result = await this.createItem(testArgs);
+      console.log('✅ Test createItem result:', result);
+      
+      if (result.success) {
+        console.log('🎉 Function calling is working correctly!');
+      } else {
+        console.log('⚠️ Function calling has issues:', result.result?.message || 'Unknown error');
+      }
+      
+    } catch (error) {
+      console.error('❌ Function calling test failed:', error);
+    }
+    
+    console.groupEnd();
   }
 
   // Clear Supabase callbacks for unauthenticated users
@@ -139,6 +172,9 @@ export class GeminiService {
     this.currentItems = items;
     console.log('📊 GEMINI SERVICE: Stored', items.length, 'current items for function access');
     
+    // Enhanced debugging of items state
+    AIDebugHelper.logItemsState(items, 'Function Context');
+    
     this.itemsModified = false;
     
     // Build system prompt with better instructions for conversational responses
@@ -173,6 +209,9 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
     try {
       const response = await this.makeGeminiRequest(messages, tools);
       console.log('🤖 Gemini Response:', response);
+      
+      // Enhanced debugging
+      AIDebugHelper.logAPIResponse(response);
       
       // CRITICAL DEBUG: Check what we actually received
       console.log('🔍 DEBUG: Response structure:', JSON.stringify(response, null, 2));
@@ -236,6 +275,10 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
               console.log('⚡ Ask mode: Executing function immediately');
               try {
                 const result = await this.executeFunction(functionCall.name, functionCall.args);
+                
+                // Enhanced debugging
+                AIDebugHelper.logFunctionCall(functionCall.name, functionCall.args, result);
+                
                 functionResults.push({
                   function: functionCall.name,
                   ...result
@@ -243,10 +286,17 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
                 console.log('✅ Ask mode: Function executed successfully');
               } catch (error) {
                 console.error('❌ Ask mode: Function execution failed:', error);
-                functionResults.push({
+                console.error('❌ Error details:', error instanceof Error ? error.stack : error);
+                
+                const errorResult = {
                   function: functionCall.name,
-                  error: error instanceof Error ? error.message : 'Unknown error'
-                });
+                  error: error instanceof Error ? error.message : 'Unknown error',
+                  success: false
+                };
+                
+                AIDebugHelper.logFunctionCall(functionCall.name, functionCall.args, errorResult);
+                
+                functionResults.push(errorResult);
               }
             }
           }
@@ -1855,50 +1905,22 @@ Please specify your preference or say "create anyway" to override.`,
       };
     }
 
-    // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
-    if (this.supabaseCallbacks.createItem) {
-      console.log('🔄 GEMINI SERVICE: Creating item via Supabase for authenticated user');
-      try {
-        const supabaseItem = await this.supabaseCallbacks.createItem(newItem);
-        // Real-time subscriptions handle data updates automatically - manual refresh removed
-        
-        return {
-          success: true,
-          function: 'createItem',
-          result: {
-            message: `✅ Created ${args.type}: "${args.title}"${isAllDayEvent ? ' (All Day)' : ''}`,
-            item: supabaseItem || newItem
-          }
-        };
-      } catch (error) {
-        console.error('❌ GEMINI SERVICE: Supabase createItem failed:', error);
-        // Fall back to localStorage
-        items.push(newItem);
-        this.saveStoredItems(items);
-        
-        return {
-          success: true,
-          function: 'createItem',
-          result: {
-            message: `✅ Created ${args.type}: "${args.title}" (saved locally due to sync error)`,
-            item: newItem
-          }
-        };
-      }
-    } else {
-      console.log('🔄 GEMINI SERVICE: Creating item via localStorage for unauthenticated user');
-      items.push(newItem);
-      this.saveStoredItems(items);
+    // ALWAYS update localStorage first for immediate UI updates
+    console.log('🔄 GEMINI SERVICE: Creating item via localStorage (hybridSync will handle Supabase)');
+    items.push(newItem);
+    this.saveStoredItems(items);
+    
+    // Mark that items were modified so hybridSync can sync to Supabase automatically
+    this.itemsModified = true;
 
-      return {
-        success: true,
-        function: 'createItem',
-        result: {
-          message: `✅ Created ${args.type}: "${args.title}"${isAllDayEvent ? ' (All Day)' : ''}`,
-          item: newItem
-        }
-      };
-    }
+    return {
+      success: true,
+      function: 'createItem',
+      result: {
+        message: `✅ Created ${args.type}: "${args.title}"${isAllDayEvent ? ' (All Day)' : ''}`,
+        item: newItem
+      }
+    };
   }
 
   // Helper methods for enhanced functionality
@@ -2103,43 +2125,20 @@ Please specify your preference or say "create anyway" to override.`,
         newItems.push(newItem);
       }
       
-      // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
-      if (this.supabaseCallbacks.bulkCreateItems) {
-        console.log('🔄 GEMINI SERVICE: Bulk creating items via Supabase for authenticated user');
-        try {
-          const supabaseItems = await this.supabaseCallbacks.bulkCreateItems(newItems);
-          // Real-time subscriptions handle data updates automatically - manual refresh removed
-          
-          return {
-            success: true,
-            function: 'bulkCreateItems',
-            result: { created: newItems.length, items: supabaseItems || newItems }
-          };
-        } catch (error) {
-          console.error('❌ GEMINI SERVICE: Supabase bulkCreateItems failed:', error);
-          // Fall back to localStorage
-          const items = this.getStoredItems();
-          items.push(...newItems);
-          this.saveStoredItems(items);
-          
-          return {
-            success: true,
-            function: 'bulkCreateItems',
-            result: { created: newItems.length, items: newItems, fallbackUsed: true }
-          };
-        }
-      } else {
-        console.log('🔄 GEMINI SERVICE: Bulk creating items via localStorage for unauthenticated user');
-        const items = this.getStoredItems();
-        items.push(...newItems);
-        this.saveStoredItems(items);
-        
-        return {
-          success: true,
-          function: 'bulkCreateItems',
-          result: { created: newItems.length, items: newItems }
-        };
-      }
+      // ALWAYS update localStorage first for immediate UI updates
+      console.log('🔄 GEMINI SERVICE: Bulk creating items via localStorage (hybridSync will handle Supabase)');
+      const items = this.getStoredItems();
+      items.push(...newItems);
+      this.saveStoredItems(items);
+      
+      // Mark that items were modified so hybridSync can sync to Supabase automatically
+      this.itemsModified = true;
+      
+      return {
+        success: true,
+        function: 'bulkCreateItems',
+        result: { created: newItems.length, items: newItems }
+      };
     } catch (error) {
       console.error('❌ Error parsing items JSON:', error);
       throw new Error(`Failed to parse items JSON: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -2316,50 +2315,22 @@ Please specify your preference or say "create anyway" to override.`,
 
     const updatedItem = { ...originalItem, ...updates };
 
-    // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
-    if (this.supabaseCallbacks.updateItem) {
-      console.log('🔄 GEMINI SERVICE: Updating item via Supabase for authenticated user');
-      try {
-        const supabaseItem = await this.supabaseCallbacks.updateItem(originalItem.id, updatedItem);
-        // Real-time subscriptions handle data updates automatically - manual refresh removed
-        
-        return {
-          success: true,
-          function: 'updateItem',
-          result: {
-            message: `✅ Updated ${updatedItem.type}: "${updatedItem.title}"`,
-            item: supabaseItem || updatedItem
-          }
-        };
-      } catch (error) {
-        console.error('❌ GEMINI SERVICE: Supabase updateItem failed:', error);
-        // Fall back to localStorage
-        items[itemIndex] = updatedItem;
-        this.saveStoredItems(items);
-        
-        return {
-          success: true,
-          function: 'updateItem',
-          result: {
-            message: `✅ Updated ${updatedItem.type}: "${updatedItem.title}" (saved locally due to sync error)`,
-            item: updatedItem
-          }
-        };
-      }
-    } else {
-      console.log('🔄 GEMINI SERVICE: Updating item via localStorage for unauthenticated user');
-      items[itemIndex] = updatedItem;
-      this.saveStoredItems(items);
+    // ALWAYS update localStorage first for immediate UI updates
+    console.log('🔄 GEMINI SERVICE: Updating item via localStorage (hybridSync will handle Supabase)');
+    items[itemIndex] = updatedItem;
+    this.saveStoredItems(items);
+    
+    // Mark that items were modified so hybridSync can sync to Supabase automatically
+    this.itemsModified = true;
 
-      return {
-        success: true,
-        function: 'updateItem',
-        result: {
-          message: `✅ Updated ${updatedItem.type}: "${updatedItem.title}"`,
-          item: updatedItem
-        }
-      };
-    }
+    return {
+      success: true,
+      function: 'updateItem',
+      result: {
+        message: `✅ Updated ${updatedItem.type}: "${updatedItem.title}"`,
+        item: updatedItem
+      }
+    };
   }
 
   private async deleteItem(args: any) {
@@ -2436,53 +2407,23 @@ Please specify your preference or say "create anyway" to override.`,
     
     const deletedItem = items[itemIndex];
 
-    // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
-    if (this.supabaseCallbacks.deleteItem) {
-      console.log('🔄 GEMINI SERVICE: Deleting item via Supabase for authenticated user');
-      try {
-        await this.supabaseCallbacks.deleteItem(deletedItem.id);
-        // Real-time subscriptions handle data updates automatically - manual refresh removed
-        
-        return {
-          success: true,
-          function: 'deleteItem',
-          result: { 
-            deleted: 1, 
-            item: deletedItem,
-            message: `Successfully deleted "${deletedItem.title}"`
-          }
-        };
-      } catch (error) {
-        console.error('❌ GEMINI SERVICE: Supabase deleteItem failed:', error);
-        // Fall back to localStorage
-        const filteredItems = items.filter((_, index) => index !== itemIndex);
-        this.saveStoredItems(filteredItems);
-        
-        return {
-          success: true,
-          function: 'deleteItem',
-          result: { 
-            deleted: 1, 
-            item: deletedItem,
-            message: `Successfully deleted "${deletedItem.title}" (saved locally due to sync error)`
-          }
-        };
+    // ALWAYS update localStorage first for immediate UI updates
+    console.log('🔄 GEMINI SERVICE: Deleting item via localStorage (hybridSync will handle Supabase)');
+    const filteredItems = items.filter((_, index) => index !== itemIndex);
+    this.saveStoredItems(filteredItems);
+    
+    // Mark that items were modified so hybridSync can sync to Supabase automatically
+    this.itemsModified = true;
+    
+    return {
+      success: true,
+      function: 'deleteItem',
+      result: { 
+        deleted: 1, 
+        item: deletedItem,
+        message: `Successfully deleted "${deletedItem.title}"`
       }
-    } else {
-      console.log('🔄 GEMINI SERVICE: Deleting item via localStorage for unauthenticated user');
-      const filteredItems = items.filter((_, index) => index !== itemIndex);
-      this.saveStoredItems(filteredItems);
-      
-      return {
-        success: true,
-        function: 'deleteItem',
-        result: { 
-          deleted: 1, 
-          item: deletedItem,
-          message: `Successfully deleted "${deletedItem.title}"`
-        }
-      };
-    }
+    };
   }
 
     private async bulkUpdateItems(args: any) {
@@ -2739,33 +2680,16 @@ Please specify your preference or say "create anyway" to override.`,
       };
     }
     
-    // Use Supabase if callbacks are available (authenticated user), otherwise localStorage
-    if (this.supabaseCallbacks.deleteItem) {
-      console.log('🔄 GEMINI SERVICE: Bulk deleting items via Supabase for authenticated user');
-      try {
-        for (const item of selectedItems) {
-          await this.supabaseCallbacks.deleteItem(item.id);
-          console.log(`✅ Deleted item via Supabase: ${item.title}`);
-        }
-        
-        // Real-time subscriptions handle data updates automatically - manual refresh removed
-      } catch (error) {
-        console.error('❌ GEMINI SERVICE: Supabase bulkDeleteItems failed:', error);
-        // Fall back to localStorage
-        const remainingItems = items.filter(item => 
-          !selectedItems.some(selected => selected.id === item.id)
-        );
-        console.log('📦 Total items after deletion:', remainingItems.length);
-        this.saveStoredItems(remainingItems);
-      }
-    } else {
-      console.log('🔄 GEMINI SERVICE: Bulk deleting items via localStorage for unauthenticated user');
-      const remainingItems = items.filter(item => 
-        !selectedItems.some(selected => selected.id === item.id)
-      );
-      console.log('📦 Total items after deletion:', remainingItems.length);
-      this.saveStoredItems(remainingItems);
-    }
+    // ALWAYS update localStorage first for immediate UI updates
+    console.log('🔄 GEMINI SERVICE: Bulk deleting items via localStorage (hybridSync will handle Supabase)');
+    const remainingItems = items.filter(item => 
+      !selectedItems.some(selected => selected.id === item.id)
+    );
+    console.log('📦 Total items after deletion:', remainingItems.length);
+    this.saveStoredItems(remainingItems);
+    
+    // Mark that items were modified so hybridSync can sync to Supabase automatically
+    this.itemsModified = true;
      
      return {
        success: true,
@@ -5580,4 +5504,9 @@ Please specify "delete this one" or "delete all" to proceed.`,
   }
 }
 
-export const geminiService = new GeminiService(); 
+export const geminiService = new GeminiService();
+
+// Make debug functions available globally for testing
+(window as any).debugGemini = {
+  testFunctionCalling: () => geminiService.testFunctionCalling()
+}; 
