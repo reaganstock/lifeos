@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import CategoryPage from './components/CategoryPage';
 import Sidebar from './components/Sidebar';
@@ -12,6 +13,7 @@ import Settings from './components/Settings';
 import Notification from './components/Notification';
 import AIAssistant from './components/AIAssistant';
 import AuthScreen from './components/onboarding/AuthScreen';
+import SignInRequired from './components/SignInRequired';
 import { AuthProvider, useAuthContext } from './components/AuthProvider';
 import { ThemeProvider } from './contexts/ThemeContext';
 // Removed initialData import - users create their own categories
@@ -26,6 +28,8 @@ import { IntegrationManager } from './services/integrations/IntegrationManager';
 
 function AppContent() {
   const { user, loading: authLoading, initialized: authInitialized } = useAuthContext();
+  const location = useLocation();
+  const navigate = useNavigate();
   const {
     categories: supabaseCategories,
     loading: dataLoading,
@@ -68,11 +72,15 @@ function AppContent() {
     return [];
   });
 
-  const [currentView, setCurrentView] = useState<string>(() => {
-    const hasSkipped = localStorage.getItem('skipLanding') === 'true';
-    console.log('🎯 App initialization - skipLanding flag:', hasSkipped);
-    return hasSkipped ? 'dashboard' : 'landing';
-  });
+  // Get current view from URL path
+  const getCurrentView = () => {
+    const path = location.pathname;
+    if (path === '/' || path === '/dashboard') return 'dashboard';
+    if (path.startsWith('/category/')) return path.split('/')[2];
+    return path.substring(1); // Remove leading slash
+  };
+  
+  const currentView = getCurrentView();
   
   // Removed showAuthModal - now using AuthScreen directly
   const [showMigrationModal, setShowMigrationModal] = useState(false);
@@ -347,8 +355,10 @@ function AppContent() {
     console.log('💾 Saved', localItems.length, 'items to localStorage');
   }, [localItems]);
 
-  // Global keyboard shortcuts
+  // Global keyboard shortcuts - only for authenticated users
   useEffect(() => {
+    if (!user) return; // Don't enable keyboard shortcuts for unauthenticated users
+    
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.contentEditable === 'true') {
@@ -363,7 +373,7 @@ function AppContent() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [user]);
 
   // Save AI sidebar width to localStorage
   useEffect(() => {
@@ -396,15 +406,15 @@ function AppContent() {
   }, []);
 
   const handleNavigateToCategory = (categoryId: string) => {
-    setCurrentView(categoryId);
+    navigate(`/category/${categoryId}`);
   };
 
   const handleBackToDashboard = () => {
-    setCurrentView('dashboard');
+    navigate('/dashboard');
   };
 
   const handleNavigateToGlobal = (view: string) => {
-    setCurrentView(view);
+    navigate(`/${view}`);
   };
 
   const handleAddItem = async (item: Item) => {
@@ -563,45 +573,47 @@ function AppContent() {
       );
     }
 
-    // Show AuthScreen if user is not authenticated
-    if (!user) {
-      return <AuthScreen onAuthSuccess={() => {
-        // After successful auth, the app will automatically re-render with user
-        console.log('✅ Authentication successful, app will reload with user data');
-      }} />;
-    }
-
-    switch (currentView) {
-      case 'dashboard':
-        return <Dashboard onNavigateToCategory={handleNavigateToCategory} items={items} categories={supabaseCategories} />;
-      
-      case 'todos':
-        return <GlobalTodos items={items} setItems={setItems} categories={supabaseCategories} />;
-      case 'calendar':
-        return <GlobalCalendar items={items} setItems={setItems} categories={supabaseCategories} />;
-      case 'life-categories':
-        return <LifeCategoriesManager onNavigateToCategory={handleNavigateToCategory} />;
-      case 'goals':
-        return <GlobalGoals items={items} setItems={setItems} categories={supabaseCategories} />;
-      case 'routines':
-        return <GlobalRoutines items={items} setItems={setItems} categories={supabaseCategories} />;
-      case 'notes':
-        return <GlobalNotes items={items} setItems={setItems} categories={supabaseCategories} />;
-      case 'settings':
-        return <Settings items={items} setItems={setItems} categories={supabaseCategories} />;
-      
-      default:
-        return (
-          <CategoryPage 
-            categoryId={currentView} 
-            onBack={handleBackToDashboard}
-            items={items}
-            setItems={setItems}
-            categories={supabaseCategories}
-            isGlobalAIAssistantOpen={showAIAssistant}
-          />
-        );
-    }
+    // Use React Router for navigation
+    return (
+      <Routes>
+        <Route path="/auth" element={
+          <AuthScreen onAuthSuccess={() => {
+            console.log('✅ Authentication successful, redirecting to dashboard');
+            navigate('/dashboard');
+          }} />
+        } />
+        {user ? (
+          // Authenticated routes
+          <>
+            <Route path="/" element={<Dashboard onNavigateToCategory={handleNavigateToCategory} items={items} categories={supabaseCategories} />} />
+            <Route path="/dashboard" element={<Dashboard onNavigateToCategory={handleNavigateToCategory} items={items} categories={supabaseCategories} />} />
+            <Route path="/todos" element={<GlobalTodos items={items} setItems={setItems} categories={supabaseCategories} />} />
+            <Route path="/calendar" element={<GlobalCalendar items={items} setItems={setItems} categories={supabaseCategories} />} />
+            <Route path="/life-categories" element={<LifeCategoriesManager onNavigateToCategory={handleNavigateToCategory} />} />
+            <Route path="/goals" element={<GlobalGoals items={items} setItems={setItems} categories={supabaseCategories} />} />
+            <Route path="/routines" element={<GlobalRoutines items={items} setItems={setItems} categories={supabaseCategories} />} />
+            <Route path="/notes" element={<GlobalNotes items={items} setItems={setItems} categories={supabaseCategories} />} />
+            <Route path="/settings" element={<Settings items={items} setItems={setItems} categories={supabaseCategories} />} />
+            <Route path="/category/:categoryId" element={
+              <CategoryPage 
+                categoryId={location.pathname.split('/')[2]} 
+                onBack={() => navigate('/dashboard')}
+                items={items}
+                setItems={setItems}
+                categories={supabaseCategories}
+                isGlobalAIAssistantOpen={showAIAssistant}
+              />
+            } />
+          </>
+        ) : (
+          // Unauthenticated routes - redirect to auth automatically
+          <>
+            <Route path="/" element={<Navigate to="/auth" replace />} />
+            <Route path="*" element={<Navigate to="/auth" replace />} />
+          </>
+        )}
+      </Routes>
+    );
   };
 
   if (showLanding) {
@@ -617,21 +629,26 @@ function AppContent() {
   return (
     <ThemeProvider>
       <div className="App flex h-screen">
-        {/* Main Left Sidebar */}
-        <Sidebar 
-          currentView={currentView}
-          onNavigateToCategory={handleNavigateToCategory}
-          onNavigateToDashboard={handleBackToDashboard}
-          onNavigateToGlobal={handleNavigateToGlobal}
-          categories={supabaseCategories}
-        />
+        {/* Only show sidebar and AI assistant for authenticated users */}
+        {user && (
+          <>
+            {/* Main Left Sidebar */}
+            <Sidebar 
+              currentView={currentView}
+              onNavigateToCategory={handleNavigateToCategory}
+              onNavigateToDashboard={handleBackToDashboard}
+              onNavigateToGlobal={handleNavigateToGlobal}
+              categories={supabaseCategories}
+            />
+          </>
+        )}
         
         {/* Main Content Area */}
         <div 
           className="flex-1 h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-blue-900 transition-all duration-300 ease-in-out overflow-auto"
           style={{
-            marginLeft: isMainSidebarCollapsed ? '60px' : `${mainSidebarWidth}px`,
-            marginRight: showAIAssistant && !isAiSidebarCollapsed ? `${aiSidebarWidth}px` : '0px',
+            marginLeft: user ? (isMainSidebarCollapsed ? '60px' : `${mainSidebarWidth}px`) : '0px',
+            marginRight: user && showAIAssistant && !isAiSidebarCollapsed ? `${aiSidebarWidth}px` : '0px',
             transition: 'margin 0.3s ease-in-out',
             scrollbarWidth: 'none',
             msOverflowStyle: 'none',
@@ -648,8 +665,8 @@ function AppContent() {
           onClose={hideNotification}
         />
 
-        {/* Global AI Assistant */}
-        {showAIAssistant && (
+        {/* Global AI Assistant - Only for authenticated users */}
+        {user && showAIAssistant && (
           <AIAssistant
             isOpen={showAIAssistant}
             onClose={() => setShowAIAssistant(false)}
@@ -677,8 +694,8 @@ function AppContent() {
 
         {/* Authentication is now handled by AuthScreen directly - no modal needed */}
 
-        {/* Migration Modal */}
-        {showMigrationModal && (
+        {/* Migration Modal - Only for authenticated users */}
+        {user && showMigrationModal && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
