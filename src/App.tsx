@@ -11,7 +11,7 @@ import GlobalNotes from './components/GlobalNotes';
 import Settings from './components/Settings';
 import Notification from './components/Notification';
 import AIAssistant from './components/AIAssistant';
-import { AuthModal } from './components/AuthModal';
+import AuthScreen from './components/onboarding/AuthScreen';
 import { AuthProvider, useAuthContext } from './components/AuthProvider';
 import { ThemeProvider } from './contexts/ThemeContext';
 // Removed initialData import - users create their own categories
@@ -74,7 +74,7 @@ function AppContent() {
     return hasSkipped ? 'dashboard' : 'landing';
   });
   
-  const [showAuthModal, setShowAuthModal] = useState(false);
+  // Removed showAuthModal - now using AuthScreen directly
   const [showMigrationModal, setShowMigrationModal] = useState(false);
   const [migrationProgress, setMigrationProgress] = useState<MigrationProgress | null>(null);
   
@@ -339,12 +339,7 @@ function AppContent() {
     setMigrationProgress(null);
   };
 
-  // Show auth modal if user is not authenticated (except on landing)
-  useEffect(() => {
-    if (authInitialized && !user && !showLanding) {
-      setShowAuthModal(true);
-    }
-  }, [authInitialized, user, showLanding]);
+  // Auth is now handled by direct AuthScreen rendering, no modal needed
 
   // Save localStorage items (primary data source for all users)
   useEffect(() => {
@@ -568,29 +563,12 @@ function AppContent() {
       );
     }
 
-    // CRITICAL: Block access if user is not authenticated
+    // Show AuthScreen if user is not authenticated
     if (!user) {
-      return (
-        <div className="flex items-center justify-center h-full bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-blue-900">
-          <div className="text-center max-w-md mx-auto p-8">
-            <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl">
-              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-            </div>
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Authentication Required</h2>
-            <p className="text-gray-600 dark:text-gray-300 mb-6 text-lg">
-              Please sign in to access Life Structure and manage your goals, tasks, and routines.
-            </p>
-            <button
-              onClick={() => setShowAuthModal(true)}
-              className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
-            >
-              Sign In to Continue
-            </button>
-          </div>
-        </div>
-      );
+      return <AuthScreen onAuthSuccess={() => {
+        // After successful auth, the app will automatically re-render with user
+        console.log('✅ Authentication successful, app will reload with user data');
+      }} />;
     }
 
     switch (currentView) {
@@ -697,11 +675,7 @@ function AppContent() {
           />
         )}
 
-        {/* Authentication Modal */}
-        <AuthModal
-          isOpen={showAuthModal}
-          onClose={() => setShowAuthModal(false)}
-        />
+        {/* Authentication is now handled by AuthScreen directly - no modal needed */}
 
         {/* Migration Modal */}
         {showMigrationModal && (
