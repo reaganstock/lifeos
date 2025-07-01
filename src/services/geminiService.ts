@@ -2853,18 +2853,10 @@ Please specify your preference or say "create anyway" to override.`,
   // Helper method to get current items with comprehensive debugging
   private getCurrentItems(): Item[] {
     console.log('🔍 GEMINI SERVICE: getCurrentItems() called');
-    console.log('📊 this.currentItems.length:', this.currentItems.length);
-    console.log('📊 Supabase callbacks available:', Object.keys(this.supabaseCallbacks).length > 0);
     
-    // Use current items from Supabase/context if available (authenticated users)
-    if (this.currentItems.length > 0) {
-      console.log('✅ GEMINI SERVICE: Using current items from Supabase context:', this.currentItems.length);
-      console.log('📋 Sample items:', this.currentItems.slice(0, 3).map(item => `"${item.title}" (${item.type})`));
-      return this.currentItems;
-    }
-    
-    // Fall back to localStorage for unauthenticated users or when no current items
-    console.log('⚠️ GEMINI SERVICE: currentItems empty, falling back to localStorage');
+    // ALWAYS read from localStorage first to get the most current data
+    // This ensures AI functions see items that were just created
+    console.log('📱 GEMINI SERVICE: Reading from localStorage for most current data');
     try {
       const savedItems = localStorage.getItem('lifeStructureItems');
       if (!savedItems) {
@@ -2897,15 +2889,31 @@ Please specify your preference or say "create anyway" to override.`,
   private saveStoredItems(items: Item[]): void {
     try {
       localStorage.setItem('lifeStructureItems', JSON.stringify(items));
-      console.log('💾 Saved', items.length, 'items to localStorage');
+      console.log('💾 GEMINI SERVICE: Saved', items.length, 'items to localStorage');
       
-      // Dispatch custom event for real-time UI updates
+      // Mark that items were modified for sync service
+      this.itemsModified = true;
+      
+      // Dispatch multiple events to ensure UI updates immediately
       window.dispatchEvent(new CustomEvent('itemsModified', {
         detail: { items, timestamp: Date.now() }
       }));
-      console.log('📡 Dispatched itemsModified event for real-time updates');
+      
+      // Also dispatch storage event for App.tsx listener
+      window.dispatchEvent(new CustomEvent('forceDataRefresh', {
+        detail: { source: 'AI_function', items: items.length }
+      }));
+      
+      // Dispatch storage event (simulated localStorage change)
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: 'lifeStructureItems',
+        newValue: JSON.stringify(items),
+        storageArea: localStorage
+      }));
+      
+      console.log('📡 GEMINI SERVICE: Dispatched all refresh events for immediate UI updates');
     } catch (error) {
-      console.error('❌ Failed to save items to localStorage:', error);
+      console.error('❌ GEMINI SERVICE: Failed to save items to localStorage:', error);
     }
   }
 

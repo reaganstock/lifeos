@@ -9,6 +9,16 @@ import type {
 } from '../lib/database.types'
 
 export class SupabaseService {
+  // Expose supabase client for direct access when needed
+  getSupabase() {
+    return supabase;
+  }
+
+  // Direct access to supabase client
+  get supabase() {
+    return supabase;
+  }
+
   // ========== AUTHENTICATION ==========
   
   async signUp(email: string, password: string, fullName?: string) {
@@ -139,7 +149,11 @@ export class SupabaseService {
         due_date: itemData.dueDate ? itemData.dueDate.toISOString() : null,
         date_time: itemData.dateTime ? itemData.dateTime.toISOString() : null,
         attachment: itemData.attachment || null,
-        metadata: itemData.metadata || {},
+        metadata: JSON.parse(JSON.stringify(itemData.metadata || {})),
+        // Audio-related fields for voice notes
+        audio_duration: itemData.metadata?.audioDuration || null,
+        audio_public_url: itemData.metadata?.audioPublicUrl || null,
+        audio_storage_path: itemData.metadata?.audioStoragePath || null,
         user_id: null, // Will be set by RLS
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()

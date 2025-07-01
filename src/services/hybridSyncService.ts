@@ -264,9 +264,34 @@ class HybridSyncService {
         console.log(`📤 Successfully pushed ${newLocalItems.length} new items to Supabase`);
       }
 
+      // BIDIRECTIONAL SYNC: Handle deletions (items in Supabase but not in localStorage)
+      const localItemKeysForDeletion = new Set(localItems.map(item => `${item.title}|${item.type}|${item.categoryId}`));
+      const deletedFromLocal = remoteItems.filter(item => {
+        const itemKey = `${item.title}|${item.type}|${item.categoryId}`;
+        return !localItemKeysForDeletion.has(itemKey);
+      });
+      
+      if (deletedFromLocal.length > 0) {
+        console.log(`🗑️ Found ${deletedFromLocal.length} items deleted from localStorage, removing from Supabase:`);
+        deletedFromLocal.forEach(item => {
+          console.log(`  - ${item.title} (${item.type}) - ID: ${item.id}`);
+        });
+        
+        // Delete from Supabase
+        for (const item of deletedFromLocal) {
+          try {
+            await supabaseService.deleteItem(item.id);
+            console.log(`✅ Deleted "${item.title}" from Supabase`);
+          } catch (error) {
+            console.error(`❌ Failed to delete "${item.title}" from Supabase:`, error);
+          }
+        }
+        console.log(`🗑️ Successfully synced ${deletedFromLocal.length} deletions to Supabase`);
+      }
+
       // Only update localStorage with remote data if no new local items were pushed
       // AND if local/remote counts match (to prevent overwriting new local data)
-      if (newLocalItems.length === 0 && localItems.length === remoteItems.length) {
+      if (newLocalItems.length === 0 && deletedFromLocal.length === 0 && localItems.length === remoteItems.length) {
         // Get fresh data from Supabase to catch any external changes
         const finalRemoteItems = await supabaseService.getItems();
         const finalRemoteCategories = await supabaseService.getCategories();
@@ -274,11 +299,14 @@ class HybridSyncService {
         this.saveLocalItems(finalRemoteItems);
         this.saveLocalCategories(finalRemoteCategories);
         console.log(`💾 LocalStorage updated: ${finalRemoteItems.length} items, ${finalRemoteCategories.length} categories`);
-      } else if (newLocalItems.length === 0 && localItems.length !== remoteItems.length) {
+      } else if (newLocalItems.length === 0 && deletedFromLocal.length === 0 && localItems.length !== remoteItems.length) {
         console.log(`⚠️ Count mismatch detected! Local: ${localItems.length}, Remote: ${remoteItems.length}`);
         console.log(`💾 LocalStorage preserved to prevent data loss - manual sync may be needed`);
       } else {
-        console.log(`💾 LocalStorage preserved to maintain new items - sync will update on next cycle`);
+        const actions = [];
+        if (newLocalItems.length > 0) actions.push(`${newLocalItems.length} creations`);
+        if (deletedFromLocal.length > 0) actions.push(`${deletedFromLocal.length} deletions`);
+        console.log(`💾 LocalStorage preserved after syncing ${actions.join(' and ')} - will refresh on next cycle`);
       }
 
       this.updateSyncMetadata({
