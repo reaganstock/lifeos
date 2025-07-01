@@ -108,18 +108,59 @@ export class SupabaseService {
   // ========== ITEMS MANAGEMENT ==========
   
   async createItem(itemData: Omit<Item, 'id' | 'createdAt' | 'updatedAt'>): Promise<Item> {
-    const result = await this.callEdgeFunction('createItem', {
-      type: itemData.type,
-      title: itemData.title,
-      text: itemData.text,
-      categoryId: itemData.categoryId,
-      dueDate: itemData.dueDate?.toISOString(),
-      dateTime: itemData.dateTime?.toISOString(),
-      metadata: itemData.metadata,
-      attachment: itemData.attachment
-    })
-    
-    return this.convertItemFromDb(result.item)
+    try {
+      const result = await this.callEdgeFunction('createItem', {
+        type: itemData.type,
+        title: itemData.title,
+        text: itemData.text,
+        categoryId: itemData.categoryId,
+        dueDate: itemData.dueDate?.toISOString(),
+        dateTime: itemData.dateTime?.toISOString(),
+        metadata: itemData.metadata,
+        attachment: itemData.attachment
+      })
+      
+      return this.convertItemFromDb(result.item)
+    } catch (error) {
+      console.warn('⚠️ Edge Function failed, using direct Supabase for createItem:', error);
+      return this.createItemDirect(itemData);
+    }
+  }
+
+  // Direct Supabase fallback for creating items
+  async createItemDirect(itemData: Omit<Item, 'id' | 'createdAt' | 'updatedAt'>): Promise<Item> {
+    try {
+      const dbItem: Omit<DbItem, 'id'> = {
+        type: itemData.type,
+        title: itemData.title,
+        text: itemData.text || null,
+        category_id: itemData.categoryId || null,
+        completed: itemData.completed || false,
+        due_date: itemData.dueDate ? itemData.dueDate.toISOString() : null,
+        date_time: itemData.dateTime ? itemData.dateTime.toISOString() : null,
+        attachment: itemData.attachment || null,
+        metadata: itemData.metadata || {},
+        user_id: null, // Will be set by RLS
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      const { data, error } = await this.supabase
+        .from('items')
+        .insert([dbItem])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Direct Supabase createItem error:', error);
+        throw error;
+      }
+
+      return this.convertItemFromDb(data);
+    } catch (error) {
+      console.error('❌ Direct Supabase createItem failed:', error);
+      throw error;
+    }
   }
 
   async getItems(options?: {
@@ -129,8 +170,57 @@ export class SupabaseService {
     limit?: number
     offset?: number
   }): Promise<Item[]> {
-    const result = await this.callEdgeFunction('getItems', options)
-    return result.items.map((item: DbItem) => this.convertItemFromDb(item))
+    try {
+      const result = await this.callEdgeFunction('getItems', options)
+      return result.items.map((item: DbItem) => this.convertItemFromDb(item))
+    } catch (error) {
+      console.warn('⚠️ Edge Function failed, using direct Supabase for getItems:', error);
+      return this.getItemsDirect(options);
+    }
+  }
+
+  // Direct Supabase fallback for when Edge Functions fail
+  async getItemsDirect(options?: {
+    type?: string
+    categoryId?: string
+    completed?: boolean
+    limit?: number
+    offset?: number
+  }): Promise<Item[]> {
+    try {
+      let query = this.supabase
+        .from('items')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (options?.type) {
+        query = query.eq('type', options.type);
+      }
+      if (options?.categoryId) {
+        query = query.eq('category_id', options.categoryId);
+      }
+      if (options?.completed !== undefined) {
+        query = query.eq('completed', options.completed);
+      }
+      if (options?.limit) {
+        query = query.limit(options.limit);
+      }
+      if (options?.offset) {
+        query = query.range(options.offset, (options.offset + (options.limit || 100)) - 1);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('❌ Direct Supabase getItems error:', error);
+        throw error;
+      }
+
+      return (data || []).map((item: DbItem) => this.convertItemFromDb(item));
+    } catch (error) {
+      console.error('❌ Direct Supabase getItems failed:', error);
+      throw error;
+    }
   }
 
   async updateItem(itemId: string, updates: Partial<Item>): Promise<Item> {

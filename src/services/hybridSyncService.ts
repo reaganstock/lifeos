@@ -641,7 +641,10 @@ class HybridSyncService {
 
 export const hybridSyncService = new HybridSyncService();
 
-// Expose for debugging
+// Expose for debugging and manual control
 if (typeof window !== 'undefined') {
   (window as any).hybridSyncService = hybridSyncService;
+  (window as any).forceSync = () => hybridSyncService.manualSync();
+  (window as any).emergencyBackup = () => hybridSyncService.emergencyBackup();
+  (window as any).syncDiagnostics = () => hybridSyncService.diagnoseSync();
 }
