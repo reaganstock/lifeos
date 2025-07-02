@@ -578,8 +578,8 @@ function AppContent() {
       <Routes>
         <Route path="/auth" element={
           <AuthScreen onAuthSuccess={() => {
-            console.log('✅ Authentication successful, redirecting to dashboard');
-            navigate('/dashboard');
+            console.log('✅ Authentication successful, redirecting to production dashboard');
+            window.location.href = 'https://app.lifely.dev/dashboard';
           }} />
         } />
         {user ? (
