@@ -381,14 +381,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items, cate
       });
     }
 
-    if (todaysTodos.length === 0 && todaysRoutines.length > 0) {
-      insights.push({
-        type: 'suggestion',
-        icon: Lightbulb,
-        text: 'Perfect day for routine mastery!',
-        color: 'amber'
-      });
-    }
 
     return insights.slice(0, 2); // Show top 2 insights
   };
