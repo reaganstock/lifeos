@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { StickyNote, Plus, Search, Mic, MicOff, Play, Pause, Camera, X, Edit3, Save, Maximize2, Trash2, Loader2 } from 'lucide-react';
+import { StickyNote, Plus, Search, Mic, MicOff, Play, Pause, Camera, X, Edit3, Save, Maximize2, Trash2, Loader2, Filter, Clock, Image, Type, Settings, Calendar } from 'lucide-react';
 import { Item, Category } from '../types';
 import { voiceService, VoiceRecording } from '../services/voiceService';
 import { AIService } from '../services/aiService';
@@ -20,6 +20,9 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [sortBy, setSortBy] = useState<'recent' | 'title' | 'category'>('recent');
+  const [mediaFilter, setMediaFilter] = useState<'all' | 'text' | 'voice' | 'images'>('all');
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [editingNote, setEditingNote] = useState<string | null>(null);
@@ -243,12 +246,36 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
   const notes = items.filter(item => item.type === 'note' || item.type === 'voiceNote');
   
   const filteredNotes = notes.filter(note => {
+    // Category filter
     const categoryMatch = selectedCategory === 'all' || note.categoryId === selectedCategory;
+    
+    // Search filter
     const searchMatch = searchQuery === '' || 
       note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       note.text.toLowerCase().includes(searchQuery.toLowerCase());
     
-    return categoryMatch && searchMatch;
+    // Media type filter
+    const mediaMatch = mediaFilter === 'all' || 
+      (mediaFilter === 'text' && note.type === 'note' && !note.metadata?.isVoiceNote && (!note.metadata?.imageUrls || note.metadata.imageUrls.length === 0)) ||
+      (mediaFilter === 'voice' && (note.type === 'voiceNote' || note.metadata?.isVoiceNote)) ||
+      (mediaFilter === 'images' && note.metadata?.imageUrls && note.metadata.imageUrls.length > 0);
+    
+    // Date filter
+    const now = new Date();
+    const noteDate = new Date(note.updatedAt);
+    let dateMatch = true;
+    
+    if (dateFilter === 'today') {
+      dateMatch = noteDate.toDateString() === now.toDateString();
+    } else if (dateFilter === 'week') {
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      dateMatch = noteDate >= weekAgo;
+    } else if (dateFilter === 'month') {
+      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      dateMatch = noteDate >= monthAgo;
+    }
+    
+    return categoryMatch && searchMatch && mediaMatch && dateMatch;
   });
 
   const sortedNotes = [...filteredNotes].sort((a, b) => {
@@ -721,7 +748,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
       <div className="p-6 max-w-7xl mx-auto">
         {/* Floating Header */}
-        <div className="sticky top-6 z-40 mb-8">
+        <div className="sticky top-6 z-30 mb-8">
           <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -736,7 +763,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
               <div className="flex space-x-3">
                 <button
                   onClick={() => setShowAddForm(true)}
-                  className="group relative overflow-hidden bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white px-8 py-4 rounded-2xl flex items-center transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
+                  className="group relative overflow-hidden bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-8 py-4 rounded-2xl flex items-center transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
                 >
                   <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
                   <Plus className="w-5 h-5 mr-3 relative z-10" />
@@ -747,10 +774,30 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
           </div>
         </div>
 
-        {/* Tesla-Style Controls */}
+        {/* Enhanced Filter Controls */}
         <div className="mb-8">
           <div className="bg-white/60 backdrop-blur-xl rounded-2xl shadow-lg border border-white/30 p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Header with Advanced Filter Toggle */}
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                <Filter className="w-5 h-5 mr-2 text-blue-600" />
+                Filter & Search
+              </h3>
+              <button
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+                  showAdvancedFilters 
+                    ? 'bg-blue-100 text-blue-700 border border-blue-200' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <Settings className="w-4 h-4" />
+                Advanced
+              </button>
+            </div>
+
+            {/* Basic Filters */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
               {/* Search */}
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-gray-700">Search Notes</label>
@@ -761,18 +808,18 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search by content..."
-                    className="w-full pl-10 pr-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all duration-300 text-gray-800"
+                    className="w-full pl-10 pr-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300 text-gray-800"
                   />
                 </div>
               </div>
 
               {/* Category Filter */}
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-gray-700">Filter by Category</label>
+                <label className="text-sm font-semibold text-gray-700">Category</label>
                 <select
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all duration-300 text-gray-800"
+                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300 text-gray-800"
                 >
                   <option value="all">All Categories</option>
                   {categories.map((category: Category) => (
@@ -789,7 +836,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as 'recent' | 'title' | 'category')}
-                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all duration-300 text-gray-800"
+                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300 text-gray-800"
                 >
                   <option value="recent">Most Recent</option>
                   <option value="title">Title</option>
@@ -797,6 +844,97 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                 </select>
               </div>
             </div>
+
+            {/* Advanced Filters */}
+            {showAdvancedFilters && (
+              <div className="border-t border-gray-200/50 pt-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Media Type Filter */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-gray-700 flex items-center">
+                      <Type className="w-4 h-4 mr-2 text-blue-600" />
+                      Media Type
+                    </label>
+                    <select
+                      value={mediaFilter}
+                      onChange={(e) => setMediaFilter(e.target.value as 'all' | 'text' | 'voice' | 'images')}
+                      className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300 text-gray-800"
+                    >
+                      <option value="all">All Types</option>
+                      <option value="text">📝 Text Only</option>
+                      <option value="voice">🎤 Voice Notes</option>
+                      <option value="images">🖼️ With Images</option>
+                    </select>
+                  </div>
+
+                  {/* Date Filter */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-gray-700 flex items-center">
+                      <Calendar className="w-4 h-4 mr-2 text-blue-600" />
+                      Date Range
+                    </label>
+                    <select
+                      value={dateFilter}
+                      onChange={(e) => setDateFilter(e.target.value as 'all' | 'today' | 'week' | 'month')}
+                      className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300 text-gray-800"
+                    >
+                      <option value="all">All Time</option>
+                      <option value="today">📅 Today</option>
+                      <option value="week">📆 This Week</option>
+                      <option value="month">🗓️ This Month</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Active Filters Summary */}
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {selectedCategory !== 'all' && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      Category: {categories.find(c => c.id === selectedCategory)?.name}
+                      <button
+                        onClick={() => setSelectedCategory('all')}
+                        className="ml-2 text-blue-600 hover:text-blue-800"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {mediaFilter !== 'all' && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      Type: {mediaFilter}
+                      <button
+                        onClick={() => setMediaFilter('all')}
+                        className="ml-2 text-green-600 hover:text-green-800"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {dateFilter !== 'all' && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                      Date: {dateFilter}
+                      <button
+                        onClick={() => setDateFilter('all')}
+                        className="ml-2 text-purple-600 hover:text-purple-800"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {searchQuery && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                      Search: "{searchQuery}"
+                      <button
+                        onClick={() => setSearchQuery('')}
+                        className="ml-2 text-orange-600 hover:text-orange-800"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1035,7 +1173,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                         ref={textareaRef}
                         value={editText}
                         onChange={(e) => setEditText(e.target.value)}
-                        className="w-full p-4 bg-gray-50/50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all duration-300 resize-none overflow-hidden"
+                        className="w-full p-4 bg-gray-50/50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300 resize-none overflow-hidden"
                         placeholder="Write your thoughts..."
                         autoFocus
                       />
@@ -1302,7 +1440,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
               </p>
               <button
                 onClick={() => setShowAddForm(true)}
-                className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white px-8 py-4 rounded-2xl transition-all duration-300 transform hover:scale-105 shadow-lg"
+                className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-8 py-4 rounded-2xl transition-all duration-300 transform hover:scale-105 shadow-lg"
               >
                 <Plus className="w-5 h-5 mr-3 inline" />
                 Create Your First Note
@@ -1378,7 +1516,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                   value={newNote.title}
                   onChange={(e) => setNewNote({ ...newNote, title: e.target.value })}
                   placeholder="Give your note a title..."
-                  className="w-full px-4 py-3 bg-gray-50/50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all duration-300"
+                  className="w-full px-4 py-3 bg-gray-50/50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300"
                 />
               </div>
 
@@ -1392,7 +1530,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                     onChange={(e) => setNewNote(prev => ({ ...prev, text: e.target.value }))}
                     placeholder="Write your thoughts, add images, record voice..."
                     rows={5}
-                    className={`w-full px-4 py-4 bg-gray-50/50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all duration-300 resize-none text-gray-800 placeholder-gray-400`}
+                    className={`w-full px-4 py-4 bg-gray-50/50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300 resize-none text-gray-800 placeholder-gray-400`}
                   style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}
                   autoFocus
                 />
@@ -1643,7 +1781,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                 <select
                   value={newNote.categoryId}
                   onChange={(e) => setNewNote({ ...newNote, categoryId: e.target.value })}
-                  className="w-full px-4 py-4 bg-gray-50/50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all duration-300"
+                  className="w-full px-4 py-4 bg-gray-50/50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300"
                 >
                   {categories.map((category: Category) => (
                     <option key={category.id} value={category.id}>
@@ -1669,7 +1807,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
               <button
                 onClick={handleAddNote}
                 disabled={!newNote.text.trim() && !newNote.voice && !newNote.images.length}
-                className="flex-1 px-6 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-2xl hover:from-yellow-600 hover:to-orange-600 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 shadow-lg font-semibold"
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-2xl hover:from-blue-600 hover:to-blue-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 shadow-lg font-semibold"
               >
                 Save Note
               </button>
@@ -1805,7 +1943,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
               <button
                 onClick={handleAddNote}
                 disabled={!newNote.text.trim() && !newNote.voice && !newNote.images.length}
-                className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 disabled:from-gray-300 disabled:to-gray-400 text-white rounded-lg disabled:cursor-not-allowed transition-all"
+                className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 disabled:from-gray-300 disabled:to-gray-400 text-white rounded-lg disabled:cursor-not-allowed transition-all"
               >
                   {editingNoteId ? 'Update' : 'Save'}
               </button>
