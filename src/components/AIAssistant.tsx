@@ -3192,7 +3192,7 @@ User message: ${messageWithContext}`;
                       isDarkMode ? 'hover:bg-gray-700 text-white border border-gray-600' : 'hover:bg-gray-100 text-gray-700 border border-gray-300'
                     }`}
                   >
-                    <span>∞</span>
+                    <span>{isAskMode ? '💬' : isAgenticMode ? '∞' : '🔄'}</span>
                     <span>
                       {isAskMode ? 'Ask' : isAgenticMode ? 'Agent (Pre-Beta)' : 'Adaptive'}
                     </span>

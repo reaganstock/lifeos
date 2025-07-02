@@ -554,7 +554,11 @@ export default function IntegrationManager({ isOpen, onClose, onImport, categori
                     onClick={() => provider.isImplemented && setSelectedProvider(provider.provider)}
                   >
                     <div className="flex items-center space-x-3">
-                      <span className="text-2xl">{provider.icon}</span>
+                      {provider.icon.startsWith('/') ? (
+                        <img src={provider.icon} alt={provider.name} className="w-8 h-8" />
+                      ) : (
+                        <span className="text-2xl">{provider.icon}</span>
+                      )}
                       <div className="flex-1">
                         <h3 className="font-semibold text-gray-900 dark:text-white">
                           {provider.name}

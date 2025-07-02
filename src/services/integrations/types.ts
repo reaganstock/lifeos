@@ -8,7 +8,8 @@ export type IntegrationProvider =
   | 'onenote'
   | 'notion' 
   | 'apple-notes' 
-  | 'youtube';
+  | 'youtube'
+  | 'google-drive';
 
 // Integration status
 export type IntegrationStatus = 'connected' | 'disconnected' | 'error' | 'syncing';

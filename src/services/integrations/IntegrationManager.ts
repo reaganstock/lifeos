@@ -43,7 +43,7 @@ export class IntegrationManager {
     this.configs.set('todoist', {
       name: 'Todoist',
       description: 'Import tasks and projects from Todoist',
-      icon: '✅',
+      icon: '/todoist.svg',
       authType: 'api_key', // or 'oauth'
       website: 'https://todoist.com',
       setupInstructions: 'Get your API token from Todoist Settings > Integrations'
@@ -52,7 +52,7 @@ export class IntegrationManager {
     this.configs.set('google-calendar', {
       name: 'Google Calendar',
       description: 'Sync events with Google Calendar',
-      icon: '📅',
+      icon: '/google-calendar.svg',
       authType: 'oauth',
       website: 'https://calendar.google.com',
       setupInstructions: 'Authorize access to your Google Calendar'
@@ -61,7 +61,7 @@ export class IntegrationManager {
     this.configs.set('notion', {
       name: 'Notion',
       description: 'Import pages and databases from Notion',
-      icon: '📝',
+      icon: '/notion.svg',
       authType: 'oauth', // or 'integration_token'
       website: 'https://notion.so',
       setupInstructions: 'Create a Notion integration and get your token'
@@ -70,7 +70,7 @@ export class IntegrationManager {
     this.configs.set('youtube', {
       name: 'YouTube',
       description: 'Import video transcripts from YouTube',
-      icon: '📺',
+      icon: '/youtube.svg',
       color: '#FF0000',
       website: 'https://youtube.com',
       setupInstructions: 'YouTube integration is ready to use - no API key required! Just connect and start importing video transcripts.'
@@ -79,7 +79,7 @@ export class IntegrationManager {
     this.configs.set('microsoft-calendar', {
       name: 'Microsoft Calendar',
       description: 'Sync events with Outlook/Microsoft Calendar',
-      icon: '📆',
+      icon: '/outlook-calendar.png',
       authType: 'oauth',
       website: 'https://outlook.com',
       setupInstructions: 'Authorize access to your Microsoft Calendar'
@@ -88,7 +88,7 @@ export class IntegrationManager {
     this.configs.set('apple-calendar', {
       name: 'Apple Calendar',
       description: 'Sync events with Apple Calendar (iCloud)',
-      icon: '🍎',
+      icon: '/apple-calendar.png',
       authType: 'oauth',
       website: 'https://icloud.com',
       setupInstructions: 'Note: Limited API access available'
@@ -106,7 +106,7 @@ export class IntegrationManager {
     this.configs.set('onenote', {
       name: 'OneNote',
       description: 'Import notes from Microsoft OneNote',
-      icon: '📔',
+      icon: '/onenote.png',
       authType: 'oauth',
       website: 'https://onenote.com',
       setupInstructions: 'Authorize access to your OneNote account'
@@ -115,10 +115,19 @@ export class IntegrationManager {
     this.configs.set('apple-notes', {
       name: 'Apple Notes',
       description: 'Import notes from Apple Notes',
-      icon: '📄',
+      icon: '/apple-notes.svg',
       authType: 'local',
       website: 'https://apple.com',
       setupInstructions: 'Export notes manually or use third-party tools'
+    });
+
+    this.configs.set('google-drive', {
+      name: 'Google Drive',
+      description: 'Import files and documents from Google Drive',
+      icon: '/google-drive.svg',
+      authType: 'oauth',
+      website: 'https://drive.google.com',
+      setupInstructions: 'Authorize access to your Google Drive account'
     });
   }
 
