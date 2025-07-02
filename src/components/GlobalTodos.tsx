@@ -75,7 +75,7 @@ const GlobalTodos: React.FC<GlobalTodosProps> = ({ items, setItems, categories }
     const priorityMatch = priorityFilter === 'all' || todo.metadata?.priority === priorityFilter;
     
     const dateMatch = dateFilter === 'all' || (() => {
-      if (!todo.dueDate) return dateFilter === 'all';
+      if (!todo.dueDate) return false;
       const dueDate = new Date(todo.dueDate);
       const today = new Date();
       const tomorrow = new Date(today);

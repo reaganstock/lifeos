@@ -189,7 +189,7 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
     
     // Priority filter (only for todos and goals)
     if ((activeTab === 'todo' || activeTab === 'goal') && localPriorityFilter !== 'all') {
-      if (item.priority !== localPriorityFilter) return false;
+      if (item.metadata?.priority !== localPriorityFilter) return false;
     }
     
     // Completion filter (only for todos)
@@ -206,8 +206,8 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
       case 'priority':
         if (activeTab === 'todo' || activeTab === 'goal') {
           const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1 };
-          const priorityA = priorityOrder[a.priority as keyof typeof priorityOrder] || 0;
-          const priorityB = priorityOrder[b.priority as keyof typeof priorityOrder] || 0;
+          const priorityA = priorityOrder[a.metadata?.priority as keyof typeof priorityOrder] || 0;
+          const priorityB = priorityOrder[b.metadata?.priority as keyof typeof priorityOrder] || 0;
           return priorityB - priorityA;
         }
         break;

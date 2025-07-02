@@ -51,7 +51,7 @@ const GlobalCalendar: React.FC<GlobalCalendarProps> = ({ items, setItems, catego
     
     // Date range filter
     const dateRangeMatch = dateRangeFilter === 'all' || (() => {
-      if (!event.dateTime) return dateRangeFilter === 'all';
+      if (!event.dateTime) return false;
       const eventDate = new Date(event.dateTime);
       const today = new Date();
       const weekStart = new Date(today);
