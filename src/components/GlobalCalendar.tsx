@@ -720,8 +720,8 @@ const GlobalCalendar: React.FC<GlobalCalendarProps> = ({ items, setItems, catego
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
       <div className="p-6 max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
+        {/* Floating Header */}
+        <div className="sticky top-6 z-40 mb-8">
           <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 p-6">
             <div className="flex items-center justify-between">
               <div>

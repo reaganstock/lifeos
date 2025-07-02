@@ -410,7 +410,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items, cate
 
       <div className="p-6 max-w-7xl mx-auto">
         {/* Floating Header */}
-        <div className="sticky top-6 z-40 mb-8">
+        <div className="sticky top-6 z-[100] mb-8">
           <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 p-6">
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
               <div className="flex-1">
