@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Calendar as CalendarIcon, Plus, Clock, MapPin, X, Edit3, Save, ChevronLeft, ChevronRight, MoreHorizontal, Calendar, CalendarDays, CalendarCheck, CheckCircle, Flame, Copy } from 'lucide-react';
+import { Calendar as CalendarIcon, Plus, Clock, MapPin, X, Edit3, Save, ChevronLeft, ChevronRight, MoreHorizontal, Calendar, CalendarDays, CalendarCheck, CheckCircle, Flame, Copy, Filter, Settings, Sun, Sunset, Moon } from 'lucide-react';
 import { Item, Category } from '../types';
 import { copyToClipboard, showCopyFeedback } from '../utils/clipboard';
 
@@ -12,6 +12,10 @@ interface GlobalCalendarProps {
 const GlobalCalendar: React.FC<GlobalCalendarProps> = ({ items, setItems, categories }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [showAddForm, setShowAddForm] = useState(false);
+  const [dateRangeFilter, setDateRangeFilter] = useState<'all' | 'today' | 'this_week' | 'this_month' | 'upcoming'>('all');
+  const [timeFilter, setTimeFilter] = useState<'all' | 'morning' | 'afternoon' | 'evening' | 'all_day'>('all');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [sortBy, setSortBy] = useState<'recent' | 'startTime' | 'category'>('recent');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showDateDetails, setShowDateDetails] = useState(false);
   const [editingEvent, setEditingEvent] = useState<string | null>(null);
@@ -40,9 +44,78 @@ const GlobalCalendar: React.FC<GlobalCalendarProps> = ({ items, setItems, catego
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const events = items.filter(item => item.type === 'event');
-  const filteredEvents = selectedCategory === 'all' 
-    ? events 
-    : events.filter(item => item.categoryId === selectedCategory);
+  
+  const filteredEvents = events.filter(event => {
+    // Category filter
+    const categoryMatch = selectedCategory === 'all' || event.categoryId === selectedCategory;
+    
+    // Date range filter
+    const dateRangeMatch = dateRangeFilter === 'all' || (() => {
+      if (!event.dateTime) return dateRangeFilter === 'all';
+      const eventDate = new Date(event.dateTime);
+      const today = new Date();
+      const weekStart = new Date(today);
+      weekStart.setDate(today.getDate() - today.getDay());
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      
+      switch (dateRangeFilter) {
+        case 'today':
+          return eventDate.toDateString() === today.toDateString();
+        case 'this_week':
+          return eventDate >= weekStart && eventDate <= weekEnd;
+        case 'this_month':
+          return eventDate >= monthStart && eventDate <= monthEnd;
+        case 'upcoming':
+          return eventDate >= today;
+        default:
+          return true;
+      }
+    })();
+    
+    // Time filter
+    const timeMatch = timeFilter === 'all' || (() => {
+      if (!event.dateTime) return timeFilter === 'all_day';
+      const eventDate = new Date(event.dateTime);
+      const hour = eventDate.getHours();
+      
+      switch (timeFilter) {
+        case 'morning':
+          return hour >= 6 && hour < 12;
+        case 'afternoon':
+          return hour >= 12 && hour < 18;
+        case 'evening':
+          return hour >= 18 || hour < 6;
+        case 'all_day':
+          return hour === 0 && eventDate.getMinutes() === 0; // All-day events often set to midnight
+        default:
+          return true;
+      }
+    })();
+    
+    return categoryMatch && dateRangeMatch && timeMatch;
+  });
+
+  // Sort events
+  const sortedEvents = [...filteredEvents].sort((a, b) => {
+    switch (sortBy) {
+      case 'recent':
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      case 'startTime':
+        if (!a.dateTime && !b.dateTime) return 0;
+        if (!a.dateTime) return 1;
+        if (!b.dateTime) return -1;
+        return new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime();
+      case 'category':
+        const catA = categories.find(c => c.id === a.categoryId);
+        const catB = categories.find(c => c.id === b.categoryId);
+        return (catA?.priority || 999) - (catB?.priority || 999);
+      default:
+        return 0;
+    }
+  });
 
   // Update newEvent categoryId when categories are loaded
   useEffect(() => {
@@ -215,7 +288,7 @@ const GlobalCalendar: React.FC<GlobalCalendarProps> = ({ items, setItems, catego
   };
 
   const getEventsForDate = (date: Date) => {
-    return filteredEvents.filter(event => {
+    return sortedEvents.filter(event => {
       if (!event.dateTime) return false;
       const eventDate = new Date(event.dateTime);
       return eventDate.toDateString() === date.toDateString();
@@ -669,6 +742,158 @@ const GlobalCalendar: React.FC<GlobalCalendarProps> = ({ items, setItems, catego
                 <span className="font-semibold relative z-10">Add Event</span>
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Advanced Filter & Search Controls */}
+        <div className="mb-6">
+          <div className="bg-white/60 backdrop-blur-xl rounded-2xl shadow-lg border border-white/30 p-6">
+            {/* Header with Advanced Filter Toggle */}
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                <Filter className="w-5 h-5 mr-2 text-blue-600" />
+                Filter & Search
+              </h3>
+              <button
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+                  showAdvancedFilters 
+                    ? 'bg-blue-100 text-blue-700 border border-blue-200' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <Settings className="w-4 h-4" />
+                Advanced
+              </button>
+            </div>
+
+            {/* Basic Filters */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+              {/* Category Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-gray-700">Category</label>
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300 text-gray-800"
+                >
+                  <option value="all">All Categories</option>
+                  {categories.map(category => (
+                    <option key={category.id} value={category.id}>
+                      {category.icon} {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Date Range Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-gray-700">Date Range</label>
+                <select
+                  value={dateRangeFilter}
+                  onChange={(e) => setDateRangeFilter(e.target.value as 'all' | 'today' | 'this_week' | 'this_month' | 'upcoming')}
+                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300 text-gray-800"
+                >
+                  <option value="all">All Dates</option>
+                  <option value="today">📅 Today</option>
+                  <option value="this_week">📆 This Week</option>
+                  <option value="this_month">🗓️ This Month</option>
+                  <option value="upcoming">🚀 Upcoming</option>
+                </select>
+              </div>
+
+              {/* Sort Options */}
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-gray-700">Sort by</label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as 'recent' | 'startTime' | 'category')}
+                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300 text-gray-800"
+                >
+                  <option value="recent">🕒 Most Recent</option>
+                  <option value="startTime">⏰ Start Time</option>
+                  <option value="category">📁 Category</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Advanced Filters */}
+            {showAdvancedFilters && (
+              <div className="border-t border-gray-200/50 pt-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Time of Day Filter */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-gray-700 flex items-center">
+                      <Sun className="w-4 h-4 mr-2 text-blue-600" />
+                      Time of Day
+                    </label>
+                    <select
+                      value={timeFilter}
+                      onChange={(e) => setTimeFilter(e.target.value as 'all' | 'morning' | 'afternoon' | 'evening' | 'all_day')}
+                      className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300 text-gray-800"
+                    >
+                      <option value="all">All Times</option>
+                      <option value="morning">🌅 Morning (6AM-12PM)</option>
+                      <option value="afternoon">☀️ Afternoon (12PM-6PM)</option>
+                      <option value="evening">🌆 Evening (6PM-6AM)</option>
+                      <option value="all_day">📅 All Day Events</option>
+                    </select>
+                  </div>
+
+                  {/* Event Stats */}
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-3">Event Stats</h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-blue-600">{sortedEvents.length}</div>
+                        <div className="text-gray-600">Total Events</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-indigo-600">{sortedEvents.filter(e => e.dateTime && new Date(e.dateTime).toDateString() === new Date().toDateString()).length}</div>
+                        <div className="text-gray-600">Today</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Active Filters Summary */}
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {selectedCategory !== 'all' && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      Category: {categories.find(c => c.id === selectedCategory)?.name}
+                      <button
+                        onClick={() => setSelectedCategory('all')}
+                        className="ml-2 text-blue-600 hover:text-blue-800"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {dateRangeFilter !== 'all' && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      Date: {dateRangeFilter.replace('_', ' ').charAt(0).toUpperCase() + dateRangeFilter.replace('_', ' ').slice(1)}
+                      <button
+                        onClick={() => setDateRangeFilter('all')}
+                        className="ml-2 text-green-600 hover:text-green-800"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {timeFilter !== 'all' && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                      Time: {timeFilter.replace('_', ' ').charAt(0).toUpperCase() + timeFilter.replace('_', ' ').slice(1)}
+                      <button
+                        onClick={() => setTimeFilter('all')}
+                        className="ml-2 text-purple-600 hover:text-purple-800"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

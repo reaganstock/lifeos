@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { RotateCcw, Plus, CheckCircle, X, Save, Filter, Calendar, Flame, Printer, Copy, Edit3, Trash2 } from 'lucide-react';
+import { RotateCcw, Plus, CheckCircle, X, Save, Filter, Calendar, Flame, Printer, Copy, Edit3, Trash2, Settings } from 'lucide-react';
 import { Item, Category } from '../types';
 import { copyToClipboard, showCopyFeedback } from '../utils/clipboard';
 
@@ -14,6 +14,9 @@ type FrequencyType = 'daily' | 'weekly' | 'monthly' | 'yearly';
 const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, categories }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedFrequency, setSelectedFrequency] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'recent' | 'frequency' | 'category' | 'streak'>('recent');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [completionFilter, setCompletionFilter] = useState<'all' | 'completed' | 'incomplete'>('all');
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingRoutine, setEditingRoutine] = useState<string | null>(null);
   const [viewingRoutine, setViewingRoutine] = useState<string | null>(null);
@@ -33,15 +36,38 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, catego
 
   const routines = items.filter(item => item.type === 'routine');
   
-  // Filter routines by category and frequency
+  // Filter routines by category, frequency, and completion status
   const filteredRoutines = routines.filter(routine => {
     const categoryMatch = selectedCategory === 'all' || routine.categoryId === selectedCategory;
     const frequencyMatch = selectedFrequency === 'all' || routine.metadata?.frequency === selectedFrequency;
-    return categoryMatch && frequencyMatch;
+    const completionMatch = completionFilter === 'all' || 
+      (completionFilter === 'completed' && routine.metadata?.completedToday) ||
+      (completionFilter === 'incomplete' && !routine.metadata?.completedToday);
+    return categoryMatch && frequencyMatch && completionMatch;
+  });
+
+  // Sort routines
+  const sortedRoutines = [...filteredRoutines].sort((a, b) => {
+    switch (sortBy) {
+      case 'recent':
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      case 'frequency':
+        const freqOrder = { 'daily': 1, 'weekly': 2, 'monthly': 3, 'yearly': 4 };
+        return (freqOrder[a.metadata?.frequency as keyof typeof freqOrder] || 5) - 
+               (freqOrder[b.metadata?.frequency as keyof typeof freqOrder] || 5);
+      case 'category':
+        const categoryA = categories.find(c => c.id === a.categoryId)?.name || '';
+        const categoryB = categories.find(c => c.id === b.categoryId)?.name || '';
+        return categoryA.localeCompare(categoryB);
+      case 'streak':
+        return (b.metadata?.currentStreak || 0) - (a.metadata?.currentStreak || 0);
+      default:
+        return 0;
+    }
   });
 
   // Group routines by frequency for better organization
-  const groupedRoutines = filteredRoutines.reduce((groups, routine) => {
+  const groupedRoutines = sortedRoutines.reduce((groups, routine) => {
     const frequency = routine.metadata?.frequency || 'daily';
     if (!groups[frequency]) {
       groups[frequency] = [];
@@ -553,16 +579,37 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, catego
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="mb-6">
-          <div className="bg-white/60 backdrop-blur-xl rounded-xl shadow-lg border border-white/30 p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <Filter className="w-5 h-5 text-gray-600" />
+        {/* Advanced Filter & Search Controls */}
+        <div className="mb-8">
+          <div className="bg-white/60 backdrop-blur-xl rounded-2xl shadow-lg border border-white/30 p-6">
+            {/* Header with Advanced Filter Toggle */}
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                <Filter className="w-5 h-5 mr-2 text-gray-600" />
+                Filter & Search
+              </h3>
+              <button
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+                  showAdvancedFilters 
+                    ? 'bg-orange-100 text-orange-700 border border-orange-200' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <Settings className="w-4 h-4" />
+                Advanced
+              </button>
+            </div>
+
+            {/* Basic Filters */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+              {/* Category Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-gray-700">Category</label>
                 <select
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="px-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-all duration-300 text-gray-800"
                 >
                   <option value="all">All Categories</option>
                   {categories.map(category => (
@@ -571,11 +618,15 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, catego
                     </option>
                   ))}
                 </select>
+              </div>
 
+              {/* Frequency Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-gray-700">Frequency</label>
                 <select
                   value={selectedFrequency}
                   onChange={(e) => setSelectedFrequency(e.target.value)}
-                  className="px-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-all duration-300 text-gray-800"
                 >
                   <option value="all">All Frequencies</option>
                   {frequencies.map(freq => (
@@ -584,6 +635,100 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, catego
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Completion Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-gray-700">Completion Status</label>
+                <select
+                  value={completionFilter}
+                  onChange={(e) => setCompletionFilter(e.target.value as 'all' | 'completed' | 'incomplete')}
+                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-all duration-300 text-gray-800"
+                >
+                  <option value="all">All Routines</option>
+                  <option value="completed">✅ Completed Today</option>
+                  <option value="incomplete">⏳ Not Completed</option>
+                </select>
+              </div>
+
+              {/* Sort Options */}
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-gray-700">Sort by</label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as 'recent' | 'frequency' | 'category' | 'streak')}
+                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-all duration-300 text-gray-800"
+                >
+                  <option value="recent">🕒 Most Recent</option>
+                  <option value="frequency">📅 Frequency</option>
+                  <option value="category">📁 Category</option>
+                  <option value="streak">🔥 Streak</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Advanced Filters */}
+            {showAdvancedFilters && (
+              <div className="border-t border-gray-200/50 pt-6">
+                {/* Active Filters Summary */}
+                <div className="flex flex-wrap gap-2">
+                  {selectedCategory !== 'all' && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      Category: {categories.find(c => c.id === selectedCategory)?.name}
+                      <button
+                        onClick={() => setSelectedCategory('all')}
+                        className="ml-2 text-blue-600 hover:text-blue-800"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {selectedFrequency !== 'all' && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                      Frequency: {selectedFrequency.charAt(0).toUpperCase() + selectedFrequency.slice(1)}
+                      <button
+                        onClick={() => setSelectedFrequency('all')}
+                        className="ml-2 text-orange-600 hover:text-orange-800"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {completionFilter !== 'all' && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      Status: {completionFilter === 'completed' ? 'Completed' : 'Incomplete'}
+                      <button
+                        onClick={() => setCompletionFilter('all')}
+                        className="ml-2 text-green-600 hover:text-green-800"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Enhanced Quick Stats */}
+            <div className="mt-6 bg-gradient-to-br from-orange-50 to-red-50 rounded-xl p-4 border border-orange-200">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Routine Statistics</h3>
+              <div className="grid grid-cols-4 gap-4 text-sm">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-orange-700">{routines.length}</div>
+                  <div className="text-gray-600">Total</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">{routines.filter(r => r.metadata?.completedToday).length}</div>
+                  <div className="text-gray-600">Completed</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-red-600">{routines.filter(r => !r.metadata?.completedToday).length}</div>
+                  <div className="text-gray-600">Pending</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-purple-600">{Math.max(...routines.map(r => r.metadata?.currentStreak || 0), 0)}</div>
+                  <div className="text-gray-600">Best Streak</div>
+                </div>
               </div>
             </div>
           </div>
@@ -630,7 +775,7 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, catego
                     </div>
                     
                     <div className="space-y-4">
-                      {frequencyRoutines.map((routine) => {
+                      {groupedRoutines[frequency].map((routine) => {
                         const category = categories.find(c => c.id === routine.categoryId);
                         const isEditing = editingRoutine === routine.id;
                         const isCompleted = routine.metadata?.completedToday || false;
@@ -804,9 +949,9 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, catego
               </h2>
             </div>
             
-            {filteredRoutines.length > 0 ? (
+            {sortedRoutines.filter(r => r.metadata?.frequency === selectedFrequency).length > 0 ? (
               <div className="space-y-4">
-                {filteredRoutines.map((routine) => {
+                {sortedRoutines.filter(r => r.metadata?.frequency === selectedFrequency).map((routine) => {
                   const category = categories.find(c => c.id === routine.categoryId);
                   const isEditing = editingRoutine === routine.id;
                   const isCompleted = routine.metadata?.completedToday || false;

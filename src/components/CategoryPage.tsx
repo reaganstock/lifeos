@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, MapPin, Clock, Calendar, Mic, MicOff, Play, Pause, Camera, Edit3, Save, X, Maximize2, Trash2, CheckCircle, CheckCircle2, FileText, RotateCcw, BowArrow, Link, ExternalLink, FolderOpen, Globe, Brain } from 'lucide-react';
+import { ArrowLeft, Plus, MapPin, Clock, Calendar, Mic, MicOff, Play, Pause, Camera, Edit3, Save, X, Maximize2, Trash2, CheckCircle, CheckCircle2, FileText, RotateCcw, BowArrow, Link, ExternalLink, FolderOpen, Globe, Brain, Settings, Filter } from 'lucide-react';
 import { Item, Category } from '../types';
 import { voiceService, VoiceRecording, TranscriptionResult } from '../services/voiceService';
 import LocalCategoryNotes from './LocalCategoryNotes';
@@ -77,6 +77,12 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
   
   // Category Knowledge Modal
   const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
+  
+  // Local Category Filters
+  const [showLocalFilters, setShowLocalFilters] = useState(false);
+  const [localPriorityFilter, setLocalPriorityFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
+  const [localCompletionFilter, setLocalCompletionFilter] = useState<'all' | 'completed' | 'incomplete'>('all');
+  const [localSortBy, setLocalSortBy] = useState<'recent' | 'priority' | 'due_date' | 'alphabetical'>('recent');
 
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
@@ -171,19 +177,61 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
   ];
 
   const filteredItems = categoryItems.filter(item => {
+    // Tab type filter
+    let typeMatch = false;
     if (activeTab === 'note') {
-      return item.type === 'note' || item.type === 'voiceNote';
-    }
-    return item.type === activeTab;
-  }).sort((a, b) => {
-    // Special sorting for events by dateTime
-    if (activeTab === 'event') {
-      const timeA = a.dateTime ? new Date(a.dateTime).getTime() : 0;
-      const timeB = b.dateTime ? new Date(b.dateTime).getTime() : 0;
-      return timeA - timeB; // Earliest events first
+      typeMatch = item.type === 'note' || item.type === 'voiceNote';
+    } else {
+      typeMatch = item.type === activeTab;
     }
     
-    // Default: Sort by most recent (updatedAt) for all other tabs
+    if (!typeMatch) return false;
+    
+    // Priority filter (only for todos and goals)
+    if ((activeTab === 'todo' || activeTab === 'goal') && localPriorityFilter !== 'all') {
+      if (item.priority !== localPriorityFilter) return false;
+    }
+    
+    // Completion filter (only for todos)
+    if (activeTab === 'todo' && localCompletionFilter !== 'all') {
+      const isCompleted = item.completed || false;
+      if (localCompletionFilter === 'completed' && !isCompleted) return false;
+      if (localCompletionFilter === 'incomplete' && isCompleted) return false;
+    }
+    
+    return true;
+  }).sort((a, b) => {
+    // Custom sorting based on localSortBy
+    switch (localSortBy) {
+      case 'priority':
+        if (activeTab === 'todo' || activeTab === 'goal') {
+          const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1 };
+          const priorityA = priorityOrder[a.priority as keyof typeof priorityOrder] || 0;
+          const priorityB = priorityOrder[b.priority as keyof typeof priorityOrder] || 0;
+          return priorityB - priorityA;
+        }
+        break;
+      case 'due_date':
+        if (activeTab === 'todo' && a.dueDate && b.dueDate) {
+          return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+        }
+        break;
+      case 'alphabetical':
+        return a.title.localeCompare(b.title);
+      case 'recent':
+      default:
+        // Special sorting for events by dateTime
+        if (activeTab === 'event') {
+          const timeA = a.dateTime ? new Date(a.dateTime).getTime() : 0;
+          const timeB = b.dateTime ? new Date(b.dateTime).getTime() : 0;
+          return timeA - timeB; // Earliest events first
+        }
+        
+        // Default: Sort by most recent (updatedAt) for all other tabs
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    }
+    
+    // Fallback to recent sorting
     return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
   });
 
@@ -1975,6 +2023,149 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
               </div>
               
               <div className="flex items-center space-x-3">
+                {/* Local Filters Button */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowLocalFilters(!showLocalFilters)}
+                    className={`p-3 border border-gray-200/50 rounded-xl transition-all duration-300 flex items-center space-x-2 ${
+                      showLocalFilters || localPriorityFilter !== 'all' || localCompletionFilter !== 'all' || localSortBy !== 'recent'
+                        ? 'bg-blue-100 text-blue-700 border-blue-200'
+                        : 'bg-white/70 hover:bg-gray-50 text-gray-600'
+                    }`}
+                  >
+                    <Settings className="w-4 h-4" />
+                    <span className="text-sm font-medium">Filters</span>
+                    {(localPriorityFilter !== 'all' || localCompletionFilter !== 'all' || localSortBy !== 'recent') && (
+                      <span className="bg-blue-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                        {[localPriorityFilter !== 'all', localCompletionFilter !== 'all', localSortBy !== 'recent'].filter(Boolean).length}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Local Filters Dropdown */}
+                  {showLocalFilters && (
+                    <div className="absolute right-0 top-full mt-2 w-80 bg-white/95 backdrop-blur-xl rounded-2xl shadow-xl border border-white/30 z-50">
+                      <div className="p-4">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                            <Filter className="w-4 h-4 mr-2 text-gray-600" />
+                            Local Filters
+                          </h3>
+                          <button
+                            onClick={() => setShowLocalFilters(false)}
+                            className="p-1 hover:bg-gray-100 rounded-lg"
+                          >
+                            <X className="w-4 h-4 text-gray-600" />
+                          </button>
+                        </div>
+
+                        <div className="space-y-4">
+                          {/* Sort Filter */}
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">Sort by</label>
+                            <select
+                              value={localSortBy}
+                              onChange={(e) => setLocalSortBy(e.target.value as 'recent' | 'priority' | 'due_date' | 'alphabetical')}
+                              className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                            >
+                              <option value="recent">🕒 Most Recent</option>
+                              {(activeTab === 'todo' || activeTab === 'goal') && <option value="priority">🔥 Priority</option>}
+                              {activeTab === 'todo' && <option value="due_date">📅 Due Date</option>}
+                              <option value="alphabetical">🔤 Alphabetical</option>
+                            </select>
+                          </div>
+
+                          {/* Priority Filter - Only for todos and goals */}
+                          {(activeTab === 'todo' || activeTab === 'goal') && (
+                            <div>
+                              <label className="block text-sm font-semibold text-gray-700 mb-2">Priority</label>
+                              <select
+                                value={localPriorityFilter}
+                                onChange={(e) => setLocalPriorityFilter(e.target.value as 'all' | 'high' | 'medium' | 'low')}
+                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                              >
+                                <option value="all">All Priorities</option>
+                                <option value="high">🔴 High Priority</option>
+                                <option value="medium">🟡 Medium Priority</option>
+                                <option value="low">🟢 Low Priority</option>
+                              </select>
+                            </div>
+                          )}
+
+                          {/* Completion Filter - Only for todos */}
+                          {activeTab === 'todo' && (
+                            <div>
+                              <label className="block text-sm font-semibold text-gray-700 mb-2">Status</label>
+                              <select
+                                value={localCompletionFilter}
+                                onChange={(e) => setLocalCompletionFilter(e.target.value as 'all' | 'completed' | 'incomplete')}
+                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                              >
+                                <option value="all">All Items</option>
+                                <option value="completed">✅ Completed</option>
+                                <option value="incomplete">⏳ Incomplete</option>
+                              </select>
+                            </div>
+                          )}
+
+                          {/* Active Filters */}
+                          <div className="border-t pt-3">
+                            <div className="flex flex-wrap gap-2">
+                              {localPriorityFilter !== 'all' && (
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                  Priority: {localPriorityFilter}
+                                  <button
+                                    onClick={() => setLocalPriorityFilter('all')}
+                                    className="ml-1 text-orange-600 hover:text-orange-800"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              )}
+                              {localCompletionFilter !== 'all' && (
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                  Status: {localCompletionFilter}
+                                  <button
+                                    onClick={() => setLocalCompletionFilter('all')}
+                                    className="ml-1 text-green-600 hover:text-green-800"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              )}
+                              {localSortBy !== 'recent' && (
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                  Sort: {localSortBy.replace('_', ' ')}
+                                  <button
+                                    onClick={() => setLocalSortBy('recent')}
+                                    className="ml-1 text-blue-600 hover:text-blue-800"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              )}
+                            </div>
+                            
+                            {/* Clear All Filters */}
+                            {(localPriorityFilter !== 'all' || localCompletionFilter !== 'all' || localSortBy !== 'recent') && (
+                              <button
+                                onClick={() => {
+                                  setLocalPriorityFilter('all');
+                                  setLocalCompletionFilter('all');
+                                  setLocalSortBy('recent');
+                                }}
+                                className="text-xs text-gray-500 hover:text-gray-700 mt-2"
+                              >
+                                Clear all filters
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
                 {/* Knowledge Chat Button */}
                 <button
                   onClick={() => setShowKnowledgeModal(true)}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BowArrow, Filter, Plus, TrendingUp, Award, Calendar, X, Edit3, Save, ChevronRight, Trash2, Maximize2, Copy } from 'lucide-react';
+import { BowArrow, Filter, Plus, TrendingUp, Award, Calendar, X, Edit3, Save, ChevronRight, Trash2, Maximize2, Copy, Settings, Target } from 'lucide-react';
 import { Item, Category } from '../types';
 import { copyToClipboard, showCopyFeedback } from '../utils/clipboard';
 
@@ -12,6 +12,8 @@ interface GlobalGoalsProps {
 const GlobalGoals: React.FC<GlobalGoalsProps> = ({ items, setItems, categories }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [showAddForm, setShowAddForm] = useState(false);
+  const [progressFilter, setProgressFilter] = useState<'all' | 'not_started' | 'in_progress' | 'completed'>('all');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [editingGoal, setEditingGoal] = useState<string | null>(null);
   const [expandedGoal, setExpandedGoal] = useState<string | null>(null);
   const [fullscreenGoal, setFullscreenGoal] = useState<string | null>(null);
@@ -33,9 +35,26 @@ const GlobalGoals: React.FC<GlobalGoalsProps> = ({ items, setItems, categories }
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const goals = items.filter(item => item.type === 'goal');
-  const filteredGoals = selectedCategory === 'all' 
-    ? goals 
-    : goals.filter(item => item.categoryId === selectedCategory);
+  
+  const filteredGoals = goals.filter(goal => {
+    const categoryMatch = selectedCategory === 'all' || goal.categoryId === selectedCategory;
+    
+    const progressMatch = progressFilter === 'all' || (() => {
+      const progress = goal.metadata?.progress || 0;
+      switch (progressFilter) {
+        case 'not_started':
+          return progress === 0;
+        case 'in_progress':
+          return progress > 0 && progress < 100;
+        case 'completed':
+          return progress >= 100;
+        default:
+          return true;
+      }
+    })();
+    
+    return categoryMatch && progressMatch;
+  });
 
   const sortedGoals = [...filteredGoals].sort((a, b) => {
     switch (sortBy) {
@@ -226,17 +245,37 @@ const GlobalGoals: React.FC<GlobalGoalsProps> = ({ items, setItems, categories }
           </div>
         </div>
 
-        {/* Tesla-Style Controls */}
+        {/* Advanced Filter & Search Controls */}
         <div className="mb-8">
           <div className="bg-white/60 backdrop-blur-xl rounded-2xl shadow-lg border border-white/30 p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Header with Advanced Filter Toggle */}
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                <Filter className="w-5 h-5 mr-2 text-gray-600" />
+                Filter & Search
+              </h3>
+              <button
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+                  showAdvancedFilters 
+                    ? 'bg-gray-100 text-gray-700 border border-gray-200' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <Settings className="w-4 h-4" />
+                Advanced
+              </button>
+            </div>
+
+            {/* Basic Filters */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
               {/* Category Filter */}
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-gray-700">Filter by Category</label>
+                <label className="text-sm font-semibold text-gray-700">Category</label>
                 <select
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-red-500/50 focus:border-red-500 transition-all duration-300 text-gray-800"
+                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-gray-500/50 focus:border-gray-500 transition-all duration-300 text-gray-800"
                 >
                   <option value="all">All Categories</option>
                   {categories.map(category => (
@@ -247,37 +286,83 @@ const GlobalGoals: React.FC<GlobalGoalsProps> = ({ items, setItems, categories }
                 </select>
               </div>
 
+              {/* Progress Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-gray-700">Progress Status</label>
+                <select
+                  value={progressFilter}
+                  onChange={(e) => setProgressFilter(e.target.value as 'all' | 'not_started' | 'in_progress' | 'completed')}
+                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-gray-500/50 focus:border-gray-500 transition-all duration-300 text-gray-800"
+                >
+                  <option value="all">All Goals</option>
+                  <option value="not_started">🎯 Not Started</option>
+                  <option value="in_progress">🔄 In Progress</option>
+                  <option value="completed">✅ Completed</option>
+                </select>
+              </div>
+
               {/* Sort Options */}
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-gray-700">Sort by</label>
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as 'recent' | 'priority' | 'progress' | 'category')}
-                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-red-500/50 focus:border-red-500 transition-all duration-300 text-gray-800"
+                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-gray-500/50 focus:border-gray-500 transition-all duration-300 text-gray-800"
                 >
-                  <option value="recent">Most Recent</option>
-                  <option value="priority">Category Priority</option>
-                  <option value="progress">Progress</option>
-                  <option value="category">Category</option>
+                  <option value="recent">🕒 Most Recent</option>
+                  <option value="progress">📊 Progress</option>
+                  <option value="priority">🔥 Priority</option>
+                  <option value="category">📁 Category</option>
                 </select>
               </div>
+            </div>
 
-              {/* Quick Stats */}
-              <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl p-4 border border-blue-100">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Quick Stats</h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>Completed:</span>
-                    <span className="font-bold text-gray-700">{completedGoals}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>In Progress:</span>
-                    <span className="font-bold text-gray-700">{totalGoals - completedGoals}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Avg Progress:</span>
-                    <span className="font-bold text-gray-700">{Math.round(averageProgress)}%</span>
-                  </div>
+            {/* Advanced Filters */}
+            {showAdvancedFilters && (
+              <div className="border-t border-gray-200/50 pt-6">
+                {/* Active Filters Summary */}
+                <div className="flex flex-wrap gap-2">
+                  {selectedCategory !== 'all' && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      Category: {categories.find(c => c.id === selectedCategory)?.name}
+                      <button
+                        onClick={() => setSelectedCategory('all')}
+                        className="ml-2 text-blue-600 hover:text-blue-800"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {progressFilter !== 'all' && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      Progress: {progressFilter.replace('_', ' ').charAt(0).toUpperCase() + progressFilter.replace('_', ' ').slice(1)}
+                      <button
+                        onClick={() => setProgressFilter('all')}
+                        className="ml-2 text-green-600 hover:text-green-800"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Enhanced Quick Stats */}
+            <div className="mt-6 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Goal Statistics</h3>
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-gray-700">{completedGoals}</div>
+                  <div className="text-gray-600">Completed</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-gray-600">{totalGoals - completedGoals}</div>
+                  <div className="text-gray-600">In Progress</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-gray-800">{Math.round(averageProgress)}%</div>
+                  <div className="text-gray-600">Avg Progress</div>
                 </div>
               </div>
             </div>
