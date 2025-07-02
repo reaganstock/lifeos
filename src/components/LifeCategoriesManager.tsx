@@ -26,6 +26,7 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [priorityError, setPriorityError] = useState<string>('');
+  const [pendingRecompaction, setPendingRecompaction] = useState(false);
   const [newCategory, setNewCategory] = useState({
     name: '',
     icon: '📁',
@@ -106,6 +107,42 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
 
     await Promise.all(updatePromises);
     console.log('✅ Priority reordering complete');
+  };
+
+  // Function to recompact priorities after deletion (removes gaps)
+  const recompactPriorities = async () => {
+    if (!user) return;
+
+    console.log('🔧 Recompacting priorities after deletion...');
+    
+    // Get all categories sorted by priority
+    const sortedCategories = [...categories].sort((a, b) => a.priority - b.priority);
+    
+    // Check if recompaction is needed (are there gaps?)
+    let needsRecompaction = false;
+    for (let i = 0; i < sortedCategories.length; i++) {
+      if (sortedCategories[i].priority !== i) {
+        needsRecompaction = true;
+        break;
+      }
+    }
+
+    if (!needsRecompaction) {
+      console.log('✅ No recompaction needed - priorities are already sequential');
+      return;
+    }
+
+    // Assign sequential priorities (0, 1, 2, 3...)
+    const updatePromises = sortedCategories.map((cat, index) => {
+      if (cat.priority !== index) {
+        console.log(`📝 Recompacting "${cat.name}" from priority ${cat.priority} to ${index}`);
+        return updateCategory(cat.id, { priority: index });
+      }
+      return Promise.resolve(true);
+    });
+
+    await Promise.all(updatePromises);
+    console.log('✅ Priority recompaction complete');
   };
 
   // Function to validate priority input and show reorder preview
@@ -251,6 +288,9 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
       const success = await deleteCategory(categoryId);
       if (success) {
         console.log('✅ Category deleted successfully');
+        
+        // Mark that we need recompaction when categories update
+        setPendingRecompaction(true);
       } else {
         console.error('❌ Failed to delete category');
         alert('Failed to delete category. Please try again.');
@@ -316,7 +356,14 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
   const commonIcons = ['📱', '💪', '🏋️', '✝️', '📝', '🗣️', '⚖️', '🎯', '💼', '🎨', '🏠', '💰', '🌱', '🧠', '❤️'];
   const commonColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#74B9FF', '#FD79A8', '#FDCB6E', '#6C5CE7'];
 
-  // Note: Smart reordering now handled on save, no auto-fixing needed
+  // Auto-recompact priorities when categories change after deletion
+  useEffect(() => {
+    if (pendingRecompaction && user && categories.length > 0) {
+      console.log('📋 Categories updated after deletion, checking for recompaction...');
+      setPendingRecompaction(false);
+      recompactPriorities();
+    }
+  }, [categories.length, pendingRecompaction, user]);
 
 
   // Show loading state while data is being fetched

@@ -2832,7 +2832,7 @@ User message: ${messageWithContext}`;
                     </svg>
                   </div>
                   <h3 className={`text-xl font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-                    Lifely AI Assistant
+                    Lifely AI
                   </h3>
                   <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                     Ready to help you organize and optimize your life!
