@@ -451,7 +451,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
       console.log('🎯 Action message detected, processing with function calling:', transcript);
       
       // Process message through Gemini service with function calling
-      const result = await geminiService.processMessage(transcript, items, []);
+      const result = await geminiService.processMessage(transcript, items, [], categories, isAgenticMode, isAskMode);
       
       console.log('✅ Function calling result:', result);
       
