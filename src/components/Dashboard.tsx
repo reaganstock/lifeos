@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { format } from 'date-fns';
-import { Clock, BowArrow, CheckCircle, Circle, Flame, TrendingUp, Star, Calendar, Zap, Award, BookOpen, Dumbbell, Edit3, Heart, Sparkles, ArrowRight, Trophy, Sun, Moon, Coffee, Sunrise, Sunset } from 'lucide-react';
-// Removed initialData import - using props from parent
+import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, isToday, isYesterday } from 'date-fns';
+import { Clock, BowArrow, CheckCircle, Circle, Flame, TrendingUp, Star, Calendar, Zap, Award, BookOpen, Dumbbell, Edit3, Heart, Sparkles, ArrowRight, Trophy, Sun, Moon, Coffee, Sunrise, Sunset, Settings, Target, BarChart3, Activity, Timer, Brain, Lightbulb } from 'lucide-react';
 import { Item } from '../types';
+import DailyFlowEditor, { DailyFlowItem } from './DailyFlowEditor';
 
 interface DashboardProps {
   onNavigateToCategory: (categoryId: string) => void;
@@ -16,17 +16,40 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items, cate
   const [personalMantra, setPersonalMantra] = useState("Excellence is a daily practice, not a destination");
   const [isEditingMantra, setIsEditingMantra] = useState(false);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [showFlowEditor, setShowFlowEditor] = useState(false);
+  const [viewPeriod, setViewPeriod] = useState<'today' | 'week' | 'month'>('today');
   
   const today = new Date();
   const todayString = format(today, 'EEEE, MMMM do, yyyy');
 
-  // Default daily schedule - users can customize this later
-  const dailySchedule = [
-    { time: '6:00 AM', activity: 'Morning Routine', categoryId: categories[0]?.id || 'general' },
-    { time: '8:00 AM', activity: 'Work/Study', categoryId: categories[1]?.id || 'general' },
-    { time: '12:00 PM', activity: 'Lunch Break', categoryId: categories[0]?.id || 'general' },
-    { time: '6:00 PM', activity: 'Evening Activities', categoryId: categories[2]?.id || 'general' },
-  ];
+  // Load daily flow from localStorage or use default
+  const [dailyFlow, setDailyFlow] = useState<DailyFlowItem[]>(() => {
+    const saved = localStorage.getItem('dailyFlow');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse saved daily flow:', e);
+      }
+    }
+    // Default daily schedule
+    return [
+      { id: 'default-1', time: '06:00', activity: 'Morning Routine', categoryId: categories[0]?.id || 'general', duration: 60, priority: 'high' },
+      { id: 'default-2', time: '08:00', activity: 'Work/Study', categoryId: categories[1]?.id || 'general', duration: 240, priority: 'high' },
+      { id: 'default-3', time: '12:00', activity: 'Lunch Break', categoryId: categories[0]?.id || 'general', duration: 60, priority: 'medium' },
+      { id: 'default-4', time: '18:00', activity: 'Evening Activities', categoryId: categories[2]?.id || 'general', duration: 120, priority: 'medium' },
+    ];
+  });
+
+  // Convert dailyFlow to old format for backward compatibility
+  const dailySchedule = dailyFlow.map(item => ({
+    time: format(new Date(`1970-01-01T${item.time}`), 'h:mm a'),
+    activity: item.activity,
+    categoryId: item.categoryId,
+    id: item.id,
+    duration: item.duration,
+    priority: item.priority
+  }));
 
   // Enhanced mouse tracking for premium effects
   useEffect(() => {
@@ -126,11 +149,61 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items, cate
     }
   };
 
-  // Get success metrics
+  // Enhanced success metrics with time-based filtering
   const getSuccessMetrics = () => {
     const goals = items.filter(item => item.type === 'goal');
     const routines = items.filter(item => item.type === 'routine');
+    const todos = items.filter(item => item.type === 'todo');
     
+    // Calculate date ranges
+    const weekStart = startOfWeek(today);
+    const weekEnd = endOfWeek(today);
+    const monthStart = startOfMonth(today);
+    const monthEnd = endOfMonth(today);
+
+    // Get period-specific data
+    const getPeriodData = (period: 'today' | 'week' | 'month') => {
+      let startDate: Date, endDate: Date;
+      
+      switch (period) {
+        case 'today':
+          startDate = today;
+          endDate = today;
+          break;
+        case 'week':
+          startDate = weekStart;
+          endDate = weekEnd;
+          break;
+        case 'month':
+          startDate = monthStart;
+          endDate = monthEnd;
+          break;
+      }
+
+      const periodTodos = todos.filter(item => {
+        if (!item.dueDate) return false;
+        const dueDate = item.dueDate instanceof Date ? item.dueDate : new Date(item.dueDate);
+        return dueDate >= startDate && dueDate <= endDate;
+      });
+
+      const completedTodos = periodTodos.filter(item => item.completed);
+      const todoCompletionRate = periodTodos.length > 0 
+        ? Math.round((completedTodos.length / periodTodos.length) * 100)
+        : 0;
+
+      return {
+        todos: periodTodos.length,
+        completedTodos: completedTodos.length,
+        todoCompletionRate,
+        productivity: Math.round((completedTodos.length / Math.max(1, periodTodos.length)) * 100)
+      };
+    };
+
+    const todayData = getPeriodData('today');
+    const weekData = getPeriodData('week');
+    const monthData = getPeriodData('month');
+
+    // Enhanced metrics
     const avgGoalProgress = goals.length > 0 
       ? goals.reduce((sum, goal) => sum + (goal.metadata?.progress || 0), 0) / goals.length
       : 0;
@@ -139,12 +212,31 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items, cate
       ? routines.reduce((sum, routine) => sum + (routine.metadata?.currentStreak || 0), 0) / routines.length
       : 0;
 
+    // Yesterday's data for comparison
+    const yesterday = subDays(today, 1);
+    const yesterdayTodos = todos.filter(item => {
+      if (!item.dueDate) return false;
+      const dueDate = item.dueDate instanceof Date ? item.dueDate : new Date(item.dueDate);
+      return isYesterday(dueDate);
+    });
+    const yesterdayCompleted = yesterdayTodos.filter(item => item.completed).length;
+    const yesterdayRate = yesterdayTodos.length > 0 ? Math.round((yesterdayCompleted / yesterdayTodos.length) * 100) : 0;
+
+    // Focus score (combination of all metrics)
+    const focusScore = Math.round((avgGoalProgress + routineCompletionRate + todayData.todoCompletionRate + Math.min(avgStreakDays * 5, 100)) / 4);
+
     return {
-      overallProgress: Math.round((avgGoalProgress + routineCompletionRate + todoCompletionRate) / 3),
+      overallProgress: Math.round((avgGoalProgress + routineCompletionRate + todayData.todoCompletionRate) / 3),
       avgGoalProgress: Math.round(avgGoalProgress),
       avgStreakDays: Math.round(avgStreakDays),
       totalGoals: goals.length,
-      activeRoutines: routines.length
+      activeRoutines: routines.length,
+      focusScore,
+      todayData,
+      weekData,
+      monthData,
+      yesterdayRate,
+      improvement: todayData.todoCompletionRate - yesterdayRate
     };
   };
 
@@ -243,6 +335,65 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items, cate
   };
 
   const contextualMotivation = getContextualMotivation();
+
+  // Daily flow editor functions
+  const handleSaveDailyFlow = (newFlow: DailyFlowItem[]) => {
+    setDailyFlow(newFlow);
+    localStorage.setItem('dailyFlow', JSON.stringify(newFlow));
+    console.log('Daily flow saved:', newFlow);
+  };
+
+  // Get insights based on current data
+  const getSmartInsights = () => {
+    const insights = [];
+    
+    if (metrics.improvement > 0) {
+      insights.push({
+        type: 'positive',
+        icon: TrendingUp,
+        text: `${metrics.improvement}% improvement from yesterday!`,
+        color: 'emerald'
+      });
+    } else if (metrics.improvement < 0) {
+      insights.push({
+        type: 'improvement',
+        icon: Target,
+        text: `Focus opportunity: ${Math.abs(metrics.improvement)}% below yesterday`,
+        color: 'blue'
+      });
+    }
+
+    if (metrics.avgStreakDays >= 7) {
+      insights.push({
+        type: 'streak',
+        icon: Flame,
+        text: `Amazing ${metrics.avgStreakDays}-day average streak!`,
+        color: 'orange'
+      });
+    }
+
+    if (metrics.focusScore >= 85) {
+      insights.push({
+        type: 'focus',
+        icon: Brain,
+        text: 'Peak focus mode activated!',
+        color: 'purple'
+      });
+    }
+
+    if (todaysTodos.length === 0 && todaysRoutines.length > 0) {
+      insights.push({
+        type: 'suggestion',
+        icon: Lightbulb,
+        text: 'Perfect day for routine mastery!',
+        color: 'amber'
+      });
+    }
+
+    return insights.slice(0, 2); // Show top 2 insights
+  };
+
+  const smartInsights = getSmartInsights();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30 relative overflow-hidden">
@@ -347,56 +498,119 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items, cate
           </div>
         </div>
 
-        {/* Compact Success Metrics */}
+        {/* Enhanced Success Metrics */}
         <div className="mb-3 lg:mb-4">
           <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-lg border border-white/50 p-3 lg:p-4">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 lg:gap-4">
-              {[
-                { 
-                  label: "Daily Todos", 
-                  value: todoCompletionRate, 
-                  suffix: "%", 
-                  color: "emerald", 
-                  icon: CheckCircle,
-                  bgFrom: "from-emerald-50/90",
-                  bgTo: "to-green-50/90",
-                  border: "border-emerald-100/60",
-                  gradient: "from-emerald-400/10 to-green-400/10"
-                },
-                { 
-                  label: "Routines", 
-                  value: routineCompletionRate, 
-                  suffix: "%", 
-                  color: "amber", 
-                  icon: Flame,
-                  bgFrom: "from-amber-50/90",
-                  bgTo: "to-orange-50/90",
-                  border: "border-amber-100/60",
-                  gradient: "from-amber-400/10 to-orange-400/10"
-                },
-                { 
-                  label: "Goals", 
-                  value: metrics.avgGoalProgress, 
-                  suffix: "%", 
-                  color: "slate", 
-                  icon: BowArrow,
-                  bgFrom: "from-slate-50/90",
-                  bgTo: "to-gray-50/90",
-                  border: "border-slate-100/60",
-                  gradient: "from-slate-400/10 to-gray-400/10"
-                },
-                { 
-                  label: "Streak", 
-                  value: metrics.avgStreakDays, 
-                  suffix: " days", 
-                  color: "indigo", 
-                  icon: TrendingUp,
-                  bgFrom: "from-indigo-50/90",
-                  bgTo: "to-blue-50/90",
-                  border: "border-indigo-100/60",
-                  gradient: "from-indigo-400/10 to-blue-400/10"
-                }
-              ].map((metric, index) => {
+            {/* Metrics Header with Period Selector */}
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center">
+                <BarChart3 className="w-5 h-5 mr-2 text-blue-600" />
+                Performance Analytics
+              </h3>
+              <div className="flex items-center bg-gray-100 rounded-lg p-1">
+                {(['today', 'week', 'month'] as const).map((period) => (
+                  <button
+                    key={period}
+                    onClick={() => setViewPeriod(period)}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all duration-200 ${
+                      viewPeriod === period
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    {period.charAt(0).toUpperCase() + period.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Smart Insights Bar */}
+            {smartInsights.length > 0 && (
+              <div className="mb-4 flex gap-2 overflow-x-auto">
+                {smartInsights.map((insight, index) => {
+                  const IconComponent = insight.icon;
+                  return (
+                    <div
+                      key={index}
+                      className={`flex items-center gap-2 px-3 py-2 bg-${insight.color}-50 text-${insight.color}-700 rounded-lg border border-${insight.color}-200 text-xs font-medium whitespace-nowrap flex-shrink-0`}
+                    >
+                      <IconComponent className="w-3 h-3" />
+                      {insight.text}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 lg:gap-4">
+              {(() => {
+                const currentData = viewPeriod === 'today' ? metrics.todayData : 
+                                  viewPeriod === 'week' ? metrics.weekData : metrics.monthData;
+                
+                return [
+                  { 
+                    label: `${viewPeriod === 'today' ? 'Today' : viewPeriod === 'week' ? 'This Week' : 'This Month'} Tasks`, 
+                    value: currentData.todoCompletionRate, 
+                    suffix: "%", 
+                    color: "emerald", 
+                    icon: CheckCircle,
+                    bgFrom: "from-emerald-50/90",
+                    bgTo: "to-green-50/90",
+                    border: "border-emerald-100/60",
+                    gradient: "from-emerald-400/10 to-green-400/10",
+                    subtext: `${currentData.completedTodos}/${currentData.todos} completed`
+                  },
+                  { 
+                    label: "Routines", 
+                    value: routineCompletionRate, 
+                    suffix: "%", 
+                    color: "amber", 
+                    icon: Flame,
+                    bgFrom: "from-amber-50/90",
+                    bgTo: "to-orange-50/90",
+                    border: "border-amber-100/60",
+                    gradient: "from-amber-400/10 to-orange-400/10",
+                    subtext: `${metrics.activeRoutines} active`
+                  },
+                  { 
+                    label: "Goals", 
+                    value: metrics.avgGoalProgress, 
+                    suffix: "%", 
+                    color: "slate", 
+                    icon: BowArrow,
+                    bgFrom: "from-slate-50/90",
+                    bgTo: "to-gray-50/90",
+                    border: "border-slate-100/60",
+                    gradient: "from-slate-400/10 to-gray-400/10",
+                    subtext: `${metrics.totalGoals} goals tracked`
+                  },
+                  { 
+                    label: "Streak", 
+                    value: metrics.avgStreakDays, 
+                    suffix: " days", 
+                    color: "indigo", 
+                    icon: TrendingUp,
+                    bgFrom: "from-indigo-50/90",
+                    bgTo: "to-blue-50/90",
+                    border: "border-indigo-100/60",
+                    gradient: "from-indigo-400/10 to-blue-400/10",
+                    subtext: "average streak"
+                  },
+                  { 
+                    label: "Focus Score", 
+                    value: metrics.focusScore, 
+                    suffix: "%", 
+                    color: "purple", 
+                    icon: Brain,
+                    bgFrom: "from-purple-50/90",
+                    bgTo: "to-violet-50/90",
+                    border: "border-purple-100/60",
+                    gradient: "from-purple-400/10 to-violet-400/10",
+                    subtext: metrics.improvement > 0 ? `+${metrics.improvement}% vs yesterday` : 
+                             metrics.improvement < 0 ? `${metrics.improvement}% vs yesterday` : 'same as yesterday'
+                  }
+                ];
+              })().map((metric, index) => {
                 const IconComponent = metric.icon;
                 return (
                   <div 
@@ -411,11 +625,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items, cate
                         <p className={`text-lg lg:text-xl font-bold text-${metric.color}-600 mb-1`}>
                           {metric.value}{metric.suffix}
                         </p>
+                        {metric.subtext && (
+                          <p className="text-xs text-gray-500 mb-1">{metric.subtext}</p>
+                        )}
                         <div className={`w-8 h-1 bg-${metric.color}-200 rounded-full overflow-hidden`}>
                           <div 
                             className={`h-full bg-${metric.color}-500 rounded-full transition-all duration-1000`} 
                             style={{
-                              width: `${metric.label === "Streak" ? Math.min(metric.value * 10, 100) : metric.value}%`
+                              width: `${metric.label.includes("Streak") ? Math.min(metric.value * 10, 100) : metric.value}%`
                             }}
                           ></div>
                 </div>
@@ -443,9 +660,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items, cate
                 </div>
                 <h2 className="text-lg lg:text-xl font-bold text-slate-800">Today's Flow</h2>
               </div>
-              <span className="text-xs font-bold text-blue-600 bg-blue-50/90 px-2 lg:px-3 py-1 lg:py-2 rounded-full border border-blue-100 animate-pulse">
-                {format(currentTime, 'h:mm a')}
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowFlowEditor(true)}
+                  className="p-1.5 lg:p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-all duration-300 hover:scale-110"
+                  title="Edit Daily Flow"
+                >
+                  <Settings className="w-4 lg:w-5 h-4 lg:h-5" />
+                </button>
+                <span className="text-xs font-bold text-blue-600 bg-blue-50/90 px-2 lg:px-3 py-1 lg:py-2 rounded-full border border-blue-100 animate-pulse">
+                  {format(currentTime, 'h:mm a')}
+                </span>
+              </div>
             </div>
             <div className="space-y-2 lg:space-y-3">
               {dailySchedule.slice(0, 4).map((item, index) => {
@@ -741,6 +967,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items, cate
           </div>
         </div>
       </div>
+
+      {/* Daily Flow Editor Modal */}
+      <DailyFlowEditor
+        isOpen={showFlowEditor}
+        onClose={() => setShowFlowEditor(false)}
+        initialFlow={dailyFlow}
+        categories={categories}
+        onSave={handleSaveDailyFlow}
+      />
     </div>
   );
 };
