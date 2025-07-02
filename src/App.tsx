@@ -155,9 +155,17 @@ function AppContent() {
               bot_id: tokenResponse.bot_id
             });
             
-            // Store the access token temporarily
+            // SECURITY NOTE: Temporary storage for integration setup only
+            // These tokens should be moved to the backend integration service
+            // and cleared after successful database storage
             sessionStorage.setItem('notion_access_token', tokenResponse.access_token);
             sessionStorage.setItem('notion_workspace', tokenResponse.workspace_name);
+            
+            // Auto-clear tokens after 5 minutes for security
+            setTimeout(() => {
+              sessionStorage.removeItem('notion_access_token');
+              sessionStorage.removeItem('notion_workspace');
+            }, 5 * 60 * 1000);
             
             showNotification(`✅ Successfully connected to Notion workspace: ${tokenResponse.workspace_name}`, 'success');
             
@@ -178,9 +186,15 @@ function AppContent() {
             const tokenResponse = await IntegrationManager.exchangeGoogleCode(code, clientId, clientSecret, redirectUri);
             console.log('✅ Google Calendar token exchange successful');
             
-            // Store the access token temporarily
+            // SECURITY NOTE: Temporary storage for integration setup only
             sessionStorage.setItem('google_access_token', tokenResponse.access_token);
             sessionStorage.setItem('google_refresh_token', tokenResponse.refresh_token);
+            
+            // Auto-clear tokens after 5 minutes for security
+            setTimeout(() => {
+              sessionStorage.removeItem('google_access_token');
+              sessionStorage.removeItem('google_refresh_token');
+            }, 5 * 60 * 1000);
             
             showNotification('✅ Successfully connected to Google Calendar', 'success');
             
@@ -203,9 +217,15 @@ function AppContent() {
             const tokenResponse = await IntegrationManager.exchangeMicrosoftCode(code, clientId, '', redirectUri);
             console.log('✅ Microsoft Calendar token exchange successful');
             
-            // Store the access token temporarily
+            // SECURITY NOTE: Temporary storage for integration setup only
             sessionStorage.setItem('microsoft_access_token', tokenResponse.access_token);
             sessionStorage.setItem('microsoft_refresh_token', tokenResponse.refresh_token);
+            
+            // Auto-clear tokens after 5 minutes for security
+            setTimeout(() => {
+              sessionStorage.removeItem('microsoft_access_token');
+              sessionStorage.removeItem('microsoft_refresh_token');
+            }, 5 * 60 * 1000);
             
             showNotification('✅ Successfully connected to Microsoft Calendar', 'success');
             

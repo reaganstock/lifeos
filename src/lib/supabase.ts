@@ -1,14 +1,20 @@
 import { createClient } from '@supabase/supabase-js'
 import { Database } from './database.types'
 
-const supabaseUrl = 'https://upkyravoehbslbywitar.supabase.co'
-const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwa3lyYXZvZWhic2xieXdpdGFyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg1NjI4MDgsImV4cCI6MjA2NDEzODgwOH0.4lVuvAZCWbZ3Uk1aBqlXPY84jctN8CVmi-8KzkAwqd8'
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL
+const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY
 
-console.log('Supabase config:', { 
-  url: supabaseUrl, 
-  key: supabaseAnonKey ? 'Present' : 'Missing',
-  keyStart: supabaseAnonKey ? supabaseAnonKey.substring(0, 20) + '...' : 'N/A'
-})
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing required Supabase environment variables. Please check REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY.')
+}
+
+// Only log in development
+if (process.env.NODE_ENV === 'development') {
+  console.log('Supabase config:', { 
+    url: supabaseUrl, 
+    key: supabaseAnonKey ? 'Present' : 'Missing'
+  })
+}
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {

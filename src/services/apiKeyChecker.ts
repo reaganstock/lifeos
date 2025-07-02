@@ -54,12 +54,17 @@ export class APIKeyChecker {
   }
   
   static logConfiguration(): void {
+    // Only log API configuration in development mode
+    if (process.env.NODE_ENV !== 'development') {
+      return;
+    }
+    
     const status = this.checkConfiguration();
     
     console.log('\n🔧 lifeOS AI - API Configuration Status');
     console.log('=====================================');
-    console.log(`OpenRouter: ${status.openrouter.configured ? '✅ Configured' : '❌ Missing'} ${status.openrouter.masked || ''}`);
-    console.log(`Gemini:     ${status.gemini.configured ? '✅ Configured' : '❌ Missing'} ${status.gemini.masked || ''}`);
+    console.log(`OpenRouter: ${status.openrouter.configured ? '✅ Configured' : '❌ Missing'}`);
+    console.log(`Gemini:     ${status.gemini.configured ? '✅ Configured' : '❌ Missing'}`);
     console.log('\n💡 Recommendation:');
     console.log(status.recommendation);
     console.log('\n📚 Setup guide: See GEMINI_INTEGRATION.md');
