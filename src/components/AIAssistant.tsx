@@ -2122,7 +2122,7 @@ User message: ${messageWithContext}`;
         width: isCollapsed ? '60px' : `${sidebarWidth || 420}px`,
         background: isDarkMode 
           ? 'linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%)'
-          : 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%)',
+          : 'linear-gradient(135deg, rgba(219, 234, 254, 0.95) 0%, rgba(255, 255, 255, 0.98) 20%, rgba(238, 242, 255, 0.95) 100%)',
         backdropFilter: 'blur(20px)',
         border: `1px solid ${themeColors.border}`,
         borderRight: 'none'
