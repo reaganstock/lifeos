@@ -15,7 +15,7 @@ const GlobalGoals: React.FC<GlobalGoalsProps> = ({ items, setItems, categories }
   const [editingGoal, setEditingGoal] = useState<string | null>(null);
   const [expandedGoal, setExpandedGoal] = useState<string | null>(null);
   const [fullscreenGoal, setFullscreenGoal] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<'priority' | 'progress' | 'category'>('priority');
+  const [sortBy, setSortBy] = useState<'recent' | 'priority' | 'progress' | 'category'>('recent');
   const [newGoal, setNewGoal] = useState({
     title: '',
     text: '',
@@ -39,6 +39,8 @@ const GlobalGoals: React.FC<GlobalGoalsProps> = ({ items, setItems, categories }
 
   const sortedGoals = [...filteredGoals].sort((a, b) => {
     switch (sortBy) {
+      case 'recent':
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
       case 'progress':
         return (b.metadata?.progress || 0) - (a.metadata?.progress || 0);
       case 'category':
@@ -250,9 +252,10 @@ const GlobalGoals: React.FC<GlobalGoalsProps> = ({ items, setItems, categories }
                 <label className="text-sm font-semibold text-gray-700">Sort by</label>
                 <select
                   value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as 'priority' | 'progress' | 'category')}
+                  onChange={(e) => setSortBy(e.target.value as 'recent' | 'priority' | 'progress' | 'category')}
                   className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-red-500/50 focus:border-red-500 transition-all duration-300 text-gray-800"
                 >
+                  <option value="recent">Most Recent</option>
                   <option value="priority">Category Priority</option>
                   <option value="progress">Progress</option>
                   <option value="category">Category</option>

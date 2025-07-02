@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CheckSquare, Filter, Plus, Calendar, Clock, Flag, X, Edit3, Save, Check, Copy, Trash2 } from 'lucide-react';
+import { CheckSquare, Filter, Plus, Calendar, Clock, Flag, X, Edit3, Save, Check, Copy, Trash2, Settings } from 'lucide-react';
 import { Item, Category } from '../types';
 import { copyToClipboard, showCopyFeedback } from '../utils/clipboard';
 
@@ -15,7 +15,10 @@ const GlobalTodos: React.FC<GlobalTodosProps> = ({ items, setItems, categories }
   const [editingTodo, setEditingTodo] = useState<string | null>(null);
   const [expandedTodo, setExpandedTodo] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'completed' | 'overdue'>('all');
-  const [sortBy, setSortBy] = useState<'dueDate' | 'priority' | 'category'>('dueDate');
+  const [priorityFilter, setPriorityFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'tomorrow' | 'this_week' | 'overdue'>('all');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [sortBy, setSortBy] = useState<'recent' | 'dueDate' | 'priority' | 'category'>('recent');
   const [newTodo, setNewTodo] = useState({
     title: '',
     text: '',
@@ -69,11 +72,38 @@ const GlobalTodos: React.FC<GlobalTodosProps> = ({ items, setItems, categories }
       (filterStatus === 'pending' && !todo.completed) ||
       (filterStatus === 'overdue' && !todo.completed && isOverdue(todo.dueDate));
     
-    return categoryMatch && statusMatch;
+    const priorityMatch = priorityFilter === 'all' || todo.metadata?.priority === priorityFilter;
+    
+    const dateMatch = dateFilter === 'all' || (() => {
+      if (!todo.dueDate) return dateFilter === 'all';
+      const dueDate = new Date(todo.dueDate);
+      const today = new Date();
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
+      
+      switch (dateFilter) {
+        case 'today':
+          return isDueToday(dueDate);
+        case 'tomorrow':
+          return dueDate.toDateString() === tomorrow.toDateString();
+        case 'this_week':
+          const weekEnd = new Date(today);
+          weekEnd.setDate(today.getDate() + 7);
+          return dueDate >= today && dueDate <= weekEnd;
+        case 'overdue':
+          return isOverdue(dueDate);
+        default:
+          return true;
+      }
+    })();
+    
+    return categoryMatch && statusMatch && priorityMatch && dateMatch;
   });
 
   const sortedTodos = [...filteredTodos].sort((a, b) => {
     switch (sortBy) {
+      case 'recent':
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
       case 'priority':
         const priorityOrder = { high: 3, medium: 2, low: 1 };
         return (priorityOrder[b.metadata?.priority as keyof typeof priorityOrder] || 2) - 
@@ -233,17 +263,37 @@ const GlobalTodos: React.FC<GlobalTodosProps> = ({ items, setItems, categories }
           </div>
         </div>
 
-        {/* Tesla-Style Controls */}
+        {/* Advanced Filter & Search Controls */}
         <div className="mb-8">
           <div className="bg-white/60 backdrop-blur-xl rounded-2xl shadow-lg border border-white/30 p-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            {/* Header with Advanced Filter Toggle */}
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                <Filter className="w-5 h-5 mr-2 text-green-600" />
+                Filter & Search
+              </h3>
+              <button
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+                  showAdvancedFilters 
+                    ? 'bg-green-100 text-green-700 border border-green-200' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <Settings className="w-4 h-4" />
+                Advanced
+              </button>
+            </div>
+
+            {/* Basic Filters */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
               {/* Category Filter */}
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-gray-700">Category</label>
                 <select
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300 text-gray-800"
+                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-green-500/50 focus:border-green-500 transition-all duration-300 text-gray-800"
                 >
                   <option value="all">All Categories</option>
                   {categories.map(category => (
@@ -260,12 +310,12 @@ const GlobalTodos: React.FC<GlobalTodosProps> = ({ items, setItems, categories }
                 <select
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value as 'all' | 'pending' | 'completed' | 'overdue')}
-                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300 text-gray-800"
+                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-green-500/50 focus:border-green-500 transition-all duration-300 text-gray-800"
                 >
                   <option value="all">All Tasks</option>
-                  <option value="pending">Pending</option>
-                  <option value="completed">Completed</option>
-                  <option value="overdue">Overdue</option>
+                  <option value="pending">⏳ Pending</option>
+                  <option value="completed">✅ Completed</option>
+                  <option value="overdue">🚨 Overdue</option>
                 </select>
               </div>
 
@@ -274,31 +324,124 @@ const GlobalTodos: React.FC<GlobalTodosProps> = ({ items, setItems, categories }
                 <label className="text-sm font-semibold text-gray-700">Sort by</label>
                 <select
                   value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as 'dueDate' | 'priority' | 'category')}
-                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300 text-gray-800"
+                  onChange={(e) => setSortBy(e.target.value as 'recent' | 'dueDate' | 'priority' | 'category')}
+                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-green-500/50 focus:border-green-500 transition-all duration-300 text-gray-800"
                 >
-                  <option value="dueDate">Due Date</option>
-                  <option value="priority">Priority</option>
-                  <option value="category">Category</option>
+                  <option value="recent">🕒 Most Recent</option>
+                  <option value="dueDate">📅 Due Date</option>
+                  <option value="priority">🔥 Priority</option>
+                  <option value="category">📁 Category</option>
                 </select>
               </div>
+            </div>
 
-              {/* Quick Stats */}
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Quick Stats</h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>Completed:</span>
-                    <span className="font-bold text-green-600">{completedTodos}</span>
+            {/* Advanced Filters */}
+            {showAdvancedFilters && (
+              <div className="border-t border-gray-200/50 pt-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Priority Filter */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-gray-700 flex items-center">
+                      <Flag className="w-4 h-4 mr-2 text-green-600" />
+                      Priority Level
+                    </label>
+                    <select
+                      value={priorityFilter}
+                      onChange={(e) => setPriorityFilter(e.target.value as 'all' | 'high' | 'medium' | 'low')}
+                      className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-green-500/50 focus:border-green-500 transition-all duration-300 text-gray-800"
+                    >
+                      <option value="all">All Priorities</option>
+                      <option value="high">🔥 High Priority</option>
+                      <option value="medium">⚡ Medium Priority</option>
+                      <option value="low">🌱 Low Priority</option>
+                    </select>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Pending:</span>
-                    <span className="font-bold text-blue-600">{totalTodos - completedTodos}</span>
+
+                  {/* Date Filter */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-gray-700 flex items-center">
+                      <Calendar className="w-4 h-4 mr-2 text-green-600" />
+                      Due Date Range
+                    </label>
+                    <select
+                      value={dateFilter}
+                      onChange={(e) => setDateFilter(e.target.value as 'all' | 'today' | 'tomorrow' | 'this_week' | 'overdue')}
+                      className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-green-500/50 focus:border-green-500 transition-all duration-300 text-gray-800"
+                    >
+                      <option value="all">All Due Dates</option>
+                      <option value="today">📅 Due Today</option>
+                      <option value="tomorrow">🌅 Due Tomorrow</option>
+                      <option value="this_week">📆 This Week</option>
+                      <option value="overdue">🚨 Overdue</option>
+                    </select>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Overdue:</span>
-                    <span className="font-bold text-gray-900">{overdueTodos}</span>
-                  </div>
+                </div>
+
+                {/* Active Filters Summary */}
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {selectedCategory !== 'all' && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      Category: {categories.find(c => c.id === selectedCategory)?.name}
+                      <button
+                        onClick={() => setSelectedCategory('all')}
+                        className="ml-2 text-green-600 hover:text-green-800"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {filterStatus !== 'all' && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      Status: {filterStatus.charAt(0).toUpperCase() + filterStatus.slice(1)}
+                      <button
+                        onClick={() => setFilterStatus('all')}
+                        className="ml-2 text-blue-600 hover:text-blue-800"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {priorityFilter !== 'all' && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                      Priority: {priorityFilter.charAt(0).toUpperCase() + priorityFilter.slice(1)}
+                      <button
+                        onClick={() => setPriorityFilter('all')}
+                        className="ml-2 text-purple-600 hover:text-purple-800"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                  {dateFilter !== 'all' && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                      Due: {dateFilter.replace('_', ' ').charAt(0).toUpperCase() + dateFilter.replace('_', ' ').slice(1)}
+                      <button
+                        onClick={() => setDateFilter('all')}
+                        className="ml-2 text-orange-600 hover:text-orange-800"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Quick Stats */}
+            <div className="mt-6 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-100">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Quick Stats</h3>
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">{completedTodos}</div>
+                  <div className="text-gray-600">Completed</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-600">{totalTodos - completedTodos}</div>
+                  <div className="text-gray-600">Pending</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-red-600">{overdueTodos}</div>
+                  <div className="text-gray-600">Overdue</div>
                 </div>
               </div>
             </div>

@@ -424,7 +424,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items, cate
 
       <div className="relative p-2 lg:p-3 max-w-7xl mx-auto">
         {/* Compact Premium Header */}
-        <div className="sticky top-0 z-[60] mb-3 lg:mb-4 pt-2 lg:pt-3">
+        <div className="sticky top-0 z-[60] mb-3 lg:mb-4 py-2 lg:py-3 -mx-2 lg:-mx-3 px-2 lg:px-3">
           <div className="bg-white/95 backdrop-blur-3xl rounded-2xl shadow-xl border border-white/50 p-3 lg:p-4 transition-all duration-700 hover:shadow-2xl">
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
               <div className="flex-1">
