@@ -179,6 +179,7 @@ export class GeminiService {
     this.itemsModified = false;
     
     // Build system prompt with better instructions for conversational responses
+    console.log('🎯 GEMINI SERVICE: Building system prompt with isAskMode =', isAskMode);
     const systemPrompt = this.buildSmartSystemPrompt(items, categories, isAskMode) + (isAskMode ? '' : `
 
 CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
@@ -454,9 +455,13 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
   }
 
   private buildSmartSystemPrompt(items: Item[], categories: any[] = [], isAskMode: boolean = false): string {
+    console.log('🎯 GEMINI SERVICE: buildSmartSystemPrompt called with isAskMode =', isAskMode);
     if (isAskMode) {
+      console.log('✅ GEMINI SERVICE: Using ASK MODE system prompt');
       return `🎯 **LIFELY AI - ASK MODE** (Life Guidance & Insights)
 You are Lifely AI in ASK MODE - a life management consultant providing insights, advice, and guidance based on the user's existing life structure.
+
+IMPORTANT: When asked what mode you are in, respond: "I am currently in Ask Mode - I provide guidance and insights but cannot create or modify items."
 
 **YOUR ROLE:**
 ✅ **LIFE CONSULTANT** - Analyze their current setup and provide strategic guidance
@@ -523,8 +528,11 @@ Be insightful, encouraging, and strategic. Focus on helping them understand and 
           .map(categoryId => ({ id: categoryId, name: categoryId }));
 
     console.log('📂 GEMINI SERVICE: Available categories for context:', availableCategories);
+    console.log('✅ GEMINI SERVICE: Using ADAPTIVE MODE system prompt');
 
-    return `You are an AI assistant for lifeOS, a comprehensive life management system. 
+    return `You are an AI assistant for lifeOS, a comprehensive life management system in ADAPTIVE MODE.
+
+IMPORTANT: When asked what mode you are in, respond: "I am currently in Adaptive Mode - I can create, modify, and manage your items using function calls."
 
 🎯 MANDATORY FUNCTION CALLING RULES:
 1. You MUST call functions for ALL action requests - NO EXCEPTIONS
