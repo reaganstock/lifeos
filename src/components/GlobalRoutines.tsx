@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { RotateCcw, Plus, CheckCircle, X, Save, Filter, Calendar, Flame, Printer, Copy, Edit3, Trash2, Settings } from 'lucide-react';
+import { RotateCcw, Plus, CheckCircle, X, Save, Filter, Calendar, Flame, Printer, Copy, Edit3, Trash2, Settings, ChevronUp, ChevronDown } from 'lucide-react';
 import { Item, Category } from '../types';
 import { copyToClipboard, showCopyFeedback } from '../utils/clipboard';
 
@@ -20,6 +20,7 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, catego
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingRoutine, setEditingRoutine] = useState<string | null>(null);
   const [viewingRoutine, setViewingRoutine] = useState<string | null>(null);
+  const [showRoutineStats, setShowRoutineStats] = useState(true);
   const [newRoutine, setNewRoutine] = useState({
     title: '',
     text: '',
@@ -763,25 +764,39 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, catego
 
             {/* Enhanced Quick Stats */}
             <div className="mt-6 bg-gradient-to-br from-orange-50 to-red-50 rounded-xl p-4 border border-orange-200">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Routine Statistics</h3>
-              <div className="grid grid-cols-4 gap-4 text-sm">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-orange-700">{routines.length}</div>
-                  <div className="text-gray-600">Total</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">{routines.filter(r => r.metadata?.completedToday).length}</div>
-                  <div className="text-gray-600">Completed</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-red-600">{routines.filter(r => !r.metadata?.completedToday).length}</div>
-                  <div className="text-gray-600">Pending</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-purple-600">{Math.max(...routines.map(r => r.metadata?.currentStreak || 0), 0)}</div>
-                  <div className="text-gray-600">Best Streak</div>
-                </div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-700">Routine Statistics</h3>
+                <button
+                  onClick={() => setShowRoutineStats(!showRoutineStats)}
+                  className="p-1 hover:bg-orange-100 rounded-lg transition-colors"
+                  title={showRoutineStats ? "Hide routine stats" : "Show routine stats"}
+                >
+                  {showRoutineStats ? 
+                    <ChevronUp className="w-4 h-4 text-gray-600" /> : 
+                    <ChevronDown className="w-4 h-4 text-gray-600" />
+                  }
+                </button>
               </div>
+              {showRoutineStats && (
+                <div className="grid grid-cols-4 gap-4 text-sm">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-orange-700">{routines.length}</div>
+                    <div className="text-gray-600">Total</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">{routines.filter(r => r.metadata?.completedToday).length}</div>
+                    <div className="text-gray-600">Completed</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-red-600">{routines.filter(r => !r.metadata?.completedToday).length}</div>
+                    <div className="text-gray-600">Pending</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-purple-600">{Math.max(...routines.map(r => r.metadata?.currentStreak || 0), 0)}</div>
+                    <div className="text-gray-600">Best Streak</div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

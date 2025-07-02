@@ -1,11 +1,16 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Supabase configuration
-const supabaseUrl = 'https://upkyravehbslbywitar.supabase.co'
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwa3lyYXZvZWhic2xieXdpdGFyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg1NjI4MDgsImV4cCI6MjA2NDEzODgwOH0.4lVuvAZCWbZ3Uk1aBqlXPY84jctN8CVmi-8KzkAwqd8'
+// Supabase configuration - using environment variables for security
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL
+const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing required Supabase environment variables. Please check REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY.')
+}
 
 // Create Supabase client
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-// For later use with edge functions
-export const supabaseServiceKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwa3lyYXZvZWhic2xieXdpdGFyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0ODU2MjgwOCwiZXhwIjoyMDY0MTM4ODA4fQ.mnLnSU1u9E6TD1sgzCzx7Q4iinZllnYZo-Y4_IQT_kk' 
+// SECURITY NOTE: Service key should NEVER be in client-side code
+// It should only be used in server-side edge functions or backend services
+// export const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY // Server-side only! 

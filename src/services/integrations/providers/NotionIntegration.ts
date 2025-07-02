@@ -16,8 +16,8 @@ type ItemType = 'todo' | 'note' | 'event' | 'goal' | 'routine';
 export class NotionIntegration extends BaseIntegration {
   private readonly baseUrl = 'https://api.notion.com/v1';
   private readonly notionVersion = '2022-06-28';
-  private readonly supabaseUrl = 'https://upkyravoehbslbywitar.supabase.co';
-  private readonly supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwa3lyYXZvZWhic2xieXdpdGFyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg1NjI4MDgsImV4cCI6MjA2NDEzODgwOH0.4lVuvAZCWbZ3Uk1aBqlXPY84jctN8CVmi-8KzkAwqd8';
+  private readonly supabaseUrl = process.env.REACT_APP_SUPABASE_URL!;
+  private readonly supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY!;
 
   constructor(config: IBaseIntegration) {
     super(config);
@@ -676,14 +676,14 @@ export class NotionIntegration extends BaseIntegration {
     });
 
     try {
-      const supabaseUrl = 'https://upkyravoehbslbywitar.supabase.co';
+      const supabaseUrl = process.env.REACT_APP_SUPABASE_URL!;
       const functionUrl = `${supabaseUrl}/functions/v1/notion-oauth`;
       
       const response = await fetch(functionUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVwa3lyYXZvZWhic2xieXdpdGFyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg1NjI4MDgsImV4cCI6MjA2NDEzODgwOH0.4lVuvAZCWbZ3Uk1aBqlXPY84jctN8CVmi-8KzkAwqd8`
+          'Authorization': `Bearer ${process.env.REACT_APP_SUPABASE_ANON_KEY!}`
         },
         body: JSON.stringify({
           action: 'exchange_token',

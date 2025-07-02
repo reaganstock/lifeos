@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CheckSquare, Filter, Plus, Calendar, Clock, Flag, X, Edit3, Save, Check, Copy, Trash2, Settings } from 'lucide-react';
+import { CheckSquare, Filter, Plus, Calendar, Clock, Flag, X, Edit3, Save, Check, Copy, Trash2, Settings, ChevronUp, ChevronDown } from 'lucide-react';
 import { Item, Category } from '../types';
 import { copyToClipboard, showCopyFeedback } from '../utils/clipboard';
 
@@ -19,6 +19,7 @@ const GlobalTodos: React.FC<GlobalTodosProps> = ({ items, setItems, categories }
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'tomorrow' | 'this_week' | 'overdue'>('all');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [sortBy, setSortBy] = useState<'recent' | 'dueDate' | 'priority' | 'category'>('recent');
+  const [showQuickStats, setShowQuickStats] = useState(true);
   const [newTodo, setNewTodo] = useState({
     title: '',
     text: '',
@@ -429,21 +430,35 @@ const GlobalTodos: React.FC<GlobalTodosProps> = ({ items, setItems, categories }
 
             {/* Quick Stats */}
             <div className="mt-6 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-100">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Quick Stats</h3>
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">{completedTodos}</div>
-                  <div className="text-gray-600">Completed</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">{totalTodos - completedTodos}</div>
-                  <div className="text-gray-600">Pending</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-red-600">{overdueTodos}</div>
-                  <div className="text-gray-600">Overdue</div>
-                </div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-700">Quick Stats</h3>
+                <button
+                  onClick={() => setShowQuickStats(!showQuickStats)}
+                  className="p-1 hover:bg-green-100 rounded-lg transition-colors"
+                  title={showQuickStats ? "Hide quick stats" : "Show quick stats"}
+                >
+                  {showQuickStats ? 
+                    <ChevronUp className="w-4 h-4 text-gray-600" /> : 
+                    <ChevronDown className="w-4 h-4 text-gray-600" />
+                  }
+                </button>
               </div>
+              {showQuickStats && (
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">{completedTodos}</div>
+                    <div className="text-gray-600">Completed</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">{totalTodos - completedTodos}</div>
+                    <div className="text-gray-600">Pending</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-red-600">{overdueTodos}</div>
+                    <div className="text-gray-600">Overdue</div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

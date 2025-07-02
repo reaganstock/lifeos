@@ -24,11 +24,11 @@ export class IntegrationManager {
   private configs: Map<IntegrationProvider, any> = new Map();
   private initialized = false;
 
-  // OAuth Configuration Constants
+  // OAuth Configuration Constants - Using environment variables for security
   private static readonly OAUTH_CONFIGS = {
     notion: {
-      clientId: '21dd872b-594c-80ed-90eb-0037fe32e351',
-      clientSecret: 'secret_krnJDLvYIlzT4Qp5sn0Pd8QYf4UeOe2ptiJJAno9T8r',
+      clientId: process.env.REACT_APP_NOTION_CLIENT_ID!,
+      clientSecret: process.env.REACT_APP_NOTION_CLIENT_SECRET!,
       redirectUri: 'http://localhost:3000/auth/notion/callback'
     }
     // Add other OAuth configs here as needed

@@ -25,6 +25,7 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
   
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [priorityError, setPriorityError] = useState<string>('');
   const [newCategory, setNewCategory] = useState({
     name: '',
     icon: '📁',
@@ -44,42 +45,78 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
     return Math.max(...existingPriorities, 0) + 1;
   };
 
-  // Function to validate priority input
-  const validatePriority = (value: string, currentCategoryId?: string) => {
+  // Function to check if priority is available
+  const checkPriorityAvailable = (value: number, currentCategoryId?: string) => {
+    return !categories.some(cat => 
+      cat.priority === value && 
+      (!currentCategoryId || cat.id !== currentCategoryId)
+    );
+  };
+
+  // Function to get available priority slots
+  const getAvailablePriorities = (currentCategoryId?: string) => {
+    const available = [];
+    for (let i = 0; i <= 10; i++) {
+      if (checkPriorityAvailable(i, currentCategoryId)) {
+        available.push(i);
+      }
+    }
+    return available;
+  };
+
+  // Function to validate priority input without auto-reassigning
+  const validatePriorityInput = (value: string, currentCategoryId?: string) => {
     const numValue = parseInt(value);
+    
+    // Clear previous errors
+    setPriorityError('');
     
     // Handle invalid inputs
     if (isNaN(numValue) || value === '') {
-      return getNextAvailablePriority();
+      setPriorityError('Please enter a valid number between 0-10');
+      return newCategory.priority; // Keep current value
     }
     
-    // Clamp to valid range
-    const clampedValue = Math.max(0, Math.min(10, numValue));
+    // Check range
+    if (numValue < 0 || numValue > 10) {
+      setPriorityError('Priority must be between 0-10');
+      return newCategory.priority; // Keep current value
+    }
     
     // Check for duplicates (excluding current category if editing)
-    const isDuplicate = categories.some(cat => 
-      cat.priority === clampedValue && 
-      (!currentCategoryId || cat.id !== currentCategoryId)
-    );
-    
-    if (isDuplicate) {
-      return getNextAvailablePriority();
+    if (!checkPriorityAvailable(numValue, currentCategoryId)) {
+      const categoryAtPriority = categories.find(cat => 
+        cat.priority === numValue && 
+        (!currentCategoryId || cat.id !== currentCategoryId)
+      );
+      const priorityLabel = numValue === 0 ? 'Primary Foundation' : `Priority ${numValue}`;
+      setPriorityError(`${priorityLabel} is already used by "${categoryAtPriority?.name}"`);
+      return newCategory.priority; // Keep current value
     }
     
-    return clampedValue;
+    return numValue;
   };
 
   const handleAddCategory = async () => {
     if (!newCategory.name.trim()) return;
 
-    // Ensure priority is unique before saving
-    const finalPriority = validatePriority(newCategory.priority.toString());
+    // Check if there's a priority error
+    if (priorityError) {
+      alert('Please fix the priority error before saving.');
+      return;
+    }
+
+    // Check if priority is available one more time before saving
+    if (!checkPriorityAvailable(newCategory.priority, editingCategory?.id)) {
+      setPriorityError('This priority is no longer available. Please choose another.');
+      return;
+    }
 
     const categoryData = {
       name: newCategory.name,
       icon: newCategory.icon,
       color: newCategory.color,
-      priority: finalPriority,
+      priority: newCategory.priority,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -90,6 +127,8 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
       if (result) {
         console.log('✅ Category created successfully:', result.name);
         setNewCategory({ name: '', icon: '📁', color: '#74B9FF', priority: getNextAvailablePriority() });
+        setPriorityError('');
+        setEditingCategory(null);
         setShowAddForm(false);
       } else {
         console.error('❌ Failed to create category');
@@ -122,14 +161,23 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
   const handleUpdateCategory = async () => {
     if (!editingCategory || !newCategory.name.trim()) return;
 
-    // Ensure priority is unique before updating
-    const finalPriority = validatePriority(newCategory.priority.toString(), editingCategory.id);
+    // Check if there's a priority error
+    if (priorityError) {
+      alert('Please fix the priority error before saving.');
+      return;
+    }
+
+    // Check if priority is available one more time before saving
+    if (!checkPriorityAvailable(newCategory.priority, editingCategory.id)) {
+      setPriorityError('This priority is no longer available. Please choose another.');
+      return;
+    }
 
     const updates = {
       name: newCategory.name,
       icon: newCategory.icon,
       color: newCategory.color,
-      priority: finalPriority,
+      priority: newCategory.priority,
       updatedAt: new Date()
     };
 
@@ -139,6 +187,7 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
       if (success) {
         console.log('✅ Category updated successfully');
         setEditingCategory(null);
+        setPriorityError('');
         setNewCategory({ name: '', icon: '📁', color: '#74B9FF', priority: getNextAvailablePriority() });
         setShowAddForm(false);
       } else {
@@ -325,6 +374,7 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
                     onClick={() => {
                       setShowAddForm(false);
                       setEditingCategory(null);
+                      setPriorityError('');
                       setNewCategory({ name: '', icon: '📁', color: '#74B9FF', priority: getNextAvailablePriority() });
                     }}
                     className="p-2 hover:bg-white/20 rounded-xl transition-colors"
@@ -354,12 +404,40 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
                       min="0"
                       max="10"
                       value={newCategory.priority}
-                      onChange={(e) => setNewCategory({ ...newCategory, priority: validatePriority(e.target.value, editingCategory?.id) })}
-                      className="w-full px-4 py-4 bg-gray-50/50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all duration-300"
+                      onChange={(e) => setNewCategory({ ...newCategory, priority: validatePriorityInput(e.target.value, editingCategory?.id) })}
+                      className={`w-full px-4 py-4 bg-gray-50/50 border rounded-2xl focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all duration-300 ${
+                        priorityError ? 'border-red-300 bg-red-50/50' : 'border-gray-200'
+                      }`}
                     />
+                    {priorityError && (
+                      <p className="text-xs text-red-600 mt-2 flex items-center">
+                        <span className="mr-1">⚠️</span>
+                        {priorityError}
+                      </p>
+                    )}
                     <p className="text-xs text-gray-500 mt-2">
-                      Lower numbers = higher priority. Duplicates are automatically adjusted to next available slot.
+                      Lower numbers = higher priority. Only one category per priority level allowed.
                     </p>
+                    {getAvailablePriorities(editingCategory?.id).length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-xs text-gray-600 mb-1">Available priorities:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {getAvailablePriorities(editingCategory?.id).map(priority => (
+                            <button
+                              key={priority}
+                              type="button"
+                              onClick={() => {
+                                setNewCategory({ ...newCategory, priority });
+                                setPriorityError('');
+                              }}
+                              className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors"
+                            >
+                              {priority === 0 ? 'Foundation' : priority}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
                 
@@ -415,6 +493,7 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
                   onClick={() => {
                     setShowAddForm(false);
                     setEditingCategory(null);
+                    setPriorityError('');
                     setNewCategory({ name: '', icon: '📁', color: '#74B9FF', priority: getNextAvailablePriority() });
                   }}
                   className="flex-1 px-6 py-4 bg-gray-100 text-gray-700 rounded-2xl hover:bg-gray-200 transition-all duration-300 font-semibold"

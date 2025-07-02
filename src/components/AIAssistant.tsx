@@ -2124,8 +2124,8 @@ User message: ${messageWithContext}`;
       style={{
         width: isCollapsed ? '60px' : `${sidebarWidth || 420}px`,
         background: isDarkMode 
-          ? 'linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%)'
-          : 'linear-gradient(135deg, rgba(219, 234, 254, 0.95) 0%, rgba(255, 255, 255, 0.98) 20%, rgba(238, 242, 255, 0.95) 100%)',
+          ? 'linear-gradient(135deg, rgba(30, 27, 75, 0.95) 0%, rgba(45, 35, 120, 0.95) 100%)'
+          : 'linear-gradient(135deg, rgba(238, 242, 255, 0.95) 0%, rgba(255, 255, 255, 0.98) 20%, rgba(228, 224, 255, 0.95) 100%)',
         backdropFilter: 'blur(20px)',
         border: `1px solid ${themeColors.border}`,
         borderRight: 'none'
@@ -2152,7 +2152,7 @@ User message: ${messageWithContext}`;
           >
             <div className="flex items-center space-x-3 relative z-10">
               <div className="relative">
-                <div className="p-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 shadow-lg">
+                <div className="p-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 shadow-lg">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffffff" className="w-6 h-6">
                     <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
                   </svg>
@@ -2231,8 +2231,8 @@ User message: ${messageWithContext}`;
           >
             <div className="flex items-center justify-between relative z-10">
               <div className="flex items-center space-x-2">
-                <Zap className="w-4 h-4 text-indigo-500" />
-                <span>Current: <span className="font-semibold text-indigo-600">
+                <Zap className="w-4 h-4 text-purple-500" />
+                <span>Current: <span className="font-semibold text-purple-600">
                   {(() => {
                     // Find category name from ID, or use view name directly
                     const category = categories.find(cat => cat.id === currentView);
@@ -2306,7 +2306,7 @@ User message: ${messageWithContext}`;
                       key={session.id}
                       className={`p-2 rounded-lg text-xs cursor-pointer transition-all transform hover:scale-[1.02] ${
                         session.id === currentSession?.id 
-                          ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md' 
+                          ? 'bg-gradient-to-r from-purple-500 to-blue-600 text-white shadow-md' 
                           : isDarkMode 
                             ? 'bg-gray-700/50 text-gray-200 hover:bg-gray-600/50'
                             : 'bg-white/50 text-gray-600 hover:bg-gray-50/80 shadow-sm'
@@ -2354,8 +2354,8 @@ User message: ${messageWithContext}`;
               {/* Ambient Background Effects */}
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 {/* Floating orbs */}
-                <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-gradient-to-r from-purple-400/10 to-indigo-400/10 rounded-full blur-3xl animate-pulse"></div>
-                <div className="absolute bottom-1/3 right-1/4 w-24 h-24 bg-gradient-to-r from-indigo-400/10 to-purple-400/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
+                <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-gradient-to-r from-purple-400/10 to-blue-400/10 rounded-full blur-3xl animate-pulse"></div>
+                <div className="absolute bottom-1/3 right-1/4 w-24 h-24 bg-gradient-to-r from-blue-400/10 to-purple-400/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
                 <div className="absolute top-1/2 right-1/3 w-16 h-16 bg-gradient-to-r from-purple-300/10 to-pink-300/10 rounded-full blur-2xl animate-pulse" style={{animationDelay: '4s'}}></div>
               </div>
               
@@ -2838,7 +2838,7 @@ User message: ${messageWithContext}`;
                     Ready to help you organize and optimize your life!
                   </p>
                   <div className="mt-4 flex justify-center space-x-2">
-                    <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
+                    <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
                     <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
                     <div className="w-2 h-2 bg-pink-500 rounded-full"></div>
                   </div>
@@ -3450,7 +3450,7 @@ const MessageBubble: React.FC<{
                 </div>
                 <div className={`flex items-center justify-between mt-3 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                   <span className="flex items-center space-x-1">
-                    <div className="w-1 h-1 bg-indigo-500 rounded-full"></div>
+                    <div className="w-1 h-1 bg-purple-500 rounded-full"></div>
                     <span>{currentVersion.timestamp.toLocaleTimeString()}</span>
                   </span>
                 </div>
@@ -3470,7 +3470,7 @@ const MessageBubble: React.FC<{
         <div 
           className={`p-2 rounded-xl shadow-lg ${
             isUser 
-              ? 'bg-gradient-to-br from-indigo-500 to-purple-600' 
+              ? 'bg-gradient-to-br from-purple-500 to-blue-600' 
               : 'bg-gradient-to-br from-gray-600 to-gray-700'
           }`}
         >
@@ -3488,12 +3488,12 @@ const MessageBubble: React.FC<{
           style={{
             backgroundColor: isUser 
               ? isDarkMode 
-                ? 'rgba(99, 102, 241, 0.2)' 
-                : 'rgba(99, 102, 241, 0.1)'
+                ? 'rgba(139, 92, 246, 0.2)' 
+                : 'rgba(139, 92, 246, 0.1)'
               : isDarkMode 
                 ? 'rgba(55, 65, 81, 0.8)' 
                 : 'rgba(255, 255, 255, 0.8)',
-            borderColor: isDarkMode ? 'rgba(99, 102, 241, 0.3)' : 'rgba(99, 102, 241, 0.2)'
+            borderColor: isDarkMode ? 'rgba(139, 92, 246, 0.3)' : 'rgba(139, 92, 246, 0.2)'
           }}
         >
           {message.isEditing ? (

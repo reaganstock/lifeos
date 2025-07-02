@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BowArrow, Filter, Plus, TrendingUp, Award, Calendar, X, Edit3, Save, ChevronRight, Trash2, Maximize2, Copy, Settings, Target } from 'lucide-react';
+import { BowArrow, Filter, Plus, TrendingUp, Award, Calendar, X, Edit3, Save, ChevronRight, Trash2, Maximize2, Copy, Settings, Target, ChevronUp, ChevronDown } from 'lucide-react';
 import { Item, Category } from '../types';
 import { copyToClipboard, showCopyFeedback } from '../utils/clipboard';
 
@@ -18,6 +18,7 @@ const GlobalGoals: React.FC<GlobalGoalsProps> = ({ items, setItems, categories }
   const [expandedGoal, setExpandedGoal] = useState<string | null>(null);
   const [fullscreenGoal, setFullscreenGoal] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'recent' | 'priority' | 'progress' | 'category'>('recent');
+  const [showGoalStats, setShowGoalStats] = useState(true);
   const [newGoal, setNewGoal] = useState({
     title: '',
     text: '',
@@ -395,21 +396,35 @@ const GlobalGoals: React.FC<GlobalGoalsProps> = ({ items, setItems, categories }
 
             {/* Enhanced Quick Stats */}
             <div className="mt-6 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Goal Statistics</h3>
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-gray-700">{completedGoals}</div>
-                  <div className="text-gray-600">Completed</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-gray-600">{totalGoals - completedGoals}</div>
-                  <div className="text-gray-600">In Progress</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-gray-800">{Math.round(averageProgress)}%</div>
-                  <div className="text-gray-600">Avg Progress</div>
-                </div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-700">Goal Statistics</h3>
+                <button
+                  onClick={() => setShowGoalStats(!showGoalStats)}
+                  className="p-1 hover:bg-gray-200 rounded-lg transition-colors"
+                  title={showGoalStats ? "Hide goal stats" : "Show goal stats"}
+                >
+                  {showGoalStats ? 
+                    <ChevronUp className="w-4 h-4 text-gray-600" /> : 
+                    <ChevronDown className="w-4 h-4 text-gray-600" />
+                  }
+                </button>
               </div>
+              {showGoalStats && (
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-gray-700">{completedGoals}</div>
+                    <div className="text-gray-600">Completed</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-gray-600">{totalGoals - completedGoals}</div>
+                    <div className="text-gray-600">In Progress</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-gray-800">{Math.round(averageProgress)}%</div>
+                    <div className="text-gray-600">Avg Progress</div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
