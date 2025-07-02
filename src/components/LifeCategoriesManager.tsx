@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FolderOpen, Plus, Edit3, Trash2, Star, ArrowUp, ArrowDown, X } from 'lucide-react';
 // Removed initialCategories import - users create their own categories
 import { Category } from '../types';
@@ -64,7 +64,51 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
     return available;
   };
 
-  // Function to validate priority input without auto-reassigning
+  // Function to reorder priorities when a category takes an existing priority
+  const reorderPriorities = async (changingCategoryId: string, newPriority: number) => {
+    if (!user) return;
+
+    // Find the category that currently has this priority
+    const existingCategory = categories.find(cat => 
+      cat.priority === newPriority && cat.id !== changingCategoryId
+    );
+
+    if (!existingCategory) return; // No conflict, no need to reorder
+
+    console.log(`🔄 Reordering priorities: ${changingCategoryId} wants priority ${newPriority}, currently held by ${existingCategory.id}`);
+
+    // Get all categories sorted by current priority
+    const sortedCategories = [...categories]
+      .filter(cat => cat.id !== changingCategoryId)
+      .sort((a, b) => a.priority - b.priority);
+
+    // Find where to insert the changing category
+    const insertIndex = sortedCategories.findIndex(cat => cat.priority >= newPriority);
+    
+    // Create new ordering
+    const reorderedCategories = [...sortedCategories];
+    if (insertIndex === -1) {
+      // Insert at the end
+      reorderedCategories.push(categories.find(cat => cat.id === changingCategoryId)!);
+    } else {
+      // Insert at the found position
+      reorderedCategories.splice(insertIndex, 0, categories.find(cat => cat.id === changingCategoryId)!);
+    }
+
+    // Assign new sequential priorities
+    const updatePromises = reorderedCategories.map((cat, index) => {
+      if (cat.priority !== index) {
+        console.log(`📝 Updating "${cat.name}" from priority ${cat.priority} to ${index}`);
+        return updateCategory(cat.id, { priority: index });
+      }
+      return Promise.resolve(true);
+    });
+
+    await Promise.all(updatePromises);
+    console.log('✅ Priority reordering complete');
+  };
+
+  // Function to validate priority input and show reorder preview
   const validatePriorityInput = (value: string, currentCategoryId?: string) => {
     const numValue = parseInt(value);
     
@@ -83,15 +127,15 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
       return newCategory.priority; // Keep current value
     }
     
-    // Check for duplicates (excluding current category if editing)
-    if (!checkPriorityAvailable(numValue, currentCategoryId)) {
-      const categoryAtPriority = categories.find(cat => 
-        cat.priority === numValue && 
-        (!currentCategoryId || cat.id !== currentCategoryId)
-      );
-      const priorityLabel = numValue === 0 ? 'Primary Foundation' : `Priority ${numValue}`;
-      setPriorityError(`${priorityLabel} is already used by "${categoryAtPriority?.name}"`);
-      return newCategory.priority; // Keep current value
+    // Check if this priority is taken (excluding current category if editing)
+    const conflictCategory = categories.find(cat => 
+      cat.priority === numValue && 
+      (!currentCategoryId || cat.id !== currentCategoryId)
+    );
+    
+    if (conflictCategory) {
+      const priorityLabel = numValue === 0 ? 'Foundation' : `Priority ${numValue}`;
+      setPriorityError(`⚠️ ${priorityLabel} is currently "${conflictCategory.name}". Saving will reorder other categories.`);
     }
     
     return numValue;
@@ -100,15 +144,9 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
   const handleAddCategory = async () => {
     if (!newCategory.name.trim()) return;
 
-    // Check if there's a priority error
-    if (priorityError) {
+    // Check if there's a range error (not reorder warnings)
+    if (priorityError && !priorityError.includes('Saving will reorder')) {
       alert('Please fix the priority error before saving.');
-      return;
-    }
-
-    // Check if priority is available one more time before saving
-    if (!checkPriorityAvailable(newCategory.priority, editingCategory?.id)) {
-      setPriorityError('This priority is no longer available. Please choose another.');
       return;
     }
 
@@ -126,6 +164,12 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
       const result = await createCategory(categoryData);
       if (result) {
         console.log('✅ Category created successfully:', result.name);
+        
+        // Trigger reordering if there was a conflict
+        if (priorityError && priorityError.includes('Saving will reorder')) {
+          await reorderPriorities(result.id, newCategory.priority);
+        }
+        
         setNewCategory({ name: '', icon: '📁', color: '#74B9FF', priority: getNextAvailablePriority() });
         setPriorityError('');
         setEditingCategory(null);
@@ -149,6 +193,7 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
 
   const handleEditCategory = (category: Category) => {
     setEditingCategory(category);
+    setPriorityError(''); // Clear any existing priority errors
     setNewCategory({
       name: category.name,
       icon: category.icon,
@@ -161,15 +206,9 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
   const handleUpdateCategory = async () => {
     if (!editingCategory || !newCategory.name.trim()) return;
 
-    // Check if there's a priority error
-    if (priorityError) {
+    // Check if there's a range error (not reorder warnings)
+    if (priorityError && !priorityError.includes('Saving will reorder')) {
       alert('Please fix the priority error before saving.');
-      return;
-    }
-
-    // Check if priority is available one more time before saving
-    if (!checkPriorityAvailable(newCategory.priority, editingCategory.id)) {
-      setPriorityError('This priority is no longer available. Please choose another.');
       return;
     }
 
@@ -186,6 +225,12 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
       const success = await updateCategory(editingCategory.id, updates);
       if (success) {
         console.log('✅ Category updated successfully');
+        
+        // Trigger reordering if there was a conflict
+        if (priorityError && priorityError.includes('Saving will reorder')) {
+          await reorderPriorities(editingCategory.id, newCategory.priority);
+        }
+        
         setEditingCategory(null);
         setPriorityError('');
         setNewCategory({ name: '', icon: '📁', color: '#74B9FF', priority: getNextAvailablePriority() });
@@ -270,6 +315,8 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
 
   const commonIcons = ['📱', '💪', '🏋️', '✝️', '📝', '🗣️', '⚖️', '🎯', '💼', '🎨', '🏠', '💰', '🌱', '🧠', '❤️'];
   const commonColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#74B9FF', '#FD79A8', '#FDCB6E', '#6C5CE7'];
+
+  // Note: Smart reordering now handled on save, no auto-fixing needed
 
 
   // Show loading state while data is being fetched
@@ -406,11 +453,19 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
                       value={newCategory.priority}
                       onChange={(e) => setNewCategory({ ...newCategory, priority: validatePriorityInput(e.target.value, editingCategory?.id) })}
                       className={`w-full px-4 py-4 bg-gray-50/50 border rounded-2xl focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500 transition-all duration-300 ${
-                        priorityError ? 'border-red-300 bg-red-50/50' : 'border-gray-200'
+                        priorityError 
+                          ? priorityError.includes('Saving will reorder')
+                            ? 'border-yellow-300 bg-yellow-50/50'
+                            : 'border-red-300 bg-red-50/50'
+                          : 'border-gray-200'
                       }`}
                     />
                     {priorityError && (
-                      <p className="text-xs text-red-600 mt-2 flex items-center">
+                      <p className={`text-xs mt-2 flex items-center ${
+                        priorityError.includes('Saving will reorder') 
+                          ? 'text-yellow-700' 
+                          : 'text-red-600'
+                      }`}>
                         <span className="mr-1">⚠️</span>
                         {priorityError}
                       </p>
@@ -502,7 +557,7 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
                 </button>
                 <button
                   onClick={editingCategory ? handleUpdateCategory : handleAddCategory}
-                  disabled={!newCategory.name.trim()}
+                  disabled={!newCategory.name.trim() || (!!priorityError && !priorityError.includes('Saving will reorder'))}
                   className="flex-1 px-6 py-4 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-2xl hover:from-purple-600 hover:to-indigo-600 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 shadow-lg font-semibold"
                 >
                   {editingCategory ? 'Update Category' : 'Add Category'}

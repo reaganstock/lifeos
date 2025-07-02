@@ -2124,8 +2124,8 @@ User message: ${messageWithContext}`;
       style={{
         width: isCollapsed ? '60px' : `${sidebarWidth || 420}px`,
         background: isDarkMode 
-          ? 'linear-gradient(135deg, rgba(30, 27, 75, 0.95) 0%, rgba(45, 35, 120, 0.95) 100%)'
-          : 'linear-gradient(135deg, rgba(238, 242, 255, 0.95) 0%, rgba(255, 255, 255, 0.98) 20%, rgba(228, 224, 255, 0.95) 100%)',
+          ? 'linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 58, 138, 0.95) 100%)'
+          : 'linear-gradient(135deg, rgba(248, 250, 252, 0.98) 0%, rgba(255, 255, 255, 0.99) 20%, rgba(239, 246, 255, 0.98) 100%)',
         backdropFilter: 'blur(20px)',
         border: `1px solid ${themeColors.border}`,
         borderRight: 'none'
@@ -2152,7 +2152,7 @@ User message: ${messageWithContext}`;
           >
             <div className="flex items-center space-x-3 relative z-10">
               <div className="relative">
-                <div className="p-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 shadow-lg">
+                <div className="p-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 shadow-lg">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffffff" className="w-6 h-6">
                     <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
                   </svg>
@@ -2231,8 +2231,8 @@ User message: ${messageWithContext}`;
           >
             <div className="flex items-center justify-between relative z-10">
               <div className="flex items-center space-x-2">
-                <Zap className="w-4 h-4 text-purple-500" />
-                <span>Current: <span className="font-semibold text-purple-600">
+                <Zap className="w-4 h-4 text-blue-500" />
+                <span>Current: <span className="font-semibold text-blue-600">
                   {(() => {
                     // Find category name from ID, or use view name directly
                     const category = categories.find(cat => cat.id === currentView);
@@ -2256,8 +2256,8 @@ User message: ${messageWithContext}`;
                 {/* Agentic Mode Indicator */}
                 {isAgenticMode && (
                   <div className="flex items-center space-x-1">
-                    <div className="w-1 h-1 bg-purple-500 rounded-full animate-pulse"></div>
-                    <span className="text-xs font-medium text-purple-600 bg-purple-100/50 px-2 py-0.5 rounded-full">
+                    <div className="w-1 h-1 bg-blue-500 rounded-full animate-pulse"></div>
+                    <span className="text-xs font-medium text-blue-600 bg-blue-100/50 px-2 py-0.5 rounded-full">
                       ∞ Agent
                     </span>
                   </div>
@@ -2306,7 +2306,7 @@ User message: ${messageWithContext}`;
                       key={session.id}
                       className={`p-2 rounded-lg text-xs cursor-pointer transition-all transform hover:scale-[1.02] ${
                         session.id === currentSession?.id 
-                          ? 'bg-gradient-to-r from-purple-500 to-blue-600 text-white shadow-md' 
+                          ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md' 
                           : isDarkMode 
                             ? 'bg-gray-700/50 text-gray-200 hover:bg-gray-600/50'
                             : 'bg-white/50 text-gray-600 hover:bg-gray-50/80 shadow-sm'
@@ -2354,9 +2354,9 @@ User message: ${messageWithContext}`;
               {/* Ambient Background Effects */}
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 {/* Floating orbs */}
-                <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-gradient-to-r from-purple-400/10 to-blue-400/10 rounded-full blur-3xl animate-pulse"></div>
-                <div className="absolute bottom-1/3 right-1/4 w-24 h-24 bg-gradient-to-r from-blue-400/10 to-purple-400/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
-                <div className="absolute top-1/2 right-1/3 w-16 h-16 bg-gradient-to-r from-purple-300/10 to-pink-300/10 rounded-full blur-2xl animate-pulse" style={{animationDelay: '4s'}}></div>
+                <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-gradient-to-r from-blue-400/10 to-blue-500/10 rounded-full blur-3xl animate-pulse"></div>
+                <div className="absolute bottom-1/3 right-1/4 w-24 h-24 bg-gradient-to-r from-blue-500/10 to-blue-400/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
+                <div className="absolute top-1/2 right-1/3 w-16 h-16 bg-gradient-to-r from-blue-300/10 to-blue-400/10 rounded-full blur-2xl animate-pulse" style={{animationDelay: '4s'}}></div>
               </div>
               
               {/* Model Selection */}
@@ -2413,8 +2413,8 @@ User message: ${messageWithContext}`;
                             className={`w-full p-4 rounded-xl transition-all duration-200 text-left hover:scale-[1.02] ${
                               selectedVoiceModel.id === model.id 
                                 ? isDarkMode 
-                                  ? 'bg-purple-900/40 border border-purple-500/30' 
-                                  : 'bg-purple-50/60 border border-purple-200/50'
+                                  ? 'bg-blue-900/40 border border-blue-500/30' 
+                                  : 'bg-blue-50/60 border border-blue-200/50'
                                 : isDarkMode 
                                   ? 'hover:bg-gray-800/60' 
                                   : 'hover:bg-gray-50/60'
@@ -2447,8 +2447,8 @@ User message: ${messageWithContext}`;
                             className={`w-full p-4 rounded-xl transition-all duration-200 text-left hover:scale-[1.02] ${
                               selectedVoiceModel.id === model.id 
                                 ? isDarkMode 
-                                  ? 'bg-purple-900/40 border border-purple-500/30' 
-                                  : 'bg-purple-50/60 border border-purple-200/50'
+                                  ? 'bg-blue-900/40 border border-blue-500/30' 
+                                  : 'bg-blue-50/60 border border-blue-200/50'
                                 : isDarkMode 
                                   ? 'hover:bg-gray-800/60' 
                                   : 'hover:bg-gray-50/60'
@@ -2524,8 +2524,8 @@ User message: ${messageWithContext}`;
                                   className={`p-3 rounded-lg transition-all duration-200 text-left hover:scale-[1.02] ${
                                     selectedOpenAIVoice.id === voice.id 
                                       ? isDarkMode 
-                                        ? 'bg-purple-900/40 border border-purple-500/30' 
-                                        : 'bg-purple-50/60 border border-purple-200/50'
+                                        ? 'bg-blue-900/40 border border-blue-500/30' 
+                                        : 'bg-blue-50/60 border border-blue-200/50'
                                       : isDarkMode 
                                         ? 'hover:bg-gray-800/60' 
                                         : 'hover:bg-gray-50/60'
@@ -2541,7 +2541,7 @@ User message: ${messageWithContext}`;
                                       </div>
                                     </div>
                                     {selectedOpenAIVoice.id === voice.id && (
-                                      <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse ml-2 flex-shrink-0"></div>
+                                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse ml-2 flex-shrink-0"></div>
                                     )}
                                   </div>
                                 </button>
@@ -2569,8 +2569,8 @@ User message: ${messageWithContext}`;
                                   className={`p-3 rounded-lg transition-all duration-200 text-left hover:scale-[1.02] ${
                                     selectedGeminiVoice.id === voice.id 
                                       ? isDarkMode 
-                                        ? 'bg-purple-900/40 border border-purple-500/30' 
-                                        : 'bg-purple-50/60 border border-purple-200/50'
+                                        ? 'bg-blue-900/40 border border-blue-500/30' 
+                                        : 'bg-blue-50/60 border border-blue-200/50'
                                       : isDarkMode 
                                         ? 'hover:bg-gray-800/60' 
                                         : 'hover:bg-gray-50/60'
@@ -2586,7 +2586,7 @@ User message: ${messageWithContext}`;
                                       </div>
                                     </div>
                                     {selectedGeminiVoice.id === voice.id && (
-                                      <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse ml-2 flex-shrink-0"></div>
+                                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse ml-2 flex-shrink-0"></div>
                                     )}
                                   </div>
                                 </button>
@@ -2838,9 +2838,9 @@ User message: ${messageWithContext}`;
                     Ready to help you organize and optimize your life!
                   </p>
                   <div className="mt-4 flex justify-center space-x-2">
-                    <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                    <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                    <div className="w-2 h-2 bg-pink-500 rounded-full"></div>
+                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
+                    <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
                   </div>
                 </div>
               </div>
@@ -2869,7 +2869,7 @@ User message: ${messageWithContext}`;
                 {isProcessing && (
                   <div className="flex justify-start relative z-10">
                     <div className="flex items-start space-x-3">
-                      <div className="p-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 shadow-lg">
+                      <div className="p-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 shadow-lg">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffffff" className="w-5 h-5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
                       </div>
                       <div 
@@ -2996,8 +2996,8 @@ User message: ${messageWithContext}`;
                   rows={1}
                   className={`w-full px-5 py-4 pr-24 rounded-2xl border-2 transition-all duration-300 focus:ring-4 text-sm backdrop-blur-xl resize-none ${
                     isDarkMode 
-                      ? 'bg-gray-900/60 border-gray-700/50 text-white placeholder-gray-400 focus:border-purple-500 focus:ring-purple-500/30 hover:bg-gray-900/70'
-                      : 'bg-white/60 border-gray-200/50 text-gray-800 placeholder-gray-500 focus:border-purple-500 focus:ring-purple-500/30 hover:bg-white/70'
+                      ? 'bg-gray-900/60 border-gray-700/50 text-white placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500/30 hover:bg-gray-900/70'
+                      : 'bg-white/60 border-gray-200/50 text-gray-800 placeholder-gray-500 focus:border-blue-500 focus:ring-blue-500/30 hover:bg-white/70'
                   }`}
                   style={{
                     minHeight: '56px',
@@ -3269,7 +3269,7 @@ User message: ${messageWithContext}`;
                   </div>
                 )}
                 {isVoiceMode && (
-                  <div className="flex items-center space-x-2 mt-1 text-purple-600">
+                  <div className="flex items-center space-x-2 mt-1 text-blue-600">
                     <div className="w-3 h-3 bg-purple-600 rounded-full animate-pulse"></div>
                     <span>Voice chat active</span>
                   </div>
@@ -3450,7 +3450,7 @@ const MessageBubble: React.FC<{
                 </div>
                 <div className={`flex items-center justify-between mt-3 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                   <span className="flex items-center space-x-1">
-                    <div className="w-1 h-1 bg-purple-500 rounded-full"></div>
+                    <div className="w-1 h-1 bg-blue-500 rounded-full"></div>
                     <span>{currentVersion.timestamp.toLocaleTimeString()}</span>
                   </span>
                 </div>
@@ -3470,7 +3470,7 @@ const MessageBubble: React.FC<{
         <div 
           className={`p-2 rounded-xl shadow-lg ${
             isUser 
-              ? 'bg-gradient-to-br from-purple-500 to-blue-600' 
+              ? 'bg-gradient-to-br from-blue-500 to-blue-600' 
               : 'bg-gradient-to-br from-gray-600 to-gray-700'
           }`}
         >
@@ -3488,12 +3488,12 @@ const MessageBubble: React.FC<{
           style={{
             backgroundColor: isUser 
               ? isDarkMode 
-                ? 'rgba(139, 92, 246, 0.2)' 
-                : 'rgba(139, 92, 246, 0.1)'
+                ? 'rgba(59, 130, 246, 0.2)' 
+                : 'rgba(59, 130, 246, 0.1)'
               : isDarkMode 
                 ? 'rgba(55, 65, 81, 0.8)' 
                 : 'rgba(255, 255, 255, 0.8)',
-            borderColor: isDarkMode ? 'rgba(139, 92, 246, 0.3)' : 'rgba(139, 92, 246, 0.2)'
+            borderColor: isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(59, 130, 246, 0.2)'
           }}
         >
           {message.isEditing ? (
