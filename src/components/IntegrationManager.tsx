@@ -470,19 +470,19 @@ export default function IntegrationManager({ isOpen, onClose, onImport, categori
       case 'todoist':
         // Keep existing logic for other providers if they need custom URLs
         const clientId = process.env.REACT_APP_CLIENT_ID || 'your-client-id';
-        const redirectUri = `${window.location.origin}/oauth/callback`;
+        const redirectUri = `https://app.lifely.dev/oauth/callback`;
         return (integrationManager.constructor as any).getTodoistOAuthUrl(clientId, redirectUri);
       case 'google-calendar':
         const gcClientId = process.env.REACT_APP_GOOGLE_CLIENT_ID || 'your-client-id';
-        const gcRedirectUri = `${window.location.origin}/oauth/callback`;
+        const gcRedirectUri = `https://app.lifely.dev/oauth/callback`;
         return (integrationManager.constructor as any).getGoogleCalendarOAuthUrl(gcClientId, gcRedirectUri);
       case 'microsoft-calendar':
         const msClientId = process.env.REACT_APP_MICROSOFT_CLIENT_ID || 'your-client-id';
-        const msRedirectUri = `${window.location.origin}/oauth/callback`;
+        const msRedirectUri = `https://app.lifely.dev/oauth/callback`;
         return await (integrationManager.constructor as any).getMicrosoftCalendarOAuthUrl(msClientId, msRedirectUri);
       case 'onenote':
         const oneNoteClientId = process.env.REACT_APP_MICROSOFT_CLIENT_ID || 'your-client-id';
-        const oneNoteRedirectUri = `${window.location.origin}/oauth/callback`;
+        const oneNoteRedirectUri = `https://app.lifely.dev/oauth/callback`;
         return await (integrationManager.constructor as any).getOneNoteOAuthUrl(oneNoteClientId, oneNoteRedirectUri);
       default:
         return null;

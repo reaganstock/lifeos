@@ -172,7 +172,7 @@ function AppContent() {
             
             const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID!;
             const clientSecret = process.env.REACT_APP_GOOGLE_CLIENT_SECRET!;
-            const redirectUri = `${window.location.origin}/oauth/callback`;
+            const redirectUri = `https://app.lifely.dev/oauth/callback`;
             
             // Exchange code for access token
             const tokenResponse = await IntegrationManager.exchangeGoogleCode(code, clientId, clientSecret, redirectUri);
@@ -196,7 +196,7 @@ function AppContent() {
             console.log('🕐 Code received at:', new Date().toISOString());
             
             const clientId = process.env.REACT_APP_MICROSOFT_CLIENT_ID!;
-            const redirectUri = `${window.location.origin}/oauth/callback`;
+            const redirectUri = `https://app.lifely.dev/oauth/callback`;
             
             console.log('🔄 Starting token exchange immediately (PKCE flow - no client secret)...');
             // Exchange code for access token using PKCE (no client secret for SPA)
@@ -221,7 +221,7 @@ function AppContent() {
             console.log('🕐 Code received at:', new Date().toISOString());
             
             const clientId = process.env.REACT_APP_MICROSOFT_CLIENT_ID!;
-            const redirectUri = `${window.location.origin}/oauth/callback`;
+            const redirectUri = `https://app.lifely.dev/oauth/callback`;
             
             console.log('🔄 Starting OneNote token exchange immediately (PKCE flow - no client secret)...');
             // Exchange code for access token using PKCE (no client secret for SPA)
@@ -247,7 +247,7 @@ function AppContent() {
             console.log('🕐 Code received at:', new Date().toISOString());
             
             const clientId = process.env.REACT_APP_MICROSOFT_CLIENT_ID!;
-            const redirectUri = `${window.location.origin}/oauth/callback`;
+            const redirectUri = `https://app.lifely.dev/oauth/callback`;
             
             console.log('🔄 Starting token exchange immediately (PKCE flow - no client secret)...');
             // Exchange code for access token using PKCE (no client secret for SPA)
