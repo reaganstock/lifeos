@@ -208,6 +208,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [isAgenticMode, setIsAgenticMode] = useState(false);
+  const [isAskMode, setIsAskMode] = useState(false);
   
   // Function calling states  
   const [isProcessingFunction, setIsProcessingFunction] = useState(false);
@@ -1757,8 +1758,8 @@ User message: ${messageWithContext}`;
           agenticMode: isAgenticMode
         });
 
-        // Check if this looks like a function call command
-        const needsFunction = needsFunctionCalling(processMessage);
+        // Check if this looks like a function call command (only for non-Ask modes)
+        const needsFunction = !isAskMode && needsFunctionCalling(processMessage);
         if (needsFunction) {
           setIsAIThinking(false);
           setIsCallingFunction(true);
@@ -1770,7 +1771,7 @@ User message: ${messageWithContext}`;
           currentCategoryId,
           items,
           categories,
-          isAgenticMode
+          isAgenticMode && !isAskMode // Disable function calling for Ask mode
         );
 
         console.log('📥 AIAssistant: Received response from chatService:', response);
@@ -2261,7 +2262,7 @@ User message: ${messageWithContext}`;
               
               {/* AI Model Selector */}
               <div className="flex items-center space-x-3">
-                <ModelSelector className="w-48" />
+                <ModelSelector className="w-48" isAskMode={isAskMode} isAgenticMode={isAgenticMode} />
               </div>
             </div>
           </div>
@@ -3191,31 +3192,51 @@ User message: ${messageWithContext}`;
                     }`}
                   >
                     <span>∞</span>
-                    <span>{isAgenticMode ? 'Agent' : 'Ask'}</span>
+                    <span>
+                      {isAskMode ? 'Ask' : isAgenticMode ? 'Agent (Pre-Beta)' : 'Adaptive'}
+                    </span>
                     <ChevronDown className="w-3 h-3" />
                   </button>
                   
                   {showModeDropdown && (
-                    <div className={`absolute bottom-full left-0 mb-1 w-32 rounded-lg border shadow-lg z-50 ${
+                    <div className={`absolute bottom-full left-0 mb-1 w-40 rounded-lg border shadow-lg z-50 ${
                       isDarkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
                     }`}>
                       <button
                         onClick={() => {
-                          stopAgenticMode();
+                          setIsAskMode(true);
+                          setIsAgenticMode(false);
                           setShowModeDropdown(false);
                         }}
                         className={`w-full px-3 py-2 text-left text-sm transition-all flex items-center space-x-2 ${
-                          !isAgenticMode
+                          isAskMode
                             ? isDarkMode ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-900'
                             : isDarkMode ? 'hover:bg-gray-700 text-white' : 'hover:bg-gray-100 text-gray-700'
                         }`}
                       >
                         <span>💬</span>
                         <span>Ask</span>
-                        {!isAgenticMode && <span className="ml-auto">✓</span>}
+                        {isAskMode && <span className="ml-auto">✓</span>}
                       </button>
                       <button
                         onClick={() => {
+                          setIsAskMode(false);
+                          setIsAgenticMode(false);
+                          setShowModeDropdown(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left text-sm transition-all flex items-center space-x-2 ${
+                          !isAskMode && !isAgenticMode
+                            ? isDarkMode ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-900'
+                            : isDarkMode ? 'hover:bg-gray-700 text-white' : 'hover:bg-gray-100 text-gray-700'
+                        }`}
+                      >
+                        <span>🔄</span>
+                        <span>Adaptive</span>
+                        {!isAskMode && !isAgenticMode && <span className="ml-auto">✓</span>}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsAskMode(false);
                           setIsAgenticMode(true);
                           setShowModeDropdown(false);
                         }}
@@ -3226,7 +3247,7 @@ User message: ${messageWithContext}`;
                         }`}
                       >
                         <span>∞</span>
-                        <span>Agent</span>
+                        <span>Agent (Pre-Beta)</span>
                         {isAgenticMode && <span className="ml-auto">✓</span>}
                       </button>
                     </div>

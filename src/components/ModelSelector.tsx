@@ -3,9 +3,11 @@ import { AVAILABLE_MODELS, getCurrentModel, setCurrentModel } from '../services/
 
 interface ModelSelectorProps {
   className?: string;
+  isAskMode?: boolean;
+  isAgenticMode?: boolean;
 }
 
-const ModelSelector: React.FC<ModelSelectorProps> = ({ className = '' }) => {
+const ModelSelector: React.FC<ModelSelectorProps> = ({ className = '', isAskMode = false, isAgenticMode = false }) => {
   const [selectedModel, setSelectedModel] = useState(getCurrentModel());
   const [isExpanded, setIsExpanded] = useState(false);
   const [animatingModel, setAnimatingModel] = useState<string | null>(null);
@@ -58,7 +60,34 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ className = '' }) => {
     setIsExpanded(false);
   };
 
-  const selectedModelInfo = AVAILABLE_MODELS.find(m => m.id === selectedModel) || AVAILABLE_MODELS[0];
+  // Filter models based on AI mode
+  const getFilteredModels = () => {
+    if (isAskMode) {
+      // Ask mode: Allow all 5 specified providers (Grok, Claude, Gemini, OpenAI, DeepSeek)
+      return AVAILABLE_MODELS.filter(model => 
+        model.provider === 'xAI' || 
+        model.provider === 'Anthropic' || 
+        model.provider === 'Google Direct' || 
+        model.provider === 'OpenAI' || 
+        model.provider === 'DeepSeek'
+      );
+    } else {
+      // Adaptive and Agent modes: Gemini-only
+      return AVAILABLE_MODELS.filter(model => model.provider === 'Google Direct');
+    }
+  };
+
+  const filteredModels = getFilteredModels();
+  const selectedModelInfo = filteredModels.find(m => m.id === selectedModel) || filteredModels[0];
+
+  // Auto-switch to valid model if current selection is not available in current mode
+  useEffect(() => {
+    const currentModelValid = filteredModels.some(m => m.id === selectedModel);
+    if (!currentModelValid && filteredModels.length > 0) {
+      console.log('🔄 Current model not available in this mode, switching to:', filteredModels[0].name);
+      handleModelSwitch(filteredModels[0].id);
+    }
+  }, [isAskMode, isAgenticMode, selectedModel, filteredModels]);
 
   const getProviderColor = (provider: string) => {
     switch (provider) {
@@ -131,7 +160,18 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ className = '' }) => {
         {/* Compact Tesla-Style Model Grid */}
         {isExpanded && (
           <div className="mt-1 space-y-0.5 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
-            {AVAILABLE_MODELS.map((model, index) => {
+            {/* Mode restriction notice */}
+            {(!isAskMode) && (
+              <div className="px-3 py-2 text-xs text-gray-400 bg-gray-800/50 rounded-lg border border-gray-700/50">
+                💎 {isAgenticMode ? 'Agent' : 'Adaptive'} mode: Gemini models only
+              </div>
+            )}
+            {isAskMode && (
+              <div className="px-3 py-2 text-xs text-gray-400 bg-gray-800/50 rounded-lg border border-gray-700/50">
+                💬 Ask mode: All models available
+              </div>
+            )}
+            {getFilteredModels().map((model, index) => {
               const isSelected = selectedModel === model.id;
               const isAnimating = animatingModel === model.id;
               
