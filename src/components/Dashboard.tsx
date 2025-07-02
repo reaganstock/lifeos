@@ -68,7 +68,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items, cate
     return () => clearInterval(timer);
   }, []);
 
-  // Get today's todos with completion status
+  // Get today's todos with proper date handling
   const todaysTodos = items.filter(item => {
     if (item.type !== 'todo' || !item.dueDate) return false;
     
@@ -76,7 +76,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items, cate
     const dueDate = item.dueDate instanceof Date ? item.dueDate : new Date(item.dueDate);
     if (isNaN(dueDate.getTime())) return false;
     
-    return format(dueDate, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd');
+    // Compare dates at midnight to avoid timezone issues
+    const dueDateMidnight = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+    const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    
+    return dueDateMidnight.getTime() === todayMidnight.getTime();
   });
 
   // Get upcoming events (next 3)
@@ -183,7 +187,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items, cate
       const periodTodos = todos.filter(item => {
         if (!item.dueDate) return false;
         const dueDate = item.dueDate instanceof Date ? item.dueDate : new Date(item.dueDate);
-        return dueDate >= startDate && dueDate <= endDate;
+        if (isNaN(dueDate.getTime())) return false;
+        
+        // Compare dates at midnight to avoid timezone issues
+        const dueDateMidnight = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+        const startDateMidnight = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+        const endDateMidnight = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+        
+        return dueDateMidnight >= startDateMidnight && dueDateMidnight <= endDateMidnight;
       });
 
       const completedTodos = periodTodos.filter(item => item.completed);
@@ -212,12 +223,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items, cate
       ? routines.reduce((sum, routine) => sum + (routine.metadata?.currentStreak || 0), 0) / routines.length
       : 0;
 
-    // Yesterday's data for comparison
+    // Yesterday's data for comparison with proper date handling
     const yesterday = subDays(today, 1);
     const yesterdayTodos = todos.filter(item => {
       if (!item.dueDate) return false;
       const dueDate = item.dueDate instanceof Date ? item.dueDate : new Date(item.dueDate);
-      return isYesterday(dueDate);
+      if (isNaN(dueDate.getTime())) return false;
+      
+      // Compare dates at midnight
+      const dueDateMidnight = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+      const yesterdayMidnight = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate());
+      
+      return dueDateMidnight.getTime() === yesterdayMidnight.getTime();
     });
     const yesterdayCompleted = yesterdayTodos.filter(item => item.completed).length;
     const yesterdayRate = yesterdayTodos.length > 0 ? Math.round((yesterdayCompleted / yesterdayTodos.length) * 100) : 0;
@@ -407,7 +424,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items, cate
 
       <div className="relative p-2 lg:p-3 max-w-7xl mx-auto">
         {/* Compact Premium Header */}
-        <div className="sticky top-0 z-50 mb-3 lg:mb-4 pt-2 lg:pt-3">
+        <div className="sticky top-0 z-[60] mb-3 lg:mb-4 pt-2 lg:pt-3">
           <div className="bg-white/95 backdrop-blur-3xl rounded-2xl shadow-xl border border-white/50 p-3 lg:p-4 transition-all duration-700 hover:shadow-2xl">
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
               <div className="flex-1">
@@ -598,8 +615,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items, cate
                     bgTo: "to-violet-50/90",
                     border: "border-purple-100/60",
                     gradient: "from-purple-400/10 to-violet-400/10",
-                    subtext: metrics.improvement > 0 ? `+${metrics.improvement}% vs yesterday` : 
-                             metrics.improvement < 0 ? `${metrics.improvement}% vs yesterday` : 'same as yesterday'
+                    subtext: (() => {
+                      const focusImprovement = metrics.focusScore - Math.round((
+                        metrics.avgGoalProgress + 
+                        routineCompletionRate + 
+                        metrics.yesterdayRate + 
+                        Math.min(metrics.avgStreakDays * 5, 100)
+                      ) / 4);
+                      
+                      if (focusImprovement > 0) return `+${focusImprovement}% vs yesterday`;
+                      if (focusImprovement < 0) return `${focusImprovement}% vs yesterday`;
+                      return 'same as yesterday';
+                    })()
                   }
                 ];
               })().map((metric, index) => {

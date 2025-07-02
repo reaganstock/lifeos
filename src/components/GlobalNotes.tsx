@@ -763,7 +763,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
               <div className="flex space-x-3">
                 <button
                   onClick={() => setShowAddForm(true)}
-                  className="group relative overflow-hidden bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-8 py-4 rounded-2xl flex items-center transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
+                  className="group relative overflow-hidden bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white px-8 py-4 rounded-2xl flex items-center transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
                 >
                   <div className="absolute inset-0 bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
                   <Plus className="w-5 h-5 mr-3 relative z-10" />
@@ -808,7 +808,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search by content..."
-                    className="w-full pl-10 pr-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300 text-gray-800"
+                    className="w-full pl-10 pr-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all duration-300 text-gray-800"
                   />
                 </div>
               </div>
@@ -819,7 +819,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                 <select
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300 text-gray-800"
+                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all duration-300 text-gray-800"
                 >
                   <option value="all">All Categories</option>
                   {categories.map((category: Category) => (
@@ -836,7 +836,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as 'recent' | 'title' | 'category')}
-                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300 text-gray-800"
+                  className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all duration-300 text-gray-800"
                 >
                   <option value="recent">Most Recent</option>
                   <option value="title">Title</option>
@@ -858,7 +858,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                     <select
                       value={mediaFilter}
                       onChange={(e) => setMediaFilter(e.target.value as 'all' | 'text' | 'voice' | 'images')}
-                      className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300 text-gray-800"
+                      className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all duration-300 text-gray-800"
                     >
                       <option value="all">All Types</option>
                       <option value="text">📝 Text Only</option>
@@ -876,7 +876,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                     <select
                       value={dateFilter}
                       onChange={(e) => setDateFilter(e.target.value as 'all' | 'today' | 'week' | 'month')}
-                      className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300 text-gray-800"
+                      className="w-full px-4 py-4 bg-white/70 border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all duration-300 text-gray-800"
                     >
                       <option value="all">All Time</option>
                       <option value="today">📅 Today</option>
@@ -1173,7 +1173,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                         ref={textareaRef}
                         value={editText}
                         onChange={(e) => setEditText(e.target.value)}
-                        className="w-full p-4 bg-gray-50/50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300 resize-none overflow-hidden"
+                        className="w-full p-4 bg-gray-50/50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all duration-300 resize-none overflow-hidden"
                         placeholder="Write your thoughts..."
                         autoFocus
                       />
@@ -1440,7 +1440,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
               </p>
               <button
                 onClick={() => setShowAddForm(true)}
-                className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-8 py-4 rounded-2xl transition-all duration-300 transform hover:scale-105 shadow-lg"
+                className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white px-8 py-4 rounded-2xl transition-all duration-300 transform hover:scale-105 shadow-lg"
               >
                 <Plus className="w-5 h-5 mr-3 inline" />
                 Create Your First Note
@@ -1516,7 +1516,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                   value={newNote.title}
                   onChange={(e) => setNewNote({ ...newNote, title: e.target.value })}
                   placeholder="Give your note a title..."
-                  className="w-full px-4 py-3 bg-gray-50/50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300"
+                  className="w-full px-4 py-3 bg-gray-50/50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all duration-300"
                 />
               </div>
 
@@ -1530,7 +1530,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                     onChange={(e) => setNewNote(prev => ({ ...prev, text: e.target.value }))}
                     placeholder="Write your thoughts, add images, record voice..."
                     rows={5}
-                    className={`w-full px-4 py-4 bg-gray-50/50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300 resize-none text-gray-800 placeholder-gray-400`}
+                    className={`w-full px-4 py-4 bg-gray-50/50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all duration-300 resize-none text-gray-800 placeholder-gray-400`}
                   style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}
                   autoFocus
                 />
@@ -1781,7 +1781,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
                 <select
                   value={newNote.categoryId}
                   onChange={(e) => setNewNote({ ...newNote, categoryId: e.target.value })}
-                  className="w-full px-4 py-4 bg-gray-50/50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300"
+                  className="w-full px-4 py-4 bg-gray-50/50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-yellow-500/50 focus:border-yellow-500 transition-all duration-300"
                 >
                   {categories.map((category: Category) => (
                     <option key={category.id} value={category.id}>
@@ -1807,7 +1807,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
               <button
                 onClick={handleAddNote}
                 disabled={!newNote.text.trim() && !newNote.voice && !newNote.images.length}
-                className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-2xl hover:from-blue-600 hover:to-blue-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 shadow-lg font-semibold"
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-2xl hover:from-yellow-600 hover:to-orange-600 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 shadow-lg font-semibold"
               >
                 Save Note
               </button>
@@ -1943,7 +1943,7 @@ const GlobalNotes: React.FC<GlobalNotesProps> = ({ items, setItems, categories }
               <button
                 onClick={handleAddNote}
                 disabled={!newNote.text.trim() && !newNote.voice && !newNote.images.length}
-                className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 disabled:from-gray-300 disabled:to-gray-400 text-white rounded-lg disabled:cursor-not-allowed transition-all"
+                className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 disabled:from-gray-300 disabled:to-gray-400 text-white rounded-lg disabled:cursor-not-allowed transition-all"
               >
                   {editingNoteId ? 'Update' : 'Save'}
               </button>

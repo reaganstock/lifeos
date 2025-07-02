@@ -366,7 +366,7 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
         item = {
           ...baseItem,
           type: 'todo' as const,
-          dueDate: newItem.dueDate ? new Date(newItem.dueDate) : undefined,
+          dueDate: newItem.dueDate ? new Date(newItem.dueDate + 'T12:00:00') : undefined,
           metadata: {
             priority: newItem.priority
           }

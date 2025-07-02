@@ -1926,7 +1926,7 @@ const LocalCategoryNotes: React.FC<LocalCategoryNotesProps> = ({ categoryId, ite
       )}
 
       {/* Floating Action Button */}
-      {!fullscreenCreate && !showAddForm && (
+      {!fullscreenCreate && !showAddForm && !showAIAssistant && (
         <button
           onClick={() => {
             // Reset form state to ensure it's always a new note
@@ -1952,7 +1952,7 @@ const LocalCategoryNotes: React.FC<LocalCategoryNotesProps> = ({ categoryId, ite
             setUploadedImages([]);
             setShowAddForm(true);
           }}
-          className="fixed bottom-8 right-8 w-16 h-16 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white rounded-full shadow-2xl hover:shadow-3xl transition-all duration-300 transform hover:scale-110 z-50 flex items-center justify-center"
+          className="fixed bottom-8 right-8 w-16 h-16 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white rounded-full shadow-2xl hover:shadow-3xl transition-all duration-300 transform hover:scale-110 z-30 flex items-center justify-center"
           title="Create new note (Press 'N')"
         >
           <Plus className="w-8 h-8" />

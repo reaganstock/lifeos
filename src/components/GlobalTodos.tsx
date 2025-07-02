@@ -115,7 +115,7 @@ const GlobalTodos: React.FC<GlobalTodosProps> = ({ items, setItems, categories }
       type: 'todo',
       title: newTodo.title,
       text: newTodo.text,
-      dueDate: newTodo.dueDate ? new Date(newTodo.dueDate) : undefined,
+      dueDate: newTodo.dueDate ? new Date(newTodo.dueDate + 'T12:00:00') : undefined,
       completed: false,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -165,7 +165,7 @@ const GlobalTodos: React.FC<GlobalTodosProps> = ({ items, setItems, categories }
             ...item, 
             title: editTodo.title,
             text: editTodo.text,
-            dueDate: editTodo.dueDate ? new Date(editTodo.dueDate) : undefined,
+            dueDate: editTodo.dueDate ? new Date(editTodo.dueDate + 'T12:00:00') : undefined,
             metadata: { 
               ...item.metadata, 
               priority: editTodo.priority
