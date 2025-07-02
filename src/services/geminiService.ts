@@ -164,7 +164,8 @@ export class GeminiService {
     items: Item[], 
     conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [],
     categories: any[] = [],
-    isAgenticMode: boolean = false
+    isAgenticMode: boolean = false,
+    isAskMode: boolean = false
   ): Promise<GeminiResponse> {
     console.log('🚀 GEMINI DIRECT API - Processing:', message);
     
@@ -178,7 +179,7 @@ export class GeminiService {
     this.itemsModified = false;
     
     // Build system prompt with better instructions for conversational responses
-    const systemPrompt = this.buildSmartSystemPrompt(items, categories) + `
+    const systemPrompt = this.buildSmartSystemPrompt(items, categories, isAskMode) + (isAskMode ? '' : `
 
 CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
 - Keep responses natural and conversational, not robotic
@@ -192,7 +193,7 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
 - For errors, be friendly and offer alternatives
 - NEVER start responses with "✅ Successfully executed..." - be more natural
 - Match the user's energy level and speaking style
-- Remember this is a VOICE conversation - keep it flowing and natural`;
+- Remember this is a VOICE conversation - keep it flowing and natural`);
     
     // Build messages array
     const messages = [
@@ -450,7 +451,31 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
     }
   }
 
-  private buildSmartSystemPrompt(items: Item[], categories: any[] = []): string {
+  private buildSmartSystemPrompt(items: Item[], categories: any[] = [], isAskMode: boolean = false): string {
+    if (isAskMode) {
+      return `🎯 **LIFELY AI - ASK MODE** (Question & Answer)
+You are Lifely AI, a helpful life management assistant. You're currently in ASK MODE, which means:
+
+❌ **NO FUNCTION CALLING** - You cannot create, edit, or manage any items
+✅ **QUESTIONS ONLY** - You can answer questions, provide advice, and have conversations
+✅ **HELPFUL GUIDANCE** - You can suggest strategies, explain concepts, and provide support
+
+CURRENT CONTEXT:
+- Date: ${new Date().toISOString().split('T')[0]}
+- Time: ${new Date().toLocaleTimeString()}
+- Mode: ASK MODE (Questions & Conversations Only)
+- Items in Storage: ${items.length} (for reference only)
+
+USER'S ITEMS PREVIEW (for context only):
+${(() => {
+  if (items.length === 0) return 'No items found in storage.';
+  return items.slice(0, 10).map(item => 
+    `- ${item.type}: "${item.title}"`
+  ).join('\n') + (items.length > 10 ? `\n... and ${items.length - 10} more items` : '');
+})()}
+
+REMEMBER: You can only answer questions and provide guidance. You cannot create, edit, or manage any items in Ask mode.`;
+    }
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
     const nextWeekStr = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];

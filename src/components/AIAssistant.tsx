@@ -1515,7 +1515,8 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
           undefined,
           [],
           [],
-          false // Force non-agentic mode for safety
+          false, // Force non-agentic mode for safety
+          true // Always use Ask mode for conversational responses
         );
         
         await chatService.addMessage('assistant', conversationalResponse.message || "Hi there! How can I help you today?");

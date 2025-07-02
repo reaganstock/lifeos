@@ -1259,10 +1259,10 @@ export class AIActions {
     const apiKey = openRouterApiKey || fallbackApiKey;
     
     if (!apiKey) {
-      throw new Error('OpenRouter API key not found. Please add REACT_APP_OPENROUTER_API_KEY to your environment variables.');
+      throw new Error('AI service configuration error. Please contact support.');
     }
 
-    console.log('🔑 AIActions: Using API key source:', openRouterApiKey ? 'OpenRouter' : 'Fallback OpenAI');
+    console.log('🔑 AIActions: API key configured successfully');
 
     this.openai = new OpenAI({
       apiKey,
@@ -1592,9 +1592,34 @@ export class AIActions {
   }
 
   // Build system prompt with current items context
-  private buildSystemPrompt(items: Item[]): string {
-    return `🎓 **GEORGETOWN LIFE MANAGEMENT OS** (Natural Language Revolution)
-You are a Georgetown University Life Management AI Assistant with UNLIMITED NATURAL LANGUAGE PROCESSING POWER.
+  private buildSystemPrompt(items: Item[], isAskMode: boolean = false): string {
+    if (isAskMode) {
+      return `🎯 **LIFELY AI - ASK MODE** (Question & Answer)
+You are Lifely AI, a helpful life management assistant. You're currently in ASK MODE, which means:
+
+❌ **NO FUNCTION CALLING** - You cannot create, edit, or manage any items
+✅ **QUESTIONS ONLY** - You can answer questions, provide advice, and have conversations
+✅ **HELPFUL GUIDANCE** - You can suggest strategies, explain concepts, and provide support
+
+CURRENT CONTEXT:
+- Date: ${new Date().toISOString().split('T')[0]}
+- Time: ${new Date().toLocaleTimeString()}
+- Mode: ASK MODE (Questions & Conversations Only)
+- Items in Storage: ${items.length} (for reference only)
+
+USER'S ITEMS PREVIEW (for context only):
+${(() => {
+  if (items.length === 0) return 'No items found in storage.';
+  return items.slice(0, 10).map(item => 
+    `- ${item.type}: "${item.title}"`
+  ).join('\n') + (items.length > 10 ? `\n... and ${items.length - 10} more items` : '');
+})()}
+
+REMEMBER: You can only answer questions and provide guidance. You cannot create, edit, or manage any items in Ask mode.`;
+    }
+    
+    return `🎯 **LIFELY AI - LIFE MANAGEMENT OS** (Natural Language Revolution)
+You are Lifely AI, an intelligent life management assistant with UNLIMITED NATURAL LANGUAGE PROCESSING POWER.
 
 CURRENT CONTEXT:
 - Date: ${new Date().toISOString().split('T')[0]}
@@ -1611,7 +1636,7 @@ ${(() => {
   ).join('\n') + (items.length > 10 ? `\n... and ${items.length - 10} more items` : '');
 })()}
 
-AVAILABLE CATEGORIES (Georgetown Life Areas):
+AVAILABLE CATEGORIES (Life Management Areas):
 - self-regulation: habits, routines, discipline, time management
 - gym-calisthenics: fitness, workouts, exercises, physical training  
 - mobile-apps: app development, coding, business, entrepreneurship
@@ -1664,17 +1689,17 @@ END OF NATURAL LANGUAGE REVOLUTION PROMPT - UNDERSTAND EVERYTHING! 🧠💪`;
   }
 
   // Process a message with function calling
-  async processMessage(message: string, items: Item[], conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [], categories: any[] = []): Promise<any> {
+  async processMessage(message: string, items: Item[], conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [], categories: any[] = [], isAskMode: boolean = false): Promise<any> {
     console.log('🎯 Message:', message);
     
     if (!OPENROUTER_API_KEY) {
-      throw new Error('OpenRouter API key not found. Please add REACT_APP_OPENROUTER_API_KEY to your environment variables.');
+      throw new Error('AI service temporarily unavailable. Please try again later.');
     }
 
     const history = this.buildConversationHistory(conversationHistory);
     console.log('📚 Built conversation history with', history.length, 'messages');
     
-    const systemPrompt = this.buildSystemPrompt(items);
+    const systemPrompt = this.buildSystemPrompt(items, isAskMode);
     
     // Smart function calling detection
     const taskKeywords = [
@@ -1713,11 +1738,13 @@ END OF NATURAL LANGUAGE REVOLUTION PROMPT - UNDERSTAND EVERYTHING! 🧠💪`;
              content.includes('add') || content.includes('create');
     });
     
-    // Use function calling for task management OR if context suggests tasks
-    const shouldUseFunctions = (hasTaskKeywords && !hasConversationKeywords) || 
+    // Use function calling for task management OR if context suggests tasks (but NEVER in Ask mode)
+    const shouldUseFunctions = !isAskMode && (
+                              (hasTaskKeywords && !hasConversationKeywords) || 
                               (recentContextHasTasks && !hasConversationKeywords && 
                                (messageLower.includes('go') || messageLower.includes('do') || 
-                                messageLower.includes('yes') || messageLower.includes('add')));
+                                messageLower.includes('yes') || messageLower.includes('add')))
+                              );
     
     console.log('🤖 Task keywords detected:', hasTaskKeywords);
     console.log('🤖 Conversation keywords detected:', hasConversationKeywords);
@@ -1755,7 +1782,7 @@ END OF NATURAL LANGUAGE REVOLUTION PROMPT - UNDERSTAND EVERYTHING! 🧠💪`;
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(`OpenRouter API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
+        throw new Error('I\'m having trouble processing your request right now. Please try again in a moment.');
       }
 
       const data = await response.json();
@@ -1819,8 +1846,9 @@ END OF NATURAL LANGUAGE REVOLUTION PROMPT - UNDERSTAND EVERYTHING! 🧠💪`;
       };
       }
     } catch (error) {
-      console.error('❌ OpenRouter API Error:', error);
-      throw error;
+      console.error('❌ AI API Error:', error);
+      // Don't expose technical details to users
+      throw new Error('I\'m having trouble processing your request right now. Please try again in a moment.');
     }
   }
 
@@ -3399,7 +3427,7 @@ END OF NATURAL LANGUAGE REVOLUTION PROMPT - UNDERSTAND EVERYTHING! 🧠💪`;
 
   private generateDescription(type: string, categoryId: string): string {
     const descriptions = {
-      todo: `Important task for ${categoryId} - generated by Georgetown AI`,
+      todo: `Important task for ${categoryId} - generated by Lifely AI`,
       goal: `Strategic goal for ${categoryId} advancement`,
       event: `Scheduled event for ${categoryId} activities`,
       note: `Important note for ${categoryId} reference`,

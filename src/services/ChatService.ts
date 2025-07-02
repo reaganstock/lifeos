@@ -699,7 +699,8 @@ class ChatService {
     currentCategoryId?: string,
     allItems?: Item[],
     allCategories?: Category[],
-    isAgenticMode?: boolean
+    isAgenticMode?: boolean,
+    isAskMode?: boolean
   ): Promise<AIResponse> {
     try {
       // Get recent items for context
@@ -753,7 +754,8 @@ class ChatService {
             allItems || [], 
             conversationHistory,
             Array.isArray(allCategories) ? allCategories : [],
-            isAgenticMode || false
+            isAgenticMode || false,
+            isAskMode || false
           );
           console.log('✅ ChatService: Gemini Direct API result:', result);
         } else {
@@ -763,7 +765,8 @@ class ChatService {
             message, 
             allItems || [], 
             conversationHistory,
-            allCategories || []
+            allCategories || [],
+            isAskMode || false
           );
           console.log('✅ ChatService: AIActions result:', result);
         }
@@ -777,7 +780,7 @@ class ChatService {
         console.error('🔥 ChatService: AI Processing Error:', error);
         result = {
           success: false,
-          response: `Error processing message: ${error instanceof Error ? error.message : 'Unknown error'}. Please check your API keys and authentication.`,
+          response: "I'm having trouble processing your request right now. Please try again in a moment.",
           functionResults: [],
           itemsModified: false
         };
@@ -815,7 +818,7 @@ class ChatService {
 
       return {
         success: false,
-        message: `🔧 Gemini 2.5 Flash encountered an error: ${(error as Error).message}. The direct Gemini API integration is working but needs your attention!`
+        message: "I'm having trouble processing your request right now. Please try again in a moment."
       };
     }
   }
