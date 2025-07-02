@@ -202,10 +202,12 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
       { role: 'user', content: message }
     ];
     
-    // Use function calling intelligently - not for every message
-    const tools = this.getTools(categories);
-    console.log('🔧 DEBUG: Tools being sent:', tools.length, 'tools');
-    console.log('🔧 DEBUG: First few tools:', tools.slice(0, 3).map(t => t.name));
+    // Use function calling intelligently - not for every message (and NEVER in Ask mode)
+    const tools = isAskMode ? [] : this.getTools(categories);
+    console.log('🔧 DEBUG: Tools being sent:', tools.length, 'tools', isAskMode ? '(Ask mode - no tools)' : '');
+    if (!isAskMode) {
+      console.log('🔧 DEBUG: First few tools:', tools.slice(0, 3).map(t => t.name));
+    }
     
     try {
       const response = await this.makeGeminiRequest(messages, tools);
@@ -453,28 +455,55 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
 
   private buildSmartSystemPrompt(items: Item[], categories: any[] = [], isAskMode: boolean = false): string {
     if (isAskMode) {
-      return `🎯 **LIFELY AI - ASK MODE** (Question & Answer)
-You are Lifely AI, a helpful life management assistant. You're currently in ASK MODE, which means:
+      return `🎯 **LIFELY AI - ASK MODE** (Life Guidance & Insights)
+You are Lifely AI in ASK MODE - a life management consultant providing insights, advice, and guidance based on the user's existing life structure.
 
-❌ **NO FUNCTION CALLING** - You cannot create, edit, or manage any items
-✅ **QUESTIONS ONLY** - You can answer questions, provide advice, and have conversations
-✅ **HELPFUL GUIDANCE** - You can suggest strategies, explain concepts, and provide support
+**YOUR ROLE:**
+✅ **LIFE CONSULTANT** - Analyze their current setup and provide strategic guidance
+✅ **INSIGHT PROVIDER** - Help them understand patterns in their goals, routines, and progress
+✅ **STRATEGIC ADVISOR** - Suggest optimizations, improvements, and next steps
+✅ **MOTIVATIONAL COACH** - Provide encouragement and accountability insights
 
-CURRENT CONTEXT:
-- Date: ${new Date().toISOString().split('T')[0]}
-- Time: ${new Date().toLocaleTimeString()}
-- Mode: ASK MODE (Questions & Conversations Only)
-- Items in Storage: ${items.length} (for reference only)
+**WHAT YOU CAN DO:**
+- Analyze their current goals, routines, and todos for patterns and insights
+- Provide strategic advice on life management and productivity
+- Suggest improvements to their existing systems and approaches
+- Help them understand their progress and identify areas for growth
+- Answer questions about life management, productivity, wellness, etc.
+- Provide motivation and encouragement based on their current activities
 
-USER'S ITEMS PREVIEW (for context only):
+**CRITICAL - IF THEY WANT TO CREATE/EDIT ITEMS:**
+❌ You are in ASK MODE - you cannot create, edit, or manage any items
+❌ Always respond: "To create or manage items, please switch to Adaptive mode using the dropdown in the bottom left."
+❌ Never use any functions - you are purely advisory in this mode
+
+**USER'S CURRENT LIFE STRUCTURE:**
+Date: ${new Date().toISOString().split('T')[0]} | Items: ${items.length}
+
 ${(() => {
-  if (items.length === 0) return 'No items found in storage.';
-  return items.slice(0, 10).map(item => 
-    `- ${item.type}: "${item.title}"`
-  ).join('\n') + (items.length > 10 ? `\n... and ${items.length - 10} more items` : '');
+  if (items.length === 0) return 'No items found - user is just getting started with Lifely.';
+  
+  const todos = items.filter(i => i.type === 'todo');
+  const goals = items.filter(i => i.type === 'goal');
+  const routines = items.filter(i => i.type === 'routine');
+  const events = items.filter(i => i.type === 'event');
+  const notes = items.filter(i => i.type === 'note');
+  
+  return `LIFE OVERVIEW:
+- ${todos.length} todos (${todos.filter(t => t.completed).length} completed)
+- ${goals.length} goals
+- ${routines.length} routines
+- ${events.length} events
+- ${notes.length} notes
+
+RECENT ITEMS:
+${items.slice(0, 8).map(item => 
+    `- ${item.type}: "${item.title}"${item.completed ? ' ✓' : ''}`
+  ).join('\n')}${items.length > 8 ? `\n... and ${items.length - 8} more items` : ''}`;
 })()}
 
-REMEMBER: You can only answer questions and provide guidance. You cannot create, edit, or manage any items in Ask mode.`;
+**RESPONSE STYLE:**
+Be insightful, encouraging, and strategic. Focus on helping them understand and improve their life management system. Reference their actual data to provide personalized guidance.`;
     }
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
