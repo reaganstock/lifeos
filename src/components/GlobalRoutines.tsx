@@ -562,7 +562,7 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, catego
                 <select
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="px-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  className="px-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="all">All Categories</option>
                   {categories.map(category => (
@@ -575,7 +575,7 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, catego
                 <select
                   value={selectedFrequency}
                   onChange={(e) => setSelectedFrequency(e.target.value)}
-                  className="px-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  className="px-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="all">All Frequencies</option>
                   {frequencies.map(freq => (
@@ -652,20 +652,20 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, catego
                                   type="text"
                                   value={editRoutine.title}
                                   onChange={(e) => setEditRoutine(prev => ({ ...prev, title: e.target.value }))}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                   placeholder="Routine title..."
                                 />
                                 <textarea
                                   value={editRoutine.text}
                                   onChange={(e) => setEditRoutine(prev => ({ ...prev, text: e.target.value }))}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 h-20 resize-none"
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 h-20 resize-none"
                                   placeholder="Routine description..."
                                 />
                                 <div className="grid grid-cols-2 gap-4">
                                   <select
                                     value={editRoutine.frequency}
                                     onChange={(e) => setEditRoutine(prev => ({ ...prev, frequency: e.target.value as FrequencyType }))}
-                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                   >
                                     {frequencies.map(freq => (
                                       <option key={freq} value={freq}>
@@ -677,7 +677,7 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, catego
                                     type="number"
                                     value={editRoutine.duration}
                                     onChange={(e) => setEditRoutine(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
-                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                     placeholder="Duration (minutes)"
                                     min="1"
                                   />
@@ -828,20 +828,20 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, catego
                             type="text"
                             value={editRoutine.title}
                             onChange={(e) => setEditRoutine(prev => ({ ...prev, title: e.target.value }))}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             placeholder="Routine title..."
                           />
                           <textarea
                             value={editRoutine.text}
                             onChange={(e) => setEditRoutine(prev => ({ ...prev, text: e.target.value }))}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 h-20 resize-none"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 h-20 resize-none"
                             placeholder="Routine description..."
                           />
                           <div className="grid grid-cols-2 gap-4">
                             <select
                               value={editRoutine.frequency}
                               onChange={(e) => setEditRoutine(prev => ({ ...prev, frequency: e.target.value as FrequencyType }))}
-                              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             >
                               {frequencies.map(freq => (
                                 <option key={freq} value={freq}>
@@ -853,7 +853,7 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, catego
                               type="number"
                               value={editRoutine.duration}
                               onChange={(e) => setEditRoutine(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
-                              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                               placeholder="Duration (minutes)"
                               min="1"
                             />
@@ -1110,7 +1110,7 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, catego
                   type="text"
                   value={newRoutine.title}
                     onChange={(e) => setNewRoutine(prev => ({ ...prev, title: e.target.value }))}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter routine title..."
                   autoFocus
                 />
@@ -1121,7 +1121,7 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, catego
                 <textarea
                   value={newRoutine.text}
                     onChange={(e) => setNewRoutine(prev => ({ ...prev, text: e.target.value }))}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 h-24 resize-none"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 h-24 resize-none"
                     placeholder="Routine description..."
                 />
               </div>
@@ -1132,7 +1132,7 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, catego
                 <select
                   value={newRoutine.categoryId}
                       onChange={(e) => setNewRoutine(prev => ({ ...prev, categoryId: e.target.value }))}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   {categories.map(category => (
                     <option key={category.id} value={category.id}>
@@ -1146,7 +1146,7 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, catego
                   <select
                     value={newRoutine.frequency}
                       onChange={(e) => setNewRoutine(prev => ({ ...prev, frequency: e.target.value as FrequencyType }))}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       {frequencies.map(freq => (
                         <option key={freq} value={freq}>
@@ -1161,7 +1161,7 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, catego
                     type="number"
                     value={newRoutine.duration}
                       onChange={(e) => setNewRoutine(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="30"
                     min="1"
                   />
