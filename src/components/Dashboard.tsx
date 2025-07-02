@@ -391,7 +391,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items, cate
   const smartInsights = getSmartInsights();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30 relative">
       {/* Enhanced animated background with mouse-reactive elements */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-20 left-20 w-72 h-72 bg-blue-400/5 rounded-full blur-3xl animate-pulse"></div>
