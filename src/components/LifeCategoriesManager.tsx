@@ -72,11 +72,14 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
   const handleAddCategory = async () => {
     if (!newCategory.name.trim()) return;
 
+    // Ensure priority is unique before saving
+    const finalPriority = validatePriority(newCategory.priority.toString());
+
     const categoryData = {
       name: newCategory.name,
       icon: newCategory.icon,
       color: newCategory.color,
-      priority: newCategory.priority,
+      priority: finalPriority,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -119,11 +122,14 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
   const handleUpdateCategory = async () => {
     if (!editingCategory || !newCategory.name.trim()) return;
 
+    // Ensure priority is unique before updating
+    const finalPriority = validatePriority(newCategory.priority.toString(), editingCategory.id);
+
     const updates = {
       name: newCategory.name,
       icon: newCategory.icon,
       color: newCategory.color,
-      priority: newCategory.priority,
+      priority: finalPriority,
       updatedAt: new Date()
     };
 

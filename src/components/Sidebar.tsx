@@ -181,6 +181,15 @@ const Sidebar: React.FC<SidebarProps> = ({
     setIsEditingTitle(false);
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSaveAndExit();
+    }
+    if (e.key === 'Escape') {
+      setIsEditingTitle(false);
+    }
+  };
+
   return (
     <>
       <div 
@@ -332,7 +341,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                           type="text"
                           value={customTitle}
                           onChange={(e) => setCustomTitle(e.target.value)}
-                          onBlur={handleSaveAndExit}
+                          onKeyDown={handleKeyDown}
                           className="w-full text-lg font-bold bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white px-2 py-1 rounded border-none focus:outline-none focus:ring-2 focus:ring-blue-500"
                           placeholder="App Title"
                           autoFocus
@@ -341,7 +350,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                           type="text"
                           value={customSubtitle}
                           onChange={(e) => setCustomSubtitle(e.target.value)}
-                          onBlur={handleSaveAndExit}
+                          onKeyDown={handleKeyDown}
                           className="w-full text-sm bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-1 rounded border-none focus:outline-none focus:ring-2 focus:ring-blue-500"
                           placeholder="Subtitle"
                         />
@@ -454,16 +463,10 @@ const Sidebar: React.FC<SidebarProps> = ({
               {topPriorityCategories.length > 0 && (
                 <div className="mb-6">
                   {sidebarWidth > 200 && (
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="mb-3">
                       <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Life Categories
                       </h3>
-                      <button
-                        onClick={() => onNavigateToGlobal('life-categories')}
-                        className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium transition-colors"
-                      >
-                        View All
-                      </button>
                     </div>
                   )}
                   {topPriorityCategories.map((category) => (
@@ -495,6 +498,16 @@ const Sidebar: React.FC<SidebarProps> = ({
                       </div>
                     </button>
                   ))}
+                  {sidebarWidth > 200 && (
+                    <div className="mt-3 text-center">
+                      <button
+                        onClick={() => onNavigateToGlobal('life-categories')}
+                        className="text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 font-medium transition-colors italic"
+                      >
+                        see all categories
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
