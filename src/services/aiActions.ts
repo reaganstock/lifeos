@@ -443,7 +443,7 @@ const FUNCTIONS = [
         },
         theme: {
           type: 'string',
-          description: 'Theme or context for generating unique values (e.g., "Georgetown success", "fitness motivation", "spiritual growth")'
+          description: 'Theme or context for generating unique values (e.g., "Life success", "fitness motivation", "spiritual growth")'
         }
       },
       required: ['searchQuery', 'updateType']
@@ -2811,7 +2811,7 @@ END OF NATURAL LANGUAGE REVOLUTION PROMPT - UNDERSTAND EVERYTHING! 🧠💪`;
 
     // Generate unique values based on updateType and theme
     const generateUniqueValues = (items: Item[], updateType: string, theme?: string) => {
-      const baseTheme = theme || 'Georgetown success and personal growth';
+      const baseTheme = theme || 'Success and personal growth';
       
       if (updateType === 'titles') {
         if (type === 'routine') {

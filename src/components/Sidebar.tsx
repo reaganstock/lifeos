@@ -25,7 +25,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     return localStorage.getItem('lifeStructureTitle') || 'Life Structure';
   });
   const [customSubtitle, setCustomSubtitle] = useState(() => {
-    return localStorage.getItem('lifeStructureSubtitle') || 'Georgetown Success';
+    return localStorage.getItem('lifeStructureSubtitle') || 'I'm a star!';
   });
   
   const [sidebarWidth, setSidebarWidth] = useState(() => {

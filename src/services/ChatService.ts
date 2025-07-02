@@ -852,7 +852,7 @@ class ChatService {
 
     return {
       success: true,
-      message: `Perfect! I'll add "${title}" as a ${itemType} to help with your Georgetown success journey.`,
+      message: `Perfect! I'll add "${title}" as a ${itemType} to help with your Life Success journey.`,
       itemCreated: {
         type: itemType,
         title,

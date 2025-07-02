@@ -107,7 +107,7 @@ export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `https://app.lifely.dev`,
+          redirectTo: `https://app.lifely.dev/dashboard`,
         },
       })
 
@@ -239,15 +239,15 @@ export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           {/* Terms */}
           <p className="mt-8 text-xs text-gray-400 leading-relaxed">
             By continuing, you agree to our{' '}
-            <a href="#" className="text-gray-600 hover:text-gray-900 underline">
+            <a href="https://lifely.dev/terms" target="_blank" rel="noopener noreferrer" className="text-gray-600 hover:text-gray-900 underline">
               Terms of Service
             </a>{' '}
             and{' '}
-            <a href="#" className="text-gray-600 hover:text-gray-900 underline">
+            <a href="https://lifely.dev/privacy" target="_blank" rel="noopener noreferrer" className="text-gray-600 hover:text-gray-900 underline">
               Privacy Policy
             </a>
             , and acknowledge our{' '}
-            <a href="#" className="text-gray-600 hover:text-gray-900 underline">
+            <a href="https://lifely.dev/privacy" target="_blank" rel="noopener noreferrer" className="text-gray-600 hover:text-gray-900 underline">
               Privacy Notice
             </a>
             .

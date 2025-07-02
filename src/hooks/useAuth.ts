@@ -143,7 +143,7 @@ export function useAuth(): AuthState & AuthActions {
   const resetPassword = async (email: string) => {
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: `https://app.lifely.dev/reset-password`,
       })
 
       return { error }
