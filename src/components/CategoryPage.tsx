@@ -85,6 +85,9 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
   const [localSortBy, setLocalSortBy] = useState<'recent' | 'priority' | 'due_date' | 'alphabetical' | 'progress' | 'date_time'>('recent');
   const [localDateFilter, setLocalDateFilter] = useState<'all' | 'today' | 'this_week' | 'upcoming' | 'overdue'>('all');
   const [localProgressFilter, setLocalProgressFilter] = useState<'all' | 'not_started' | 'in_progress' | 'completed'>('all');
+  const [localFrequencyFilter, setLocalFrequencyFilter] = useState<'all' | 'daily' | 'weekly' | 'monthly' | 'yearly'>('all');
+  const [localRoutineStatusFilter, setLocalRoutineStatusFilter] = useState<'all' | 'completed_today' | 'pending_today' | 'streak_active'>('all');
+  const [localNotesFilter, setLocalNotesFilter] = useState<'all' | 'voice_notes' | 'text_notes' | 'with_images' | 'recent_week'>('all');
 
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
@@ -237,6 +240,44 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
           return progress > 0 && progress < 100;
         case 'completed':
           return progress >= 100;
+        default:
+          return true;
+      }
+    }
+    
+    // Frequency filter (only for routines)
+    if (activeTab === 'routine' && localFrequencyFilter !== 'all') {
+      const frequency = item.metadata?.frequency;
+      return frequency === localFrequencyFilter;
+    }
+    
+    // Routine status filter (only for routines)
+    if (activeTab === 'routine' && localRoutineStatusFilter !== 'all') {
+      switch (localRoutineStatusFilter) {
+        case 'completed_today':
+          return item.metadata?.completedToday === true;
+        case 'pending_today':
+          return item.metadata?.completedToday !== true;
+        case 'streak_active':
+          return (item.metadata?.currentStreak || 0) > 0;
+        default:
+          return true;
+      }
+    }
+    
+    // Notes filter (only for notes)
+    if (activeTab === 'note' && localNotesFilter !== 'all') {
+      switch (localNotesFilter) {
+        case 'voice_notes':
+          return item.type === 'voiceNote' || item.metadata?.isVoiceNote === true;
+        case 'text_notes':
+          return item.type === 'note' && item.metadata?.isVoiceNote !== true;
+        case 'with_images':
+          return item.metadata?.hasImage === true || (item.metadata?.imageUrls && item.metadata.imageUrls.length > 0);
+        case 'recent_week':
+          const weekAgo = new Date();
+          weekAgo.setDate(weekAgo.getDate() - 7);
+          return new Date(item.createdAt) > weekAgo;
         default:
           return true;
       }
@@ -2083,16 +2124,16 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
                   <button
                     onClick={() => setShowLocalFilters(!showLocalFilters)}
                     className={`p-3 border border-gray-200/50 rounded-xl transition-all duration-300 flex items-center space-x-2 ${
-                      showLocalFilters || localPriorityFilter !== 'all' || localCompletionFilter !== 'all' || localSortBy !== 'recent' || localDateFilter !== 'all' || localProgressFilter !== 'all'
+                      showLocalFilters || localPriorityFilter !== 'all' || localCompletionFilter !== 'all' || localSortBy !== 'recent' || localDateFilter !== 'all' || localProgressFilter !== 'all' || localFrequencyFilter !== 'all' || localRoutineStatusFilter !== 'all' || localNotesFilter !== 'all'
                         ? 'bg-blue-100 text-blue-700 border-blue-200'
                         : 'bg-white/70 hover:bg-gray-50 text-gray-600'
                     }`}
                   >
                     <Settings className="w-4 h-4" />
                     <span className="text-sm font-medium">Filters</span>
-                    {(localPriorityFilter !== 'all' || localCompletionFilter !== 'all' || localSortBy !== 'recent' || localDateFilter !== 'all' || localProgressFilter !== 'all') && (
+                    {(localPriorityFilter !== 'all' || localCompletionFilter !== 'all' || localSortBy !== 'recent' || localDateFilter !== 'all' || localProgressFilter !== 'all' || localFrequencyFilter !== 'all' || localRoutineStatusFilter !== 'all' || localNotesFilter !== 'all') && (
                       <span className="bg-blue-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                        {[localPriorityFilter !== 'all', localCompletionFilter !== 'all', localSortBy !== 'recent', localDateFilter !== 'all', localProgressFilter !== 'all'].filter(Boolean).length}
+                        {[localPriorityFilter !== 'all', localCompletionFilter !== 'all', localSortBy !== 'recent', localDateFilter !== 'all', localProgressFilter !== 'all', localFrequencyFilter !== 'all', localRoutineStatusFilter !== 'all', localNotesFilter !== 'all'].filter(Boolean).length}
                       </span>
                     )}
                   </button>
@@ -2202,6 +2243,59 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
                             </div>
                           )}
 
+                          {/* Frequency Filter - Only for routines */}
+                          {activeTab === 'routine' && (
+                            <div>
+                              <label className="block text-sm font-semibold text-gray-700 mb-2">Frequency</label>
+                              <select
+                                value={localFrequencyFilter}
+                                onChange={(e) => setLocalFrequencyFilter(e.target.value as 'all' | 'daily' | 'weekly' | 'monthly' | 'yearly')}
+                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                              >
+                                <option value="all">All Frequencies</option>
+                                <option value="daily">📅 Daily</option>
+                                <option value="weekly">📆 Weekly</option>
+                                <option value="monthly">🗓️ Monthly</option>
+                                <option value="yearly">📊 Yearly</option>
+                              </select>
+                            </div>
+                          )}
+
+                          {/* Routine Status Filter - Only for routines */}
+                          {activeTab === 'routine' && (
+                            <div>
+                              <label className="block text-sm font-semibold text-gray-700 mb-2">Today's Status</label>
+                              <select
+                                value={localRoutineStatusFilter}
+                                onChange={(e) => setLocalRoutineStatusFilter(e.target.value as 'all' | 'completed_today' | 'pending_today' | 'streak_active')}
+                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                              >
+                                <option value="all">All Routines</option>
+                                <option value="completed_today">✅ Completed Today</option>
+                                <option value="pending_today">⏳ Pending Today</option>
+                                <option value="streak_active">🔥 Active Streak</option>
+                              </select>
+                            </div>
+                          )}
+
+                          {/* Notes Filter - Only for notes */}
+                          {activeTab === 'note' && (
+                            <div>
+                              <label className="block text-sm font-semibold text-gray-700 mb-2">Note Type</label>
+                              <select
+                                value={localNotesFilter}
+                                onChange={(e) => setLocalNotesFilter(e.target.value as 'all' | 'voice_notes' | 'text_notes' | 'with_images' | 'recent_week')}
+                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                              >
+                                <option value="all">All Notes</option>
+                                <option value="voice_notes">🎤 Voice Notes</option>
+                                <option value="text_notes">📝 Text Notes</option>
+                                <option value="with_images">📷 With Images</option>
+                                <option value="recent_week">📅 Recent Week</option>
+                              </select>
+                            </div>
+                          )}
+
                           {/* Active Filters */}
                           <div className="border-t pt-3">
                             <div className="flex flex-wrap gap-2">
@@ -2260,10 +2354,43 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
                                   </button>
                                 </span>
                               )}
+                              {localFrequencyFilter !== 'all' && (
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                                  Frequency: {localFrequencyFilter}
+                                  <button
+                                    onClick={() => setLocalFrequencyFilter('all')}
+                                    className="ml-1 text-indigo-600 hover:text-indigo-800"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              )}
+                              {localRoutineStatusFilter !== 'all' && (
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-pink-100 text-pink-800">
+                                  Status: {localRoutineStatusFilter.replace('_', ' ')}
+                                  <button
+                                    onClick={() => setLocalRoutineStatusFilter('all')}
+                                    className="ml-1 text-pink-600 hover:text-pink-800"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              )}
+                              {localNotesFilter !== 'all' && (
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-teal-100 text-teal-800">
+                                  Notes: {localNotesFilter.replace('_', ' ')}
+                                  <button
+                                    onClick={() => setLocalNotesFilter('all')}
+                                    className="ml-1 text-teal-600 hover:text-teal-800"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              )}
                             </div>
                             
                             {/* Clear All Filters */}
-                            {(localPriorityFilter !== 'all' || localCompletionFilter !== 'all' || localSortBy !== 'recent' || localDateFilter !== 'all' || localProgressFilter !== 'all') && (
+                            {(localPriorityFilter !== 'all' || localCompletionFilter !== 'all' || localSortBy !== 'recent' || localDateFilter !== 'all' || localProgressFilter !== 'all' || localFrequencyFilter !== 'all' || localRoutineStatusFilter !== 'all' || localNotesFilter !== 'all') && (
                               <button
                                 onClick={() => {
                                   setLocalPriorityFilter('all');
@@ -2271,6 +2398,9 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
                                   setLocalSortBy('recent');
                                   setLocalDateFilter('all');
                                   setLocalProgressFilter('all');
+                                  setLocalFrequencyFilter('all');
+                                  setLocalRoutineStatusFilter('all');
+                                  setLocalNotesFilter('all');
                                 }}
                                 className="text-xs text-gray-500 hover:text-gray-700 mt-2"
                               >
