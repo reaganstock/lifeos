@@ -1664,7 +1664,8 @@ User message: ${messageWithContext}`;
           categories.find(cat => cat.id === currentView)?.id,
           items,
           categories,
-          isAgenticMode
+          isAgenticMode && !isAskMode,
+          isAskMode
         );
 
         console.log('🔧 Fullscreen note mode - got response:', response);
@@ -1772,7 +1773,8 @@ User message: ${messageWithContext}`;
           currentCategoryId,
           items,
           categories,
-          isAgenticMode && !isAskMode // Disable function calling for Ask mode
+          isAgenticMode && !isAskMode, // Disable function calling for Ask mode
+          isAskMode
         );
 
         console.log('📥 AIAssistant: Received response from chatService:', response);
@@ -1979,7 +1981,8 @@ User message: ${messageWithContext}`;
           currentCategoryId,
           items,
           categories,
-          false // Voice mode is always Ask mode, not Agent mode
+          false, // Voice mode is always Ask mode, not Agent mode
+          true   // isAskMode = true for voice mode
         );
 
         // Handle item creation
@@ -3391,7 +3394,8 @@ const MessageBubble: React.FC<{
                         currentCategoryId,
                         items,
                         categories,
-                        true // Keep agentic mode active
+                        isAgenticMode && !isAskMode, // Keep agentic mode active
+                        isAskMode
                       );
                       
                       // Handle the alternative response
