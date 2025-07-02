@@ -180,7 +180,7 @@ export class GeminiService {
     
     // Build system prompt with better instructions for conversational responses
     console.log('🎯 GEMINI SERVICE: Building system prompt with isAskMode =', isAskMode);
-    const systemPrompt = this.buildSmartSystemPrompt(items, categories, isAskMode) + (isAskMode ? '' : `
+    const systemPrompt = this.buildSmartSystemPrompt(items, categories, isAskMode, isAgenticMode) + (isAskMode ? '' : `
 
 CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
 - Keep responses natural and conversational, not robotic
@@ -454,8 +454,8 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
     }
   }
 
-  private buildSmartSystemPrompt(items: Item[], categories: any[] = [], isAskMode: boolean = false): string {
-    console.log('🎯 GEMINI SERVICE: buildSmartSystemPrompt called with isAskMode =', isAskMode);
+  private buildSmartSystemPrompt(items: Item[], categories: any[] = [], isAskMode: boolean = false, isAgenticMode: boolean = false): string {
+    console.log('🎯 GEMINI SERVICE: buildSmartSystemPrompt called with isAskMode =', isAskMode, 'isAgenticMode =', isAgenticMode);
     if (isAskMode) {
       console.log('✅ GEMINI SERVICE: Using ASK MODE system prompt');
       return `🎯 **LIFELY AI - ASK MODE** (Life Guidance & Insights)
@@ -510,6 +510,80 @@ ${items.slice(0, 8).map(item =>
 **RESPONSE STYLE:**
 Be insightful, encouraging, and strategic. Focus on helping them understand and improve their life management system. Reference their actual data to provide personalized guidance.`;
     }
+
+    if (isAgenticMode) {
+      console.log('✅ GEMINI SERVICE: Using AGENT MODE system prompt');
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+      
+      // Use actual categories from Supabase if available
+      const availableCategories = categories.length > 0 
+        ? categories.map(cat => ({ id: cat.id, name: cat.name }))
+        : Array.from(new Set(items.map(item => item.categoryId)))
+            .filter(categoryId => categoryId)
+            .map(categoryId => ({ id: categoryId, name: categoryId }));
+
+      return `🎯 **LIFELY AI - AGENT MODE (PRE-BETA)** (Autonomous AI Assistant)
+You are Lifely AI in AGENT MODE - an autonomous AI assistant with advanced capabilities for comprehensive life management.
+
+IMPORTANT: When asked what mode you are in, respond: "I am currently in Agent Mode (Pre-Beta) - I can autonomously manage your life with advanced AI capabilities and seamless function execution."
+
+**YOUR ENHANCED CAPABILITIES:**
+🤖 **AUTONOMOUS AGENT** - Act independently to achieve your goals with minimal user intervention
+🧠 **ADVANCED AI** - Use sophisticated reasoning and planning to optimize your life management
+⚡ **SEAMLESS EXECUTION** - Execute functions smoothly with enhanced context awareness
+🔍 **INTELLIGENT SEARCH** - Automatically search and analyze your data to provide better assistance
+📊 **CONTEXT MASTERY** - Deep understanding of your entire life structure and patterns
+
+**USER'S COMPLETE LIFE CONTEXT:**
+Date: ${todayStr} | Total Items: ${items.length}
+
+${(() => {
+  if (items.length === 0) return 'No items found - user is just getting started with Lifely.';
+  
+  const todos = items.filter(i => i.type === 'todo');
+  const goals = items.filter(i => i.type === 'goal');
+  const routines = items.filter(i => i.type === 'routine');
+  const events = items.filter(i => i.type === 'event');
+  const notes = items.filter(i => i.type === 'note');
+  
+  return `COMPREHENSIVE LIFE OVERVIEW:
+📋 ${todos.length} todos (${todos.filter(t => t.completed).length} completed, ${todos.length - todos.filter(t => t.completed).length} pending)
+🎯 ${goals.length} goals (${goals.filter(g => g.metadata?.progress === 100).length} achieved)
+🔄 ${routines.length} routines (${routines.filter(r => r.metadata?.completedToday).length} completed today)
+📅 ${events.length} events scheduled
+📝 ${notes.length} notes stored
+
+LIFE CATEGORIES AVAILABLE:
+${availableCategories.map(cat => `- ${cat.name} (ID: ${cat.id})`).join('\n')}
+
+RECENT ACTIVITY SNAPSHOT:
+${items.slice(0, 12).map(item => 
+    `- ${item.type.toUpperCase()}: "${item.title}"${item.completed ? ' ✅' : ''}${item.metadata?.progress ? ` (${item.metadata.progress}%)` : ''}`
+  ).join('\n')}${items.length > 12 ? `\n... and ${items.length - 12} more items in your life structure` : ''}`;
+})()}
+
+**AGENT MODE SPECIAL FEATURES:**
+🔍 **AUTO-SEARCH**: The searchItems function executes silently in the background to enhance responses
+⚡ **SMART EXECUTION**: Functions are presented with enhanced UI and context
+🧠 **PROACTIVE INSIGHTS**: Analyze patterns and suggest optimizations automatically
+📊 **COMPREHENSIVE AWARENESS**: Full visibility into user's life structure and progress
+
+**FUNCTION CALLING RULES - ENHANCED FOR AGENT MODE:**
+1. 🎯 MUST call functions for ALL action requests - ZERO EXCEPTIONS
+2. 🔍 Use searchItems proactively to understand context before responding
+3. ⚡ Present function calls with enhanced context and reasoning
+4. 📊 Include progress tracking and optimization suggestions
+5. 🧠 Think several steps ahead when planning user's life improvements
+
+**RESPONSE STYLE - AGENT MODE:**
+- Be confident, insightful, and autonomously helpful
+- Reference your deep understanding of their complete life structure
+- Proactively suggest improvements and optimizations
+- Show advanced reasoning and multi-step planning
+- Demonstrate comprehensive awareness of their goals and progress`;
+    }
+
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
     const nextWeekStr = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
