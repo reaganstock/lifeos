@@ -82,7 +82,9 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
   const [showLocalFilters, setShowLocalFilters] = useState(false);
   const [localPriorityFilter, setLocalPriorityFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
   const [localCompletionFilter, setLocalCompletionFilter] = useState<'all' | 'completed' | 'incomplete'>('all');
-  const [localSortBy, setLocalSortBy] = useState<'recent' | 'priority' | 'due_date' | 'alphabetical'>('recent');
+  const [localSortBy, setLocalSortBy] = useState<'recent' | 'priority' | 'due_date' | 'alphabetical' | 'progress' | 'date_time'>('recent');
+  const [localDateFilter, setLocalDateFilter] = useState<'all' | 'today' | 'this_week' | 'upcoming' | 'overdue'>('all');
+  const [localProgressFilter, setLocalProgressFilter] = useState<'all' | 'not_started' | 'in_progress' | 'completed'>('all');
 
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
@@ -199,6 +201,47 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
       if (localCompletionFilter === 'incomplete' && isCompleted) return false;
     }
     
+    // Date filter (for todos and events)
+    if ((activeTab === 'todo' || activeTab === 'event') && localDateFilter !== 'all') {
+      const itemDate = activeTab === 'todo' ? item.dueDate : item.dateTime;
+      if (!itemDate) return false;
+      
+      const date = new Date(itemDate);
+      const today = new Date();
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
+      const weekEnd = new Date(today);
+      weekEnd.setDate(today.getDate() + 7);
+      
+      switch (localDateFilter) {
+        case 'today':
+          return date.toDateString() === today.toDateString();
+        case 'this_week':
+          return date >= today && date <= weekEnd;
+        case 'upcoming':
+          return date > today;
+        case 'overdue':
+          return date < today && activeTab === 'todo' && !item.completed;
+        default:
+          return true;
+      }
+    }
+    
+    // Progress filter (only for goals)
+    if (activeTab === 'goal' && localProgressFilter !== 'all') {
+      const progress = item.metadata?.progress || 0;
+      switch (localProgressFilter) {
+        case 'not_started':
+          return progress === 0;
+        case 'in_progress':
+          return progress > 0 && progress < 100;
+        case 'completed':
+          return progress >= 100;
+        default:
+          return true;
+      }
+    }
+    
     return true;
   }).sort((a, b) => {
     // Custom sorting based on localSortBy
@@ -218,6 +261,18 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
         break;
       case 'alphabetical':
         return a.title.localeCompare(b.title);
+      case 'progress':
+        if (activeTab === 'goal') {
+          const progressA = a.metadata?.progress || 0;
+          const progressB = b.metadata?.progress || 0;
+          return progressB - progressA;
+        }
+        break;
+      case 'date_time':
+        if (activeTab === 'event' && a.dateTime && b.dateTime) {
+          return new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime();
+        }
+        break;
       case 'recent':
       default:
         // Special sorting for events by dateTime
@@ -2028,16 +2083,16 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
                   <button
                     onClick={() => setShowLocalFilters(!showLocalFilters)}
                     className={`p-3 border border-gray-200/50 rounded-xl transition-all duration-300 flex items-center space-x-2 ${
-                      showLocalFilters || localPriorityFilter !== 'all' || localCompletionFilter !== 'all' || localSortBy !== 'recent'
+                      showLocalFilters || localPriorityFilter !== 'all' || localCompletionFilter !== 'all' || localSortBy !== 'recent' || localDateFilter !== 'all' || localProgressFilter !== 'all'
                         ? 'bg-blue-100 text-blue-700 border-blue-200'
                         : 'bg-white/70 hover:bg-gray-50 text-gray-600'
                     }`}
                   >
                     <Settings className="w-4 h-4" />
                     <span className="text-sm font-medium">Filters</span>
-                    {(localPriorityFilter !== 'all' || localCompletionFilter !== 'all' || localSortBy !== 'recent') && (
+                    {(localPriorityFilter !== 'all' || localCompletionFilter !== 'all' || localSortBy !== 'recent' || localDateFilter !== 'all' || localProgressFilter !== 'all') && (
                       <span className="bg-blue-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                        {[localPriorityFilter !== 'all', localCompletionFilter !== 'all', localSortBy !== 'recent'].filter(Boolean).length}
+                        {[localPriorityFilter !== 'all', localCompletionFilter !== 'all', localSortBy !== 'recent', localDateFilter !== 'all', localProgressFilter !== 'all'].filter(Boolean).length}
                       </span>
                     )}
                   </button>
@@ -2065,12 +2120,14 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
                             <label className="block text-sm font-semibold text-gray-700 mb-2">Sort by</label>
                             <select
                               value={localSortBy}
-                              onChange={(e) => setLocalSortBy(e.target.value as 'recent' | 'priority' | 'due_date' | 'alphabetical')}
+                              onChange={(e) => setLocalSortBy(e.target.value as 'recent' | 'priority' | 'due_date' | 'alphabetical' | 'progress' | 'date_time')}
                               className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                             >
                               <option value="recent">🕒 Most Recent</option>
                               {(activeTab === 'todo' || activeTab === 'goal') && <option value="priority">🔥 Priority</option>}
                               {activeTab === 'todo' && <option value="due_date">📅 Due Date</option>}
+                              {activeTab === 'goal' && <option value="progress">📊 Progress</option>}
+                              {activeTab === 'event' && <option value="date_time">⏰ Event Time</option>}
                               <option value="alphabetical">🔤 Alphabetical</option>
                             </select>
                           </div>
@@ -2104,6 +2161,43 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
                                 <option value="all">All Items</option>
                                 <option value="completed">✅ Completed</option>
                                 <option value="incomplete">⏳ Incomplete</option>
+                              </select>
+                            </div>
+                          )}
+
+                          {/* Date Filter - For todos and events */}
+                          {(activeTab === 'todo' || activeTab === 'event') && (
+                            <div>
+                              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                {activeTab === 'todo' ? 'Due Date' : 'Event Date'}
+                              </label>
+                              <select
+                                value={localDateFilter}
+                                onChange={(e) => setLocalDateFilter(e.target.value as 'all' | 'today' | 'this_week' | 'upcoming' | 'overdue')}
+                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                              >
+                                <option value="all">All Dates</option>
+                                <option value="today">📅 Today</option>
+                                <option value="this_week">📆 This Week</option>
+                                <option value="upcoming">⏭️ Upcoming</option>
+                                {activeTab === 'todo' && <option value="overdue">⚠️ Overdue</option>}
+                              </select>
+                            </div>
+                          )}
+
+                          {/* Progress Filter - Only for goals */}
+                          {activeTab === 'goal' && (
+                            <div>
+                              <label className="block text-sm font-semibold text-gray-700 mb-2">Progress Status</label>
+                              <select
+                                value={localProgressFilter}
+                                onChange={(e) => setLocalProgressFilter(e.target.value as 'all' | 'not_started' | 'in_progress' | 'completed')}
+                                className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                              >
+                                <option value="all">All Goals</option>
+                                <option value="not_started">🎯 Not Started</option>
+                                <option value="in_progress">🔄 In Progress</option>
+                                <option value="completed">✅ Completed</option>
                               </select>
                             </div>
                           )}
@@ -2144,15 +2238,39 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
                                   </button>
                                 </span>
                               )}
+                              {localDateFilter !== 'all' && (
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                  Date: {localDateFilter.replace('_', ' ')}
+                                  <button
+                                    onClick={() => setLocalDateFilter('all')}
+                                    className="ml-1 text-purple-600 hover:text-purple-800"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              )}
+                              {localProgressFilter !== 'all' && (
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                  Progress: {localProgressFilter.replace('_', ' ')}
+                                  <button
+                                    onClick={() => setLocalProgressFilter('all')}
+                                    className="ml-1 text-yellow-600 hover:text-yellow-800"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </span>
+                              )}
                             </div>
                             
                             {/* Clear All Filters */}
-                            {(localPriorityFilter !== 'all' || localCompletionFilter !== 'all' || localSortBy !== 'recent') && (
+                            {(localPriorityFilter !== 'all' || localCompletionFilter !== 'all' || localSortBy !== 'recent' || localDateFilter !== 'all' || localProgressFilter !== 'all') && (
                               <button
                                 onClick={() => {
                                   setLocalPriorityFilter('all');
                                   setLocalCompletionFilter('all');
                                   setLocalSortBy('recent');
+                                  setLocalDateFilter('all');
+                                  setLocalProgressFilter('all');
                                 }}
                                 className="text-xs text-gray-500 hover:text-gray-700 mt-2"
                               >

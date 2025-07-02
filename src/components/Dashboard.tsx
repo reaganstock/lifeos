@@ -364,21 +364,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items, cate
   const getSmartInsights = () => {
     const insights = [];
     
-    if (metrics.improvement > 0) {
-      insights.push({
-        type: 'positive',
-        icon: TrendingUp,
-        text: `${metrics.improvement}% improvement from yesterday!`,
-        color: 'emerald'
-      });
-    } else if (metrics.improvement < 0) {
-      insights.push({
-        type: 'improvement',
-        icon: Target,
-        text: `Focus opportunity: ${Math.abs(metrics.improvement)}% below yesterday`,
-        color: 'blue'
-      });
-    }
+    // Removed improvement insights to clean up performance analytics section
 
     if (metrics.avgStreakDays >= 7) {
       insights.push({
@@ -424,7 +410,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToCategory, items, cate
 
       <div className="relative p-2 lg:p-3 max-w-7xl mx-auto">
         {/* Compact Premium Header */}
-        <div className="sticky top-0 z-[60] mb-3 lg:mb-4 py-2 lg:py-3 -mx-2 lg:-mx-3 px-2 lg:px-3">
+        <div className="sticky top-0 z-[100] mb-3 lg:mb-4 py-2 lg:py-3 -mx-2 lg:-mx-3 px-2 lg:px-3 bg-gradient-to-br from-gray-50/95 via-white/95 to-blue-50/95 backdrop-blur-3xl">
           <div className="bg-white/95 backdrop-blur-3xl rounded-2xl shadow-xl border border-white/50 p-3 lg:p-4 transition-all duration-700 hover:shadow-2xl">
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
               <div className="flex-1">

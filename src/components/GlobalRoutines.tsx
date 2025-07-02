@@ -670,8 +670,10 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, catego
             {/* Advanced Filters */}
             {showAdvancedFilters && (
               <div className="border-t border-gray-200/50 pt-6">
+                <h4 className="text-sm font-semibold text-gray-700 mb-3">Active Filters & Quick Actions</h4>
+                
                 {/* Active Filters Summary */}
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 mb-4">
                   {selectedCategory !== 'all' && (
                     <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                       Category: {categories.find(c => c.id === selectedCategory)?.name}
@@ -705,6 +707,56 @@ const GlobalRoutines: React.FC<GlobalRoutinesProps> = ({ items, setItems, catego
                       </button>
                     </span>
                   )}
+                  {sortBy !== 'recent' && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                      Sort: {sortBy === 'frequency' ? 'Frequency' : sortBy === 'category' ? 'Category' : 'Streak'}
+                      <button
+                        onClick={() => setSortBy('recent')}
+                        className="ml-2 text-purple-600 hover:text-purple-800"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                </div>
+
+                {/* Quick Filter Actions */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <button
+                    onClick={() => setSelectedFrequency('daily')}
+                    className="flex items-center gap-2 px-3 py-2 bg-blue-50 hover:bg-blue-100 rounded-lg text-sm font-medium text-blue-700 transition-colors"
+                  >
+                    📅 Daily
+                  </button>
+                  <button
+                    onClick={() => setCompletionFilter('completed')}
+                    className="flex items-center gap-2 px-3 py-2 bg-green-50 hover:bg-green-100 rounded-lg text-sm font-medium text-green-700 transition-colors"
+                  >
+                    ✅ Completed
+                  </button>
+                  <button
+                    onClick={() => setCompletionFilter('incomplete')}
+                    className="flex items-center gap-2 px-3 py-2 bg-orange-50 hover:bg-orange-100 rounded-lg text-sm font-medium text-orange-700 transition-colors"
+                  >
+                    ⏳ Pending
+                  </button>
+                  <button
+                    onClick={() => setSortBy('streak')}
+                    className="flex items-center gap-2 px-3 py-2 bg-red-50 hover:bg-red-100 rounded-lg text-sm font-medium text-red-700 transition-colors"
+                  >
+                    🔥 By Streak
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedCategory('all');
+                      setSelectedFrequency('all');
+                      setCompletionFilter('all');
+                      setSortBy('recent');
+                    }}
+                    className="flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg text-sm font-medium text-gray-700 transition-colors"
+                  >
+                    🔄 Clear All
+                  </button>
                 </div>
               </div>
             )}
