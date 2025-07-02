@@ -2858,6 +2858,7 @@ User message: ${messageWithContext}`;
                     onExecuteFunction={handleExecuteFunction}
                     isDarkMode={isDarkMode}
                     isAgenticMode={isAgenticMode}
+                    isAskMode={isAskMode}
                     categories={categories}
                     items={items}
                     currentView={currentView}
@@ -3304,11 +3305,12 @@ const MessageBubble: React.FC<{
   onExecuteFunction?: (messageId: string, functionCall: any) => void;
   isDarkMode: boolean;
   isAgenticMode?: boolean;
+  isAskMode?: boolean;
   categories?: any[];
   items?: any[];
   currentView?: string;
   setIsAIThinking?: (thinking: boolean) => void;
-}> = ({ message, onEdit, onStartEdit, onCancelEdit, onNavigateVersion, onExecuteFunction, isDarkMode, isAgenticMode = false, categories = [], items = [], currentView = '', setIsAIThinking }) => {
+}> = ({ message, onEdit, onStartEdit, onCancelEdit, onNavigateVersion, onExecuteFunction, isDarkMode, isAgenticMode = false, isAskMode = false, categories = [], items = [], currentView = '', setIsAIThinking }) => {
   const currentVersion = message.versions[message.currentVersionIndex];
   const [editContent, setEditContent] = useState(currentVersion.content);
   const versionInfo = chatService.getVersionInfo(message.id);
