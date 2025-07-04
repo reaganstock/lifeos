@@ -4,6 +4,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuthContext } from './AuthProvider';
 import IntegrationManager from './IntegrationManager';
 import { Item } from '../types';
+import { ImportResult } from '../services/integrations/types';
 
 interface SettingsProps {
   items: Item[];
@@ -471,7 +472,7 @@ const Settings: React.FC<SettingsProps> = ({ items, setItems, categories = [] })
         isOpen={showIntegrationManager}
         onClose={() => setShowIntegrationManager(false)}
         categories={categories}
-        onImport={(results) => {
+        onImport={(results: ImportResult[]) => {
           console.log('Integration import results:', results);
           // Reload items from localStorage to reflect the imported data
           const savedItems = localStorage.getItem('lifeStructureItems');

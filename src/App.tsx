@@ -13,6 +13,15 @@ import Settings from './components/Settings';
 import Notification from './components/Notification';
 import AIAssistant from './components/AIAssistant';
 import AuthScreen from './components/onboarding/AuthScreen';
+import AuthCallback from './components/onboarding/AuthCallback';
+import Onboarding from './components/onboarding/Onboarding';
+import DocumentUpload from './components/onboarding/DocumentUpload';
+import IntegrationsSetup from './components/onboarding/IntegrationsSetup';
+import OnboardingProcessing from './components/onboarding/OnboardingProcessing';
+import OnboardingProcessingNew from './components/onboarding/OnboardingProcessingNew';
+import OnboardingComplete from './components/onboarding/OnboardingComplete';
+import OnboardingConversation from './components/onboarding/OnboardingConversation';
+import VoiceMemoOnboarding from './components/onboarding/VoiceMemoOnboarding';
 import SignInRequired from './components/SignInRequired';
 import { AuthProvider, useAuthContext } from './components/AuthProvider';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -44,7 +53,8 @@ function AppContent() {
     bulkCreateItems,
     bulkUpdateItems,
     bulkDeleteItems,
-    refreshData
+    refreshData,
+    ensureProfileExists
   } = useSupabaseData();
 
   // Legacy localStorage state for unauthenticated users or migration
@@ -72,6 +82,25 @@ function AppContent() {
     return [];
   });
 
+  // localStorage categories state (localStorage-first pattern)
+  const [localCategories, setLocalCategories] = useState<any[]>(() => {
+    const savedCategories = localStorage.getItem('lifeStructureCategories');
+    if (savedCategories) {
+      try {
+        const parsedCategories = JSON.parse(savedCategories);
+        return parsedCategories.map((category: any) => ({
+          ...category,
+          createdAt: category.createdAt ? new Date(category.createdAt) : new Date(),
+          updatedAt: category.updatedAt ? new Date(category.updatedAt) : new Date()
+        }));
+      } catch (error) {
+        console.error('Error parsing saved categories:', error);
+        return [];
+      }
+    }
+    return [];
+  });
+
   // Get current view from URL path
   const getCurrentView = () => {
     const path = location.pathname;
@@ -81,6 +110,13 @@ function AppContent() {
   };
   
   const currentView = getCurrentView();
+  
+  // Check if we're in onboarding or auth flows
+  const isOnboardingFlow = location.pathname.startsWith('/onboarding') || location.pathname.startsWith('/auth');
+  
+  // Check onboarding completion status
+  const isOnboardingCompleted = localStorage.getItem('lifely_onboarding_completed') === 'true';
+  const onboardingProgress = localStorage.getItem('lifely_onboarding_progress') || '/onboarding';
   
   // Removed showAuthModal - now using AuthScreen directly
   const [showMigrationModal, setShowMigrationModal] = useState(false);
@@ -311,6 +347,7 @@ function AppContent() {
 
   // ALWAYS use localStorage as primary data source for perfect UX
   const items = localItems;
+  const categories = localCategories;
   
   // Create a setItems function that prioritizes localStorage (no automatic Supabase sync)
   const setItems = (updater: React.SetStateAction<Item[]>) => {
@@ -321,6 +358,12 @@ function AppContent() {
     // 1. Manual "Update" button clicks (when user explicitly saves)
     // 2. Hourly background sync (for cross-device sync)
     // This ensures perfect real-time UX with correct category colors immediately
+  };
+
+  // Create a setCategories function that prioritizes localStorage (no automatic Supabase sync)
+  const setCategories = (updater: React.SetStateAction<any[]>) => {
+    console.log('💾 setCategories called - using localStorage for instant UX');
+    setLocalCategories(updater);
   };
 
   // Check for migration on authentication
@@ -353,7 +396,8 @@ function AppContent() {
       bulkCreateItems,
       bulkUpdateItems,
       bulkDeleteItems,
-      refreshData
+      refreshData,
+      ensureProfileExists
     });
 
     if (result.success) {
@@ -375,9 +419,15 @@ function AppContent() {
     console.log('💾 Saved', localItems.length, 'items to localStorage');
   }, [localItems]);
 
-  // Global keyboard shortcuts - only for authenticated users
+  // Save localStorage categories (primary data source for all users)
   useEffect(() => {
-    if (!user) return; // Don't enable keyboard shortcuts for unauthenticated users
+    localStorage.setItem('lifeStructureCategories', JSON.stringify(localCategories));
+    console.log('💾 Saved', localCategories.length, 'categories to localStorage');
+  }, [localCategories]);
+
+  // Global keyboard shortcuts - only for authenticated users who are not in onboarding
+  useEffect(() => {
+    if (!user || isOnboardingFlow) return; // Don't enable keyboard shortcuts during onboarding
     
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -393,7 +443,7 @@ function AppContent() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [user]);
+  }, [user, isOnboardingFlow]);
 
   // Save AI sidebar width to localStorage
   useEffect(() => {
@@ -596,34 +646,51 @@ function AppContent() {
     // Use React Router for navigation
     return (
       <Routes>
-        <Route path="/auth" element={
-          <AuthScreen onAuthSuccess={() => {
-            console.log('✅ Authentication successful, redirecting to production dashboard');
-            window.location.href = 'https://app.lifely.dev/dashboard';
-          }} />
-        } />
+        <Route path="/auth" element={<AuthScreen />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
         {user ? (
           // Authenticated routes
           <>
-            <Route path="/" element={<Dashboard onNavigateToCategory={handleNavigateToCategory} items={items} categories={supabaseCategories} />} />
-            <Route path="/dashboard" element={<Dashboard onNavigateToCategory={handleNavigateToCategory} items={items} categories={supabaseCategories} />} />
-            <Route path="/todos" element={<GlobalTodos items={items} setItems={setItems} categories={supabaseCategories} />} />
-            <Route path="/calendar" element={<GlobalCalendar items={items} setItems={setItems} categories={supabaseCategories} />} />
-            <Route path="/life-categories" element={<LifeCategoriesManager onNavigateToCategory={handleNavigateToCategory} />} />
-            <Route path="/goals" element={<GlobalGoals items={items} setItems={setItems} categories={supabaseCategories} />} />
-            <Route path="/routines" element={<GlobalRoutines items={items} setItems={setItems} categories={supabaseCategories} />} />
-            <Route path="/notes" element={<GlobalNotes items={items} setItems={setItems} categories={supabaseCategories} />} />
-            <Route path="/settings" element={<Settings items={items} setItems={setItems} categories={supabaseCategories} />} />
-            <Route path="/category/:categoryId" element={
-              <CategoryPage 
-                categoryId={location.pathname.split('/')[2]} 
-                onBack={() => navigate('/dashboard')}
-                items={items}
-                setItems={setItems}
-                categories={supabaseCategories}
-                isGlobalAIAssistantOpen={showAIAssistant}
-              />
-            } />
+            {/* Onboarding Routes */}
+            <Route path="/onboarding" element={<Onboarding />} />
+            <Route path="/onboarding/conversation" element={<OnboardingConversation />} />
+            <Route path="/onboarding/voice-memo" element={<VoiceMemoOnboarding />} />
+            <Route path="/onboarding/documents" element={<DocumentUpload />} />
+            <Route path="/onboarding/integrations" element={<IntegrationsSetup />} />
+            <Route path="/onboarding/processing" element={<OnboardingProcessingNew />} />
+            <Route path="/onboarding/complete" element={<OnboardingComplete />} />
+            
+            {/* Main App Routes - Only accessible after onboarding completion */}
+            {isOnboardingCompleted ? (
+              <>
+                <Route path="/" element={<Dashboard onNavigateToCategory={handleNavigateToCategory} items={items} categories={categories} />} />
+                <Route path="/dashboard" element={<Dashboard onNavigateToCategory={handleNavigateToCategory} items={items} categories={categories} />} />
+                <Route path="/todos" element={<GlobalTodos items={items} setItems={setItems} categories={categories} />} />
+                <Route path="/calendar" element={<GlobalCalendar items={items} setItems={setItems} categories={categories} />} />
+                <Route path="/life-categories" element={<LifeCategoriesManager onNavigateToCategory={handleNavigateToCategory} categories={categories} setCategories={setCategories} />} />
+                <Route path="/goals" element={<GlobalGoals items={items} setItems={setItems} categories={categories} />} />
+                <Route path="/routines" element={<GlobalRoutines items={items} setItems={setItems} categories={categories} />} />
+                <Route path="/notes" element={<GlobalNotes items={items} setItems={setItems} categories={categories} />} />
+                <Route path="/settings" element={<Settings items={items} setItems={setItems} categories={categories} />} />
+                <Route path="/category/:categoryId" element={
+                  <CategoryPage 
+                    categoryId={location.pathname.split('/')[2]} 
+                    onBack={() => navigate('/dashboard')}
+                    items={items}
+                    setItems={setItems}
+                    categories={categories}
+                    isGlobalAIAssistantOpen={showAIAssistant}
+                  />
+                } />
+              </>
+            ) : (
+              // Redirect to onboarding progress if not completed
+              <>
+                <Route path="/" element={<Navigate to={onboardingProgress} replace />} />
+                <Route path="/dashboard" element={<Navigate to={onboardingProgress} replace />} />
+                <Route path="*" element={<Navigate to={onboardingProgress} replace />} />
+              </>
+            )}
           </>
         ) : (
           // Unauthenticated routes - redirect to auth automatically
@@ -649,8 +716,8 @@ function AppContent() {
   return (
     <ThemeProvider>
       <div className="App flex h-screen">
-        {/* Only show sidebar and AI assistant for authenticated users */}
-        {user && (
+        {/* Only show sidebar and AI assistant for authenticated users who are not in onboarding */}
+        {user && !isOnboardingFlow && (
           <>
             {/* Main Left Sidebar */}
             <Sidebar 
@@ -658,7 +725,7 @@ function AppContent() {
               onNavigateToCategory={handleNavigateToCategory}
               onNavigateToDashboard={handleBackToDashboard}
               onNavigateToGlobal={handleNavigateToGlobal}
-              categories={supabaseCategories}
+              categories={categories}
             />
           </>
         )}
@@ -667,8 +734,8 @@ function AppContent() {
         <div 
           className="flex-1 h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-blue-900 transition-all duration-300 ease-in-out overflow-auto"
           style={{
-            marginLeft: user ? (isMainSidebarCollapsed ? '60px' : `${mainSidebarWidth}px`) : '0px',
-            marginRight: user && showAIAssistant && !isAiSidebarCollapsed ? `${aiSidebarWidth}px` : '0px',
+            marginLeft: user && !isOnboardingFlow ? (isMainSidebarCollapsed ? '60px' : `${mainSidebarWidth}px`) : '0px',
+            marginRight: user && !isOnboardingFlow && showAIAssistant && !isAiSidebarCollapsed ? `${aiSidebarWidth}px` : '0px',
             transition: 'margin 0.3s ease-in-out',
             scrollbarWidth: 'none',
             msOverflowStyle: 'none',
@@ -685,8 +752,8 @@ function AppContent() {
           onClose={hideNotification}
         />
 
-        {/* Global AI Assistant - Only for authenticated users */}
-        {user && showAIAssistant && (
+        {/* Global AI Assistant - Only for authenticated users who are not in onboarding */}
+        {user && !isOnboardingFlow && showAIAssistant && (
           <AIAssistant
             isOpen={showAIAssistant}
             onClose={() => setShowAIAssistant(false)}

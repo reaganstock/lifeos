@@ -7,21 +7,21 @@ import { useSupabaseData } from '../hooks/useSupabaseData';
 
 interface LifeCategoriesManagerProps {
   onNavigateToCategory: (categoryId: string) => void;
+  categories: Category[];
+  setCategories: React.Dispatch<React.SetStateAction<Category[]>>;
 }
 
-const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigateToCategory }) => {
+const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigateToCategory, categories, setCategories }) => {
   const { user } = useAuthContext();
   const {
-    categories: supabaseCategories,
     loading,
     error,
-    createCategory,
-    updateCategory,
-    deleteCategory
+    createCategory: createSupabaseCategory,
+    updateCategory: updateSupabaseCategory,
+    deleteCategory: deleteSupabaseCategory
   } = useSupabaseData();
   
-  // Use Supabase categories for authenticated users, localStorage for others
-  const categories = user ? supabaseCategories : [];
+  // Use localStorage-first pattern with categories passed from App.tsx
   
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -96,23 +96,39 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
       reorderedCategories.splice(insertIndex, 0, categories.find(cat => cat.id === changingCategoryId)!);
     }
 
-    // Assign new sequential priorities
-    const updatePromises = reorderedCategories.map((cat, index) => {
-      if (cat.priority !== index) {
-        console.log(`📝 Updating "${cat.name}" from priority ${cat.priority} to ${index}`);
-        return updateCategory(cat.id, { priority: index });
+    // Update categories with new sequential priorities (localStorage-first)
+    const updatedCategories = categories.map(cat => {
+      const newIndex = reorderedCategories.findIndex(reordered => reordered.id === cat.id);
+      if (newIndex !== -1 && cat.priority !== newIndex) {
+        console.log(`📝 Updating "${cat.name}" from priority ${cat.priority} to ${newIndex}`);
+        return { ...cat, priority: newIndex, updatedAt: new Date() };
       }
-      return Promise.resolve(true);
+      return cat;
     });
 
-    await Promise.all(updatePromises);
+    setCategories(updatedCategories);
+
+    // Background sync to Supabase if user is authenticated
+    if (user) {
+      try {
+        const updatePromises = reorderedCategories.map(async (cat, index) => {
+          if (cat.priority !== index) {
+            return updateSupabaseCategory(cat.id, { priority: index });
+          }
+          return Promise.resolve(true);
+        });
+        await Promise.all(updatePromises);
+        console.log('✅ Priority reordering synced to Supabase');
+      } catch (error) {
+        console.error('⚠️ Failed to sync priority reordering to Supabase:', error);
+      }
+    }
+    
     console.log('✅ Priority reordering complete');
   };
 
   // Function to recompact priorities after deletion (removes gaps)
   const recompactPriorities = async () => {
-    if (!user) return;
-
     console.log('🔧 Recompacting priorities after deletion...');
     
     // Get all categories sorted by priority
@@ -132,16 +148,34 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
       return;
     }
 
-    // Assign sequential priorities (0, 1, 2, 3...)
-    const updatePromises = sortedCategories.map((cat, index) => {
-      if (cat.priority !== index) {
-        console.log(`📝 Recompacting "${cat.name}" from priority ${cat.priority} to ${index}`);
-        return updateCategory(cat.id, { priority: index });
+    // Assign sequential priorities (0, 1, 2, 3...) in localStorage immediately
+    const updatedCategories = categories.map(cat => {
+      const sortedIndex = sortedCategories.findIndex(sorted => sorted.id === cat.id);
+      if (sortedIndex !== -1 && cat.priority !== sortedIndex) {
+        console.log(`📝 Recompacting "${cat.name}" from priority ${cat.priority} to ${sortedIndex}`);
+        return { ...cat, priority: sortedIndex, updatedAt: new Date() };
       }
-      return Promise.resolve(true);
+      return cat;
     });
 
-    await Promise.all(updatePromises);
+    setCategories(updatedCategories);
+
+    // Background sync to Supabase if user is authenticated
+    if (user) {
+      try {
+        const updatePromises = sortedCategories.map(async (cat, index) => {
+          if (cat.priority !== index) {
+            return updateSupabaseCategory(cat.id, { priority: index });
+          }
+          return Promise.resolve(true);
+        });
+        await Promise.all(updatePromises);
+        console.log('✅ Priority recompaction synced to Supabase');
+      } catch (error) {
+        console.error('⚠️ Failed to sync priority recompaction to Supabase:', error);
+      }
+    }
+    
     console.log('✅ Priority recompaction complete');
   };
 
@@ -178,6 +212,31 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
     return numValue;
   };
 
+  // localStorage-first helper functions
+  const reorderPrioritiesLocal = (categoriesList: Category[], targetCategoryId: string, newPriority: number) => {
+    // Create a copy for manipulation
+    const categoryMap = new Map(categoriesList.map(cat => [cat.id, { ...cat }]));
+    const targetCategory = categoryMap.get(targetCategoryId);
+    
+    if (!targetCategory) return categoriesList;
+    
+    const oldPriority = targetCategory.priority;
+    targetCategory.priority = newPriority;
+    
+    // Adjust other categories
+    categoryMap.forEach((category, id) => {
+      if (id === targetCategoryId) return;
+      
+      if (oldPriority < newPriority && category.priority > oldPriority && category.priority <= newPriority) {
+        category.priority = Math.max(0, category.priority - 1);
+      } else if (oldPriority > newPriority && category.priority >= newPriority && category.priority < oldPriority) {
+        category.priority = Math.min(10, category.priority + 1);
+      }
+    });
+    
+    return Array.from(categoryMap.values()).sort((a, b) => a.priority - b.priority);
+  };
+
   const handleAddCategory = async () => {
     if (!newCategory.name.trim()) return;
 
@@ -187,7 +246,10 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
       return;
     }
 
+    // Create new category with localStorage-first pattern
+    const newCategoryId = `cat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const categoryData = {
+      id: newCategoryId,
       name: newCategory.name,
       icon: newCategory.icon,
       color: newCategory.color,
@@ -196,36 +258,33 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
       updatedAt: new Date()
     };
 
-    if (user) {
-      // Use Supabase for authenticated users
-      const result = await createCategory(categoryData);
-      if (result) {
-        console.log('✅ Category created successfully:', result.name);
-        
-        // Trigger reordering if there was a conflict
-        if (priorityError && priorityError.includes('Saving will reorder')) {
-          await reorderPriorities(result.id, newCategory.priority);
-        }
-        
-        setNewCategory({ name: '', icon: '📁', color: '#74B9FF', priority: getNextAvailablePriority() });
-        setPriorityError('');
-        setEditingCategory(null);
-        setShowAddForm(false);
-      } else {
-        console.error('❌ Failed to create category');
-        alert('Failed to create category. Please try again.');
-      }
+    // Update localStorage immediately (localStorage-first pattern)
+    const updatedCategories = [...categories, categoryData];
+    
+    // Trigger reordering if there was a conflict
+    if (priorityError && priorityError.includes('Saving will reorder')) {
+      const reorderedCategories = reorderPrioritiesLocal(updatedCategories, newCategoryId, newCategory.priority);
+      setCategories(reorderedCategories);
     } else {
-      // Legacy localStorage handling for unauthenticated users
-      // For unauthenticated users - this is no longer supported
-      // const category: Category = {
-      //   id: newCategory.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
-      //   ...categoryData
-      // };
-      // Note: This won't work because we're not managing localStorage categories anymore
-      console.warn('⚠️ Cannot create categories for unauthenticated users');
-      alert('Please sign in to create categories');
+      setCategories(updatedCategories);
     }
+
+    // Background sync to Supabase if user is authenticated
+    if (user) {
+      try {
+        await createSupabaseCategory(categoryData);
+        console.log('✅ Category synced to Supabase:', categoryData.name);
+      } catch (error) {
+        console.error('⚠️ Failed to sync category to Supabase:', error);
+        // Don't show error to user as localStorage update succeeded
+      }
+    }
+    
+    // Reset form
+    setNewCategory({ name: '', icon: '📁', color: '#74B9FF', priority: getNextAvailablePriority() });
+    setPriorityError('');
+    setEditingCategory(null);
+    setShowAddForm(false);
   };
 
   const handleEditCategory = (category: Category) => {
@@ -257,57 +316,87 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
       updatedAt: new Date()
     };
 
-    if (user) {
-      // Use Supabase for authenticated users
-      const success = await updateCategory(editingCategory.id, updates);
-      if (success) {
-        console.log('✅ Category updated successfully');
-        
-        // Trigger reordering if there was a conflict
-        if (priorityError && priorityError.includes('Saving will reorder')) {
-          await reorderPriorities(editingCategory.id, newCategory.priority);
-        }
-        
-        setEditingCategory(null);
-        setPriorityError('');
-        setNewCategory({ name: '', icon: '📁', color: '#74B9FF', priority: getNextAvailablePriority() });
-        setShowAddForm(false);
-      } else {
-        console.error('❌ Failed to update category');
-        alert('Failed to update category. Please try again.');
-      }
-    } else {
-      console.warn('⚠️ Cannot update categories for unauthenticated users');
-      alert('Please sign in to update categories');
+    // Update localStorage immediately (localStorage-first pattern)
+    let updatedCategories = categories.map(cat => 
+      cat.id === editingCategory.id 
+        ? { ...cat, ...updates }
+        : cat
+    );
+    
+    // Trigger reordering if there was a conflict
+    if (priorityError && priorityError.includes('Saving will reorder')) {
+      updatedCategories = reorderPrioritiesLocal(updatedCategories, editingCategory.id, newCategory.priority);
     }
+    
+    setCategories(updatedCategories);
+
+    // Background sync to Supabase if user is authenticated
+    if (user) {
+      try {
+        await updateSupabaseCategory(editingCategory.id, updates);
+        console.log('✅ Category synced to Supabase');
+      } catch (error) {
+        console.error('⚠️ Failed to sync category update to Supabase:', error);
+        // Don't show error to user as localStorage update succeeded
+      }
+    }
+    
+    // Reset form
+    setEditingCategory(null);
+    setPriorityError('');
+    setNewCategory({ name: '', icon: '📁', color: '#74B9FF', priority: getNextAvailablePriority() });
+    setShowAddForm(false);
   };
 
   const handleDeleteCategory = async (categoryId: string) => {
-    if (user) {
-      // Use Supabase for authenticated users - the warning dialog is already handled in useSupabaseData
-      const success = await deleteCategory(categoryId);
-      if (success) {
-        console.log('✅ Category deleted successfully');
-        
-        // Mark that we need recompaction when categories update
-        setPendingRecompaction(true);
-      } else {
-        console.error('❌ Failed to delete category');
-        alert('Failed to delete category. Please try again.');
-      }
+    const categoryToDelete = categories.find(cat => cat.id === categoryId);
+    if (!categoryToDelete) return;
+
+    // Show confirmation dialog with item count (similar to useSupabaseData)
+    const itemsInCategory = JSON.parse(localStorage.getItem('lifeStructureItems') || '[]')
+      .filter((item: any) => item.categoryId === categoryId);
+    
+    let confirmMessage = `Are you sure you want to delete the category "${categoryToDelete.name}"?`;
+    
+    if (itemsInCategory.length > 0) {
+      confirmMessage += `\n\n⚠️ WARNING: This will also delete ${itemsInCategory.length} item${itemsInCategory.length === 1 ? '' : 's'} (notes, todos, events, goals, routines) assigned to this category.\n\nThis action cannot be undone.`;
     } else {
-      console.warn('⚠️ Cannot delete categories for unauthenticated users');
-      alert('Please sign in to delete categories');
+      confirmMessage += '\n\nThis action cannot be undone.';
     }
+
+    const confirmed = window.confirm(confirmMessage);
+    if (!confirmed) return;
+
+    // Update localStorage immediately (localStorage-first pattern)
+    const updatedCategories = categories.filter(cat => cat.id !== categoryId);
+    setCategories(updatedCategories);
+
+    // Also remove items from this category in localStorage
+    if (itemsInCategory.length > 0) {
+      const allItems = JSON.parse(localStorage.getItem('lifeStructureItems') || '[]');
+      const updatedItems = allItems.filter((item: any) => item.categoryId !== categoryId);
+      localStorage.setItem('lifeStructureItems', JSON.stringify(updatedItems));
+      
+      // Trigger a storage event to update other components
+      window.dispatchEvent(new CustomEvent('forceDataRefresh'));
+    }
+
+    // Background sync to Supabase if user is authenticated
+    if (user) {
+      try {
+        await deleteSupabaseCategory(categoryId);
+        console.log('✅ Category deletion synced to Supabase');
+      } catch (error) {
+        console.error('⚠️ Failed to sync category deletion to Supabase:', error);
+        // Don't show error to user as localStorage update succeeded
+      }
+    }
+    
+    // Mark that we need recompaction
+    setPendingRecompaction(true);
   };
 
   const adjustPriority = async (categoryId: string, direction: 'up' | 'down') => {
-    if (!user) {
-      console.warn('⚠️ Cannot adjust priority for unauthenticated users');
-      alert('Please sign in to adjust category priorities');
-      return;
-    }
-
     const category = categories.find(cat => cat.id === categoryId);
     if (!category) return;
 
@@ -328,26 +417,30 @@ const LifeCategoriesManager: React.FC<LifeCategoriesManagerProps> = ({ onNavigat
     const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
     const targetCategory = sortedCategories[targetIndex];
     
-    // Swap priorities between the two categories
-    const newPriority = targetCategory.priority;
-    const targetNewPriority = category.priority;
-    
-    try {
-      // Update both categories to swap their priorities
-      const [success1, success2] = await Promise.all([
-        updateCategory(categoryId, { priority: newPriority }),
-        updateCategory(targetCategory.id, { priority: targetNewPriority })
-      ]);
-      
-      if (success1 && success2) {
-        console.log('✅ Category priorities swapped successfully');
-      } else {
-        console.error('❌ Failed to swap category priorities');
-        alert('Failed to update category priorities. Please try again.');
+    // Swap priorities between the two categories in localStorage immediately
+    const updatedCategories = categories.map(cat => {
+      if (cat.id === categoryId) {
+        return { ...cat, priority: targetCategory.priority, updatedAt: new Date() };
+      } else if (cat.id === targetCategory.id) {
+        return { ...cat, priority: category.priority, updatedAt: new Date() };
       }
-    } catch (error) {
-      console.error('❌ Error swapping priorities:', error);
-      alert('Failed to update category priorities. Please try again.');
+      return cat;
+    });
+    
+    setCategories(updatedCategories);
+
+    // Background sync to Supabase if user is authenticated
+    if (user) {
+      try {
+        await Promise.all([
+          updateSupabaseCategory(categoryId, { priority: targetCategory.priority }),
+          updateSupabaseCategory(targetCategory.id, { priority: category.priority })
+        ]);
+        console.log('✅ Category priorities synced to Supabase');
+      } catch (error) {
+        console.error('⚠️ Failed to sync priority swap to Supabase:', error);
+        // Don't show error to user as localStorage update succeeded
+      }
     }
   };
 

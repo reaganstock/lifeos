@@ -341,10 +341,29 @@ export class OpenAIRealtimeService {
       this.audioElement.setAttribute('data-openai-realtime', 'true'); // Mark for cleanup
       this.audioElement.autoplay = true;
       this.audioElement.volume = 0.8;
+      this.audioElement.controls = false; // Hide controls but ensure it can play
+      this.audioElement.muted = false; // Explicitly set unmuted
       
       // CRITICAL: Append audio element to DOM for proper playback
       document.body.appendChild(this.audioElement);
       console.log('🎵 OPENAI REALTIME SERVICE: Audio element added to DOM');
+      
+      // Add event listeners to debug audio playback issues
+      this.audioElement.addEventListener('canplay', () => {
+        console.log('🎵 OPENAI REALTIME SERVICE: Audio element can play');
+      });
+      
+      this.audioElement.addEventListener('play', () => {
+        console.log('🎵 OPENAI REALTIME SERVICE: Audio element started playing');
+      });
+      
+      this.audioElement.addEventListener('error', (e) => {
+        console.error('❌ OPENAI REALTIME SERVICE: Audio element error:', e);
+      });
+      
+      this.audioElement.addEventListener('pause', () => {
+        console.log('⏸️ OPENAI REALTIME SERVICE: Audio element paused');
+      });
 
       // Handle remote audio stream from the model
       this.peerConnection.ontrack = (event) => {
@@ -356,20 +375,53 @@ export class OpenAIRealtimeService {
         if (this.audioElement && event.streams[0]) {
           this.audioElement.srcObject = event.streams[0];
           console.log('✅ OPENAI REALTIME SERVICE: Audio stream connected to element');
+          
+          // Force play the audio to overcome autoplay restrictions
+          this.audioElement.play().then(() => {
+            console.log('🎵 OPENAI REALTIME SERVICE: Audio element play() succeeded');
+          }).catch((error) => {
+            console.error('❌ OPENAI REALTIME SERVICE: Audio element play() failed:', error);
+            console.error('❌ This usually means autoplay is blocked. User needs to interact with the page first.');
+          });
         }
       };
 
       // Get user media for microphone input
       console.log('🎤 OPENAI REALTIME SERVICE: Getting user media...');
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          sampleRate: 24000,
-          channelCount: 1
+      
+      // Check if we're in a secure context (required for getUserMedia)
+      if (!window.isSecureContext) {
+        throw new Error('Voice features require HTTPS. Please access the app via https://localhost:3000 or deploy to a secure server.');
+      }
+      
+      // Check if getUserMedia is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('getUserMedia is not supported in this browser. Please use a modern browser with microphone support.');
+      }
+      
+      try {
+        this.mediaStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 24000,
+            channelCount: 1
+          }
+        });
+      } catch (error) {
+        console.error('❌ OPENAI REALTIME SERVICE: getUserMedia failed:', error);
+        if (error instanceof Error) {
+          if (error.name === 'NotAllowedError') {
+            throw new Error('Microphone access denied. Please allow microphone access and refresh the page.');
+          } else if (error.name === 'NotFoundError') {
+            throw new Error('No microphone found. Please connect a microphone and try again.');
+          } else if (error.name === 'NotSecureError' || error.message.includes('insecure')) {
+            throw new Error('Voice features require HTTPS. Please access the app via https://localhost:3000');
+          }
         }
-      });
+        throw new Error(`Microphone access failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
 
       // Add local audio track
       const audioTrack = this.mediaStream.getAudioTracks()[0];
@@ -631,11 +683,24 @@ Remember: Only use functions for CREATE/UPDATE/DELETE actions. Answer questions 
       return;
     }
 
-    const tools = this.getLifeOSTools();
+    // Check if we're in onboarding mode first (before setting up tools)
+    const isOnboardingMode = sessionStorage.getItem('lifely_onboarding_mode') === 'true';
+    const onboardingInstructions = sessionStorage.getItem('lifely_onboarding_instructions');
+    
+    const tools = isOnboardingMode ? [] : this.getLifeOSTools();
     console.log('🔧 OPENAI REALTIME SERVICE: Available tools:', tools.length, tools.map(t => t.name));
-    console.log('🔧 OPENAI REALTIME SERVICE: Tool details:', JSON.stringify(tools.slice(0, 2), null, 2));
-
-    const instructions = config.instructions || this.buildDigitalLifeInstructions(config.items || [], config.categories || [], config.voice);
+    if (tools.length > 0) {
+      console.log('🔧 OPENAI REALTIME SERVICE: Tool details:', JSON.stringify(tools.slice(0, 2), null, 2));
+    }
+    
+    let instructions: string;
+    if (isOnboardingMode && onboardingInstructions) {
+      instructions = onboardingInstructions;
+      console.log('🎯 OPENAI REALTIME SERVICE: Using onboarding instructions');
+    } else {
+      instructions = config.instructions || this.buildDigitalLifeInstructions(config.items || [], config.categories || [], config.voice);
+      console.log('🏠 OPENAI REALTIME SERVICE: Using Digital Life instructions');
+    }
     console.log('📋 OPENAI REALTIME SERVICE: Session instructions preview:', instructions.substring(0, 200) + '...');
     
     const sessionUpdate = {
@@ -651,9 +716,9 @@ Remember: Only use functions for CREATE/UPDATE/DELETE actions. Answer questions 
         },
         turn_detection: {
           type: 'server_vad',
-          threshold: 0.5,
-          prefix_padding_ms: 300,
-          silence_duration_ms: 200
+          threshold: 0.3, // Lower threshold = more sensitive to speech
+          prefix_padding_ms: 500, // More padding for better capture
+          silence_duration_ms: 800 // Wait longer before cutting off
         },
         tools: tools,
         tool_choice: tools.length > 0 ? 'auto' : 'none',
@@ -927,10 +992,20 @@ Remember: Only use functions for CREATE/UPDATE/DELETE actions. Answer questions 
         break;
         
       default:
-        console.log('📨 OPENAI REALTIME SERVICE: Unhandled event:', event.type, event);
-        // Log any function-related events we might be missing
-        if (event.type.includes('function')) {
-          console.log('🔧 OPENAI REALTIME SERVICE: FUNCTION EVENT DETECTED:', event.type, event);
+        // Handle specific unhandled events with better logging
+        if (event.type === 'conversation.item.input_audio_transcription.failed') {
+          console.error('❌ OPENAI REALTIME SERVICE: Transcription failed:', {
+            itemId: (event as any).item_id,
+            error: (event as any).error,
+            reason: (event as any).error?.message || 'Unknown transcription error'
+          });
+          console.log('🔧 OPENAI REALTIME SERVICE: Try speaking louder, clearer, or for longer duration');
+        } else {
+          console.log('📨 OPENAI REALTIME SERVICE: Unhandled event:', event.type, event);
+          // Log any function-related events we might be missing
+          if (event.type.includes('function')) {
+            console.log('🔧 OPENAI REALTIME SERVICE: FUNCTION EVENT DETECTED:', event.type, event);
+          }
         }
     }
   }

@@ -24,6 +24,7 @@ export interface SupabaseDataActions {
   bulkUpdateItems: (updates: { id: string; updates: Partial<LocalItem> }[]) => Promise<boolean>
   bulkDeleteItems: (ids: string[]) => Promise<boolean>
   refreshData: () => Promise<void>
+  ensureProfileExists: () => Promise<boolean>
 }
 
 // Helper functions to convert between database and local types
@@ -203,21 +204,26 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
     }
   }, [user, reverseMapping])
 
-  const createInitialCategories = useCallback(async () => {
-    if (!user) return []
+  const ensureProfileExists = useCallback(async (): Promise<boolean> => {
+    if (!user) return false
 
-    console.log('🆕 New user detected, creating initial categories')
-    
-    // First ensure the profile exists
     try {
-      const { data: existingProfile } = await supabase
+      console.log('🔍 Checking if profile exists for user:', user.id)
+      
+      const { data: existingProfile, error: checkError } = await supabase
         .from('profiles')
         .select('id')
         .eq('id', user.id)
         .single()
 
+      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = not found
+        console.error('❌ Error checking profile:', checkError)
+        return false
+      }
+
       if (!existingProfile) {
-        console.log('📝 Creating user profile first...')
+        console.log('📝 Profile not found, creating profile for user:', user.email)
+        
         const { error: profileError } = await supabase
           .from('profiles')
           .upsert([
@@ -226,26 +232,155 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
               email: user.email!,
               full_name: user.user_metadata?.full_name || '',
               avatar_url: user.user_metadata?.avatar_url || null,
+              has_completed_onboarding: false,
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             },
-          ])
+          ], {
+            onConflict: 'id',
+            ignoreDuplicates: false
+          })
 
         if (profileError) {
-          console.error('Error creating profile:', profileError)
-          return []
+          console.error('❌ Error creating profile:', profileError)
+          return false
         }
+        
+        console.log('✅ Profile created successfully for user:', user.email)
+      } else {
+        console.log('✅ Profile already exists for user:', user.email)
       }
+      
+      return true
     } catch (err) {
-      console.error('Error checking/creating profile:', err)
+      console.error('❌ Exception in ensureProfileExists:', err)
+      return false
+    }
+  }, [user])
+
+  const createInitialCategories = useCallback(async () => {
+    if (!user) return []
+
+    console.log('🆕 New user detected, creating initial categories')
+    
+    // First ensure the profile exists
+    const profileCreated = await ensureProfileExists()
+    if (!profileCreated) {
+      console.error('❌ Could not create/verify profile, cannot create categories')
       return []
     }
 
+    // Check if user already has categories from onboarding (localStorage first approach)
+    const localCategories = localStorage.getItem('lifeStructureCategories')
+    if (localCategories) {
+      try {
+        const parsedCategories = JSON.parse(localCategories)
+        console.log('📂 Found categories from onboarding in localStorage:', parsedCategories.length)
+        
+        // Sync these categories to Supabase if they don't exist there yet
+        const createdCategories: LocalCategory[] = []
+        for (const category of parsedCategories) {
+          try {
+            const { data, error } = await supabase
+              .from('categories')
+              .upsert([
+                {
+                  id: category.id,
+                  name: category.name,
+                  icon: category.icon || '📁',
+                  color: category.color || '#3B82F6',
+                  priority: category.priority || 0,
+                  user_id: user.id,
+                  created_at: new Date(category.createdAt || Date.now()).toISOString(),
+                  updated_at: new Date(category.updatedAt || Date.now()).toISOString(),
+                }
+              ], {
+                onConflict: 'id',
+                ignoreDuplicates: false
+              })
+              .select()
+
+            if (error) {
+              console.error('❌ Error syncing category to Supabase:', error)
+              continue
+            }
+
+            if (data && data[0]) {
+              createdCategories.push({
+                id: data[0].id,
+                name: data[0].name,
+                icon: data[0].icon || '📁',
+                color: data[0].color || '#3B82F6',
+                priority: data[0].priority || 0,
+                createdAt: new Date(data[0].created_at || new Date()),
+                updatedAt: new Date(data[0].updated_at || new Date())
+              })
+              console.log('✅ Synced category to Supabase:', data[0].name)
+            }
+          } catch (categoryError) {
+            console.error('❌ Error creating category:', categoryError)
+          }
+        }
+        
+        console.log('🎉 Successfully synced', createdCategories.length, 'categories from onboarding to Supabase')
+        return createdCategories
+      } catch (parseError) {
+        console.error('❌ Error parsing localStorage categories:', parseError)
+      }
+    }
+
+    // If no categories from onboarding, create default ones
+    console.log('📂 No onboarding categories found, creating default categories')
+    const defaultCategories = [
+      { name: 'Personal Growth', icon: '🧠', color: '#8B5CF6', priority: 1 },
+      { name: 'Work & Career', icon: '💼', color: '#3B82F6', priority: 2 },
+      { name: 'Health & Fitness', icon: '💪', color: '#EF4444', priority: 3 },
+      { name: 'Relationships', icon: '👥', color: '#10B981', priority: 4 }
+    ]
+
     const createdCategories: LocalCategory[] = []
-    // No initial categories - users will create their own
-    console.log('New user profile created, ready to create categories');
+    for (const categoryData of defaultCategories) {
+      try {
+        const categoryId = `cat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        const { data, error } = await supabase
+          .from('categories')
+          .insert([
+            {
+              id: categoryId,
+              name: categoryData.name,
+              icon: categoryData.icon,
+              color: categoryData.color,
+              priority: categoryData.priority,
+              user_id: user.id,
+            }
+          ])
+          .select()
+
+        if (error) {
+          console.error('❌ Error creating default category:', error)
+          continue
+        }
+
+        if (data && data[0]) {
+          createdCategories.push({
+            id: data[0].id,
+            name: data[0].name,
+            icon: data[0].icon || '📁',
+            color: data[0].color || '#3B82F6',
+            priority: data[0].priority || 0,
+            createdAt: new Date(data[0].created_at || new Date()),
+            updatedAt: new Date(data[0].updated_at || new Date())
+          })
+          console.log('✅ Created default category:', data[0].name)
+        }
+      } catch (categoryError) {
+        console.error('❌ Error creating category:', categoryError)
+      }
+    }
+
+    console.log('🎉 Created', createdCategories.length, 'default categories')
     return createdCategories
-  }, [user])
+  }, [user, ensureProfileExists, supabase])
 
   const refreshData = useCallback(async () => {
     if (!user) {
@@ -416,6 +551,14 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
     try {
       console.log('🎯 Creating category with data:', category)
       console.log('🎯 User ID:', user.id)
+      
+      // CRITICAL: Ensure profile exists before creating category
+      const profileExists = await ensureProfileExists()
+      if (!profileExists) {
+        console.error('❌ Cannot create category - profile creation failed')
+        setError('Profile verification failed. Please try again.')
+        return null
+      }
       
       // Check if a category with this name already exists for this user
       const { data: existingCategories, error: checkError } = await supabase
@@ -747,5 +890,6 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
     bulkUpdateItems,
     bulkDeleteItems,
     refreshData,
+    ensureProfileExists,
   }
 }

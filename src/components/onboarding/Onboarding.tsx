@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import LifelyLogo from "../LifelyLogo";
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -9,6 +10,41 @@ export default function Onboarding() {
     source: "",
     goals: [] as string[]
   });
+
+  // Load saved progress on component mount
+  useEffect(() => {
+    const savedProgress = localStorage.getItem('lifely_onboarding_step');
+    const savedData = localStorage.getItem('lifely_onboarding_data');
+    
+    if (savedProgress) {
+      const step = parseInt(savedProgress);
+      setCurrentStep(step);
+    }
+    
+    if (savedData) {
+      try {
+        const parsedData = JSON.parse(savedData);
+        setFormData(parsedData);
+      } catch (error) {
+        console.error('Error parsing saved onboarding data:', error);
+      }
+    }
+  }, []);
+
+  // Save progress whenever step or data changes
+  useEffect(() => {
+    localStorage.setItem('lifely_onboarding_step', currentStep.toString());
+    localStorage.setItem('lifely_onboarding_data', JSON.stringify(formData));
+    
+    // Save current progress URL for App.tsx redirect logic
+    const progressUrls = [
+      '/onboarding',
+      '/onboarding',
+      '/onboarding',
+      '/onboarding'
+    ];
+    localStorage.setItem('lifely_onboarding_progress', progressUrls[Math.min(currentStep, progressUrls.length - 1)]);
+  }, [currentStep, formData]);
 
   const roles = [
     {
@@ -157,54 +193,79 @@ export default function Onboarding() {
   };
 
   const handleContinue = () => {
-    // Save onboarding data to localStorage  
+    if (currentStep < 3) {
+      setCurrentStep(currentStep + 1);
+    } else {
+      // This shouldn't be reached as step 3 uses direct method selection
+      localStorage.setItem('lifely_onboarding_data', JSON.stringify(formData));
+      navigate('/onboarding/chat-mode');
+    }
+  };
+
+  const handleOnboardingMethod = (method: 'voice-memo' | 'ai-conversation') => {
     localStorage.setItem('lifely_onboarding_data', JSON.stringify(formData));
-    // Navigate to chat mode selection
-    navigate('/onboarding/chat-mode');
+    localStorage.setItem('lifely_onboarding_method', method);
+    
+    if (method === 'voice-memo') {
+      localStorage.setItem('lifely_onboarding_progress', '/onboarding/voice-memo');
+      navigate('/onboarding/voice-memo');
+    } else {
+      localStorage.setItem('lifely_onboarding_progress', '/onboarding/conversation');
+      navigate('/onboarding/conversation');
+    }
   };
 
   const steps = [
     {
       title: "What best describes you?",
       subtitle: "Help us understand your lifestyle so we can personalize your experience",
-      progress: 33
+      progress: 25
     },
     {
       title: "How did you hear about Lifely?",
       subtitle: "We're curious how you discovered us in the wild",
-      progress: 66
+      progress: 50
     },
     {
       title: "What are your main goals?",
       subtitle: "Select all that apply - this helps us set up your dashboard perfectly",
+      progress: 75
+    },
+    {
+      title: "Choose your setup method",
+      subtitle: "How would you like to set up your personalized dashboard?",
       progress: 100
     }
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-lifeos-light via-white to-blue-50 flex items-center justify-center p-6">
-      {/* Background Elements */}
+    <div className="min-h-screen w-full bg-gradient-to-br from-lifeos-50 via-lifeos-100 to-lifeos-200 font-sans overflow-hidden">
+      {/* Enhanced Background Elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-lifeos-primary/20 to-lifeos-secondary/20 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-lifeos-secondary/20 to-purple-600/20 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
+        <div className="absolute top-20 left-10 w-20 h-20 bg-gradient-to-br from-lifeos-primary/20 to-lifeos-secondary/20 rounded-full blur-xl animate-float" style={{animationDelay: '0s'}}></div>
+        <div className="absolute top-40 right-20 w-16 h-16 bg-gradient-to-br from-lifeos-secondary/30 to-purple-400/30 rounded-lg blur-lg animate-pulse" style={{animationDelay: '1s', animationDuration: '6s'}}></div>
+        <div className="absolute bottom-32 left-1/4 w-12 h-12 bg-gradient-to-br from-lifeos-primary/25 to-blue-400/25 rounded-full blur-md animate-ping" style={{animationDelay: '2s', animationDuration: '8s'}}></div>
+        <div className="absolute top-1/3 right-1/3 w-24 h-24 bg-gradient-to-br from-purple-400/20 to-lifeos-secondary/20 rounded-xl blur-lg animate-float-delayed"></div>
+        <div className="absolute bottom-20 right-10 w-14 h-14 bg-gradient-to-br from-lifeos-primary/30 to-pink-400/30 rounded-full blur-sm animate-bounce" style={{animationDelay: '4s', animationDuration: '7s'}}></div>
+        
+        {/* Large Animated Gradient Orbs */}
+        <div className="absolute top-1/4 left-1/2 transform -translate-x-1/2 w-96 h-96 bg-gradient-radial from-lifeos-primary/10 via-lifeos-secondary/5 to-transparent rounded-full blur-3xl animate-spin" style={{animationDuration: '20s'}}></div>
+        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-gradient-radial from-lifeos-secondary/15 via-purple-400/8 to-transparent rounded-full blur-2xl animate-pulse" style={{animationDuration: '15s'}}></div>
       </div>
 
-      <div className="w-full max-w-4xl relative">
+      <div className="relative z-10 min-h-screen flex items-center justify-center p-6">
+        <div className="w-full max-w-4xl relative">
         {/* Header */}
         <div className="text-center mb-12">
-          <div className="flex items-center justify-center gap-2 mb-6">
-            <div className="w-12 h-12 bg-gradient-to-br from-lifeos-primary to-lifeos-secondary rounded-xl flex items-center justify-center shadow-lg">
-              <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-              </svg>
-            </div>
+          <div className="flex items-center justify-center gap-3 mb-6">
+            <LifelyLogo size={48} />
             <span className="text-2xl font-bold text-lifeos-dark">Lifely</span>
           </div>
 
           {/* Progress Bar */}
           <div className="w-full max-w-md mx-auto mb-8">
             <div className="flex items-center justify-between text-sm text-lifeos-gray-400 mb-2">
-              <span>Step {currentStep + 1} of 3</span>
+              <span>Step {currentStep + 1} of 4</span>
               <span>{steps[currentStep].progress}%</span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2">
@@ -339,16 +400,73 @@ export default function Onboarding() {
               )}
             </div>
           )}
+
+          {/* Step 3: Onboarding Method Selection */}
+          {currentStep === 3 && (
+            <div className="space-y-6">
+              <div className="grid gap-6">
+                {/* Voice Memo Option */}
+                <div
+                  onClick={() => handleOnboardingMethod('voice-memo')}
+                  className="p-8 rounded-2xl border cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-xl group border-green-200 hover:border-green-400 bg-gradient-to-br from-green-50 to-emerald-50"
+                >
+                  <div className="flex items-start gap-6">
+                    <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-500 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                      <span className="text-2xl">🎤</span>
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-3">
+                        <h3 className="text-xl font-semibold text-gray-800">Voice Memo Setup</h3>
+                        <span className="bg-green-100 text-green-700 text-xs font-medium px-3 py-1 rounded-full">Recommended</span>
+                      </div>
+                      <p className="text-gray-600 mb-4 leading-relaxed">
+                        Record yourself answering questions about your life and goals.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* AI Conversation Option */}
+                <div
+                  onClick={() => handleOnboardingMethod('ai-conversation')}
+                  className="p-8 rounded-2xl border cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-xl group border-blue-200 hover:border-blue-400 bg-gradient-to-br from-blue-50 to-indigo-50"
+                >
+                  <div className="flex items-start gap-6">
+                    <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                      <span className="text-2xl">🤖</span>
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-3">
+                        <h3 className="text-xl font-semibold text-gray-800">AI Conversation</h3>
+                      </div>
+                      <p className="text-gray-600 mb-4 leading-relaxed">
+                        Chat with our AI assistant about your workflow and goals.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-center pt-4">
+                <p className="text-sm text-gray-500">
+                  Both methods create the same personalized dashboard. Choose what feels right for you!
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Navigation */}
-        {currentStep < 2 && (
+        {currentStep < 3 && (
           <div className="text-center mt-8">
             <p className="text-lifeos-gray-400">
-              {currentStep === 0 ? "Click any option to continue" : "Almost there! One more question..."}
+              {currentStep === 0 ? "Click any option to continue" : 
+               currentStep === 1 ? "Almost there! Two more questions..." : 
+               "Last step! Choose your setup method..."}
             </p>
           </div>
         )}
+        </div>
       </div>
     </div>
   );

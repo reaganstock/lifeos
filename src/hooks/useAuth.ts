@@ -61,7 +61,7 @@ export function useAuth(): AuthState & AuthActions {
         setLoading(false)
         setInitialized(true)
 
-        // Handle profile creation on sign up
+        // Handle profile creation on sign up only  
         if ((event as string) === 'SIGNED_UP' && session?.user) {
           await createProfile(session.user)
         }
@@ -76,6 +76,8 @@ export function useAuth(): AuthState & AuthActions {
 
   const createProfile = async (user: User) => {
     try {
+      console.log('👤 Creating/updating profile for user:', user.email)
+      
       const { error } = await supabase
         .from('profiles')
         .upsert([
@@ -84,16 +86,22 @@ export function useAuth(): AuthState & AuthActions {
             email: user.email!,
             full_name: user.user_metadata?.full_name || '',
             avatar_url: user.user_metadata?.avatar_url || null,
+            has_completed_onboarding: false,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           },
-        ])
+        ], {
+          onConflict: 'id',
+          ignoreDuplicates: false
+        })
 
       if (error) {
-        console.error('Error creating profile:', error)
+        console.error('❌ Error creating/updating profile:', error)
+      } else {
+        console.log('✅ Profile created/updated successfully for:', user.email)
       }
     } catch (error) {
-      console.error('Error in createProfile:', error)
+      console.error('❌ Exception in createProfile:', error)
     }
   }
 
@@ -142,8 +150,13 @@ export function useAuth(): AuthState & AuthActions {
 
   const resetPassword = async (email: string) => {
     try {
+      const isDevelopment = process.env.NODE_ENV === 'development'
+      const redirectTo = isDevelopment 
+        ? `${window.location.origin}/reset-password`
+        : `https://app.lifely.dev/reset-password`
+      
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `https://app.lifely.dev/reset-password`,
+        redirectTo,
       })
 
       return { error }

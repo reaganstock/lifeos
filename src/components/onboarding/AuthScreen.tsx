@@ -104,10 +104,16 @@ export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
 
     try {
       console.log(`🔐 Starting ${provider} OAuth flow...`)
+      // Always redirect to auth callback URL - we'll handle new vs returning users there
+      const isDevelopment = process.env.NODE_ENV === 'development';
+      const redirectUrl = isDevelopment 
+        ? `${window.location.origin}/auth/callback` 
+        : `https://app.lifely.dev/auth/callback`;
+      
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `https://app.lifely.dev/dashboard`,
+          redirectTo: redirectUrl,
         },
       })
 

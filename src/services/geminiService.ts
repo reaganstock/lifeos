@@ -2196,6 +2196,11 @@ Please specify your preference or say "create anyway" to override.`,
       
       // Fix common Gemini JSON malformation patterns
       cleanedJson = cleanedJson
+        // Fix unescaped newlines and control characters in string values (CRITICAL FIX)
+        .replace(/\\n/g, '\\\\n')  // Escape already escaped newlines
+        .replace(/\n/g, '\\n')     // Escape literal newlines
+        .replace(/\r/g, '\\r')     // Escape carriage returns
+        .replace(/\t/g, '\\t')     // Escape tabs
         // Fix duplicate key patterns like "type": "note": "note" -> "type": "note"
         .replace(/"(\w+)":\s*"([^"]+)":\s*"[^"]*"/g, '"$1": "$2"')
         // Fix missing commas between properties
