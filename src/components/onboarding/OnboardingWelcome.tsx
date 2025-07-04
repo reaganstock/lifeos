@@ -70,20 +70,20 @@ const OnboardingWelcome: React.FC<OnboardingWelcomeProps> = ({ onNext }) => {
 
   if (isComplete) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 flex items-center justify-center p-4">
         <div className="text-center">
-          <div className="w-16 h-16 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6">
+          <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full flex items-center justify-center mx-auto mb-6">
             <Sparkles className="w-8 h-8 text-white" />
           </div>
           <h2 className="text-2xl font-bold text-gray-800 mb-4">Perfect! Let's continue...</h2>
-          <div className="w-8 h-1 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full mx-auto animate-pulse"></div>
+          <div className="w-8 h-1 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full mx-auto animate-pulse"></div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50 flex items-center justify-center p-4">
       <div className="max-w-2xl w-full">
         {/* Progress Bar */}
         <div className="mb-8">
@@ -93,7 +93,7 @@ const OnboardingWelcome: React.FC<OnboardingWelcomeProps> = ({ onNext }) => {
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div 
-              className="bg-gradient-to-r from-indigo-500 to-purple-600 h-2 rounded-full transition-all duration-500 ease-out"
+              className="bg-gradient-to-r from-blue-600 to-blue-700 h-2 rounded-full transition-all duration-500 ease-out"
               style={{ width: `${((currentStep + 1) / questions.length) * 100}%` }}
             />
           </div>
@@ -124,15 +124,15 @@ const OnboardingWelcome: React.FC<OnboardingWelcomeProps> = ({ onNext }) => {
                 onClick={() => handleOptionSelect(option.value)}
                 className={`group relative p-6 rounded-2xl border-2 transition-all duration-300 transform hover:scale-[1.02] hover:shadow-xl ${
                   isSelected
-                    ? 'border-indigo-500 bg-gradient-to-r from-indigo-50 to-purple-50 shadow-lg'
-                    : 'border-gray-200 bg-white/80 backdrop-blur-sm hover:border-indigo-300'
+                    ? 'border-blue-500 bg-gradient-to-r from-blue-50 to-blue-100 shadow-lg'
+                    : 'border-gray-200 bg-white/80 backdrop-blur-sm hover:border-blue-300'
                 }`}
               >
                 <div className="flex items-center space-x-4">
                   <div className={`p-3 rounded-xl transition-all duration-300 ${
                     isSelected
-                      ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white'
-                      : 'bg-gray-100 text-gray-600 group-hover:bg-indigo-100 group-hover:text-indigo-600'
+                      ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white'
+                      : 'bg-gray-100 text-gray-600 group-hover:bg-blue-100 group-hover:text-blue-600'
                   }`}>
                     <Icon className="w-6 h-6" />
                   </div>
@@ -146,14 +146,14 @@ const OnboardingWelcome: React.FC<OnboardingWelcomeProps> = ({ onNext }) => {
                   </div>
                   <ChevronRight className={`w-5 h-5 transition-all duration-300 ${
                     isSelected
-                      ? 'text-indigo-600 transform translate-x-1'
-                      : 'text-gray-400 group-hover:text-indigo-600 group-hover:transform group-hover:translate-x-1'
+                      ? 'text-blue-600 transform translate-x-1'
+                      : 'text-gray-400 group-hover:text-blue-600 group-hover:transform group-hover:translate-x-1'
                   }`} />
                 </div>
 
                 {/* Selection indicator */}
                 {isSelected && (
-                  <div className="absolute -top-2 -right-2 w-6 h-6 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                  <div className="absolute -top-2 -right-2 w-6 h-6 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full flex items-center justify-center">
                     <div className="w-2 h-2 bg-white rounded-full"></div>
                   </div>
                 )}

@@ -213,7 +213,7 @@ export default function OnboardingComplete() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 dark:from-gray-900 dark:to-indigo-900">
       {/* Header */}
-      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 py-12">
+      <div className="bg-gradient-to-r from-blue-600 to-blue-700 py-12">
         <div className="max-w-4xl mx-auto text-center px-8">
           <div className="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-6">
             <LifelyLogo size={48} />
@@ -221,7 +221,7 @@ export default function OnboardingComplete() {
           <h1 className="text-4xl font-bold text-white mb-4">
             Your Personalized Dashboard is Ready!
           </h1>
-          <p className="text-indigo-100 text-lg max-w-2xl mx-auto">
+          <p className="text-blue-100 text-lg max-w-2xl mx-auto">
             Based on your onboarding responses, we've created a custom life management system 
             that matches your unique goals, preferences, and lifestyle.
           </p>
@@ -291,7 +291,7 @@ export default function OnboardingComplete() {
                           <div 
                             key={i}
                             className={`w-2 h-2 rounded-full ${
-                              i <= Math.min(category.priority || 0, 4) ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'
+                              i <= Math.min(category.priority || 0, 4) ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'
                             }`}
                           />
                         ))}
@@ -366,11 +366,11 @@ export default function OnboardingComplete() {
               <Sparkles className="w-6 h-6" />
               Personal Insights
             </h2>
-            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-500/20 dark:to-purple-500/20 rounded-xl p-6 border border-indigo-200 dark:border-indigo-400/30 shadow-lg">
+            <div className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-500/20 dark:to-blue-500/20 rounded-xl p-6 border border-blue-200 dark:border-blue-400/30 shadow-lg">
               <div className="space-y-3">
                 {(extractedData.personalInsights || []).map((insight, index) => (
                   <div key={index} className="flex items-start gap-3">
-                    <div className="w-2 h-2 bg-indigo-500 rounded-full mt-2 flex-shrink-0" />
+                    <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0" />
                     <p className="text-slate-700 dark:text-slate-200">{insight}</p>
                   </div>
                 ))}
@@ -391,7 +391,7 @@ export default function OnboardingComplete() {
           <button
             onClick={createDashboard}
             disabled={isCreatingDashboard}
-            className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-12 py-4 rounded-xl font-semibold text-lg transition-all duration-300 hover:scale-105 hover:shadow-lg flex items-center gap-3 mx-auto disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-12 py-4 rounded-xl font-semibold text-lg transition-all duration-300 hover:scale-105 hover:shadow-lg flex items-center gap-3 mx-auto disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isCreatingDashboard ? (
               <>
