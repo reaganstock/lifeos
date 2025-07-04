@@ -666,10 +666,25 @@ function AppContent() {
     // Listen for immediate AI function refresh events
     window.addEventListener('forceDataRefresh', handleStorageSync);
     
+    // Listen for onboarding completion to update state immediately
+    const handleOnboardingComplete = () => {
+      if (user?.id) {
+        console.log('🎉 Onboarding completion event detected, updating app state');
+        const completed = getUserData(user.id, 'lifely_onboarding_completed', false);
+        setIsOnboardingCompleted(completed);
+        // Force refresh data to get new categories/items
+        if (refreshData) {
+          refreshData();
+        }
+      }
+    };
+    window.addEventListener('onboardingComplete', handleOnboardingComplete);
+    
     return () => {
       window.removeEventListener('storage', handleStorageSync);
       window.removeEventListener('hybridSyncComplete', handleStorageSync);
       window.removeEventListener('forceDataRefresh', handleStorageSync);
+      window.removeEventListener('onboardingComplete', handleOnboardingComplete);
     };
   }, [user?.id]);
 
