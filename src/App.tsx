@@ -93,72 +93,52 @@ function AppContent() {
     getUserData(user?.id || null, 'lifely_onboarding_progress', '/onboarding')
   );
   
-  // Check Supabase for onboarding completion as fallback/sync
+  // SIMPLIFIED: Check onboarding completion - prioritize localStorage, fallback to categories check
   useEffect(() => {
-    const checkOnboardingStatusInSupabase = async () => {
-      if (!user?.id || !dataInitialized) return;
+    const checkOnboardingStatus = async () => {
+      if (!user?.id) return;
       
-      // If localStorage says completed, trust it (faster)
+      console.log('🔍 Checking onboarding status for user:', user.email);
+      
+      // First check localStorage (fastest, most reliable)
       const localCompleted = getUserData(user.id, 'lifely_onboarding_completed', false);
       if (localCompleted) {
+        console.log('✅ User completed onboarding (localStorage):', user.email);
         setIsOnboardingCompleted(true);
         return;
       }
       
+      // Wait for data to initialize before checking Supabase
+      if (!dataInitialized) {
+        console.log('⏳ Waiting for data initialization...');
+        return;
+      }
+      
+      // Check if user has categories (indicates previous use)
       try {
-        console.log('🔍 Checking onboarding status in Supabase for user:', user.email);
-        
-        // Check both profile status AND if user has categories (for existing users)
-        const [profileResult, categoriesResult] = await Promise.all([
-          supabase
-            .from('profiles')
-            .select('has_completed_onboarding')
-            .eq('id', user.id)
-            .single(),
-          supabase
-            .from('categories')
-            .select('id')
-            .eq('user_id', user.id)
-            .limit(1)
-        ]);
+        const { data: categories, error } = await supabase
+          .from('categories')
+          .select('id')
+          .eq('user_id', user.id)
+          .limit(1);
           
-        if (profileResult.error && profileResult.error.code !== 'PGRST116') {
-          console.warn('⚠️ Could not check profile onboarding status:', profileResult.error);
-        }
-        
-        if (categoriesResult.error) {
-          console.warn('⚠️ Could not check categories:', categoriesResult.error);
-        }
-        
-        // User has completed onboarding if:
-        // 1. Profile explicitly says so, OR
-        // 2. User has categories (existing user logging back in)
-        const hasProfileCompleted = profileResult.data && 'has_completed_onboarding' in profileResult.data 
-          ? profileResult.data.has_completed_onboarding 
-          : false;
-        const hasCategories = categoriesResult.data && categoriesResult.data.length > 0;
-        
-        if (hasProfileCompleted || hasCategories) {
-          console.log('✅ User has completed onboarding:', {
-            profileCompleted: hasProfileCompleted,
-            hasCategories: hasCategories,
-            email: user.email
-          });
+        if (!error && categories && categories.length > 0) {
+          console.log('✅ Existing user with categories - skip onboarding:', user.email);
           setUserData(user.id, 'lifely_onboarding_completed', true);
           setIsOnboardingCompleted(true);
         } else {
           console.log('📝 New user - needs onboarding:', user.email);
-          // Reset onboarding progress for new users to ensure they start from the beginning
           setUserData(user.id, 'lifely_onboarding_progress', '/onboarding');
           setOnboardingProgress('/onboarding');
           setIsOnboardingCompleted(false);
         }
       } catch (error) {
-        console.warn('⚠️ Exception checking onboarding status in Supabase:', error);
+        console.warn('⚠️ Error checking categories, assuming new user:', error);
+        setIsOnboardingCompleted(false);
       }
     };
     
-    checkOnboardingStatusInSupabase();
+    checkOnboardingStatus();
   }, [user?.id, user?.email, dataInitialized]);
   
   // Removed showAuthModal - now using AuthScreen directly
@@ -672,7 +652,37 @@ function AppContent() {
         console.log('🎉 Onboarding completion event detected, updating app state');
         const completed = getUserData(user.id, 'lifely_onboarding_completed', false);
         setIsOnboardingCompleted(completed);
-        // Force refresh data to get new categories/items
+        
+        // CRITICAL: Reload categories and items from localStorage after onboarding
+        const userCategories = getUserData(user.id, 'lifeStructureCategories', []);
+        const userItems = getUserData(user.id, 'lifeStructureItems', []);
+        
+        console.log('🔄 Reloading categories after onboarding:', userCategories.length);
+        console.log('🔄 Reloading items after onboarding:', userItems.length);
+        
+        // Format and set categories
+        const formattedCategories = userCategories.map((category: any) => ({
+          ...category,
+          createdAt: category.createdAt ? new Date(category.createdAt) : new Date(),
+          updatedAt: category.updatedAt ? new Date(category.updatedAt) : new Date()
+        }));
+        setLocalCategories(formattedCategories);
+        
+        // Format and set items
+        const formattedItems = userItems.map((item: any) => ({
+          ...item,
+          createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
+          updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
+          dueDate: item.dueDate ? new Date(item.dueDate) : undefined,
+          dateTime: item.dateTime ? new Date(item.dateTime) : undefined,
+          metadata: {
+            ...item.metadata,
+            eventDate: item.metadata?.eventDate ? new Date(item.metadata.eventDate) : undefined
+          }
+        }));
+        setLocalItems(formattedItems);
+        
+        // Force refresh data to get new categories/items from Supabase too
         if (refreshData) {
           refreshData();
         }
