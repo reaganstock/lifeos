@@ -89,7 +89,9 @@ function AppContent() {
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState(() => 
     getUserData(user?.id || null, 'lifely_onboarding_completed', false)
   );
-  const onboardingProgress = getUserData(user?.id || null, 'lifely_onboarding_progress', '/onboarding');
+  const [onboardingProgress, setOnboardingProgress] = useState(() => 
+    getUserData(user?.id || null, 'lifely_onboarding_progress', '/onboarding')
+  );
   
   // Check Supabase for onboarding completion as fallback/sync
   useEffect(() => {
@@ -146,6 +148,10 @@ function AppContent() {
           setIsOnboardingCompleted(true);
         } else {
           console.log('📝 New user - needs onboarding:', user.email);
+          // Reset onboarding progress for new users to ensure they start from the beginning
+          setUserData(user.id, 'lifely_onboarding_progress', '/onboarding');
+          setOnboardingProgress('/onboarding');
+          setIsOnboardingCompleted(false);
         }
       } catch (error) {
         console.warn('⚠️ Exception checking onboarding status in Supabase:', error);
@@ -187,6 +193,12 @@ function AppContent() {
     if (user?.id) {
       console.log('🔄 Loading user-specific data for:', user.email);
       
+      // Update onboarding state for this user
+      const userCompleted = getUserData(user.id, 'lifely_onboarding_completed', false);
+      const userProgress = getUserData(user.id, 'lifely_onboarding_progress', '/onboarding');
+      setIsOnboardingCompleted(userCompleted);
+      setOnboardingProgress(userProgress);
+      
       // Load user-specific items
       const userItems = getUserData(user.id, 'lifeStructureItems', []);
       const formattedItems = userItems.map((item: any) => ({
@@ -216,6 +228,8 @@ function AppContent() {
       // Clear data when no user
       setLocalItems([]);
       setLocalCategories([]);
+      setIsOnboardingCompleted(false);
+      setOnboardingProgress('/onboarding');
     }
   }, [user?.id, user?.email]);
 
