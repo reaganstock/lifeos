@@ -132,18 +132,58 @@ export default function OnboardingProcessingNew() {
         }).join(', ')}\\n\\n`;
       }
 
+      // Analyze context richness for the agent
+      const contextRichness = {
+        hasConversation: conversationText.length > 0,
+        hasDocuments: documents.length > 0,
+        hasInitialData: !!initialData,
+        hasIntegrations: connectedIntegrations.length > 0,
+        totalContextLength: fullContext.length
+      };
+      
+      let contextQuality = 'minimal';
+      if (contextRichness.hasConversation && contextRichness.hasDocuments && contextRichness.hasIntegrations) {
+        contextQuality = 'rich';
+      } else if (contextRichness.hasConversation || (contextRichness.hasDocuments && contextRichness.hasIntegrations)) {
+        contextQuality = 'moderate';
+      }
+      
+      // Add context quality assessment to help the agent
+      fullContext += `\n\nCONTEXT QUALITY ASSESSMENT:
+- Input richness: ${contextQuality}
+- Has conversation responses: ${contextRichness.hasConversation}
+- Has uploaded documents: ${contextRichness.hasDocuments} (${documents.length} files)
+- Has connected integrations: ${contextRichness.hasIntegrations} (${connectedIntegrations.join(', ') || 'none'})
+- Onboarding type: ${onboardingType || 'unknown'}
+
+PERSONALIZATION GUIDANCE:
+${contextQuality === 'rich' ? 'Create highly specific, detailed personalization using all available context.' :
+  contextQuality === 'moderate' ? 'Create targeted personalization focusing on the strongest available signals.' :
+  'Create foundational personalization around whatever specific details are available, avoiding generic categories.'}`;
+
       // Debug: Show what context we're working with
-      console.log('📋 ONBOARDING CONTEXT ANALYSIS:');
-      console.log('- Conversation text length:', conversationText.length);
-      console.log('- Document context length:', documentContext.length);
-      console.log('- Has initial data:', !!initialData);
+      console.log('📋 COMPREHENSIVE ONBOARDING ANALYSIS:');
+      console.log('- Context quality:', contextQuality);
+      console.log('- Onboarding type:', onboardingType);
+      console.log('- Conversation length:', conversationText.length);
+      console.log('- Documents uploaded:', documents.length);
       console.log('- Connected integrations:', connectedIntegrations.length);
-      console.log('- Full context preview:', fullContext.substring(0, 200) + '...');
+      console.log('- Total context length:', fullContext.length);
+      console.log('- Context preview:', fullContext.substring(0, 300) + '...');
       
       if (!fullContext.trim()) {
-        console.warn('⚠️ No onboarding context found - user may have skipped all steps');
-        // For minimal context users, create a basic context
-        fullContext = 'USER PROFILE: New user seeking life organization and productivity improvement. Looking to establish better systems for managing tasks, goals, and daily routines.';
+        console.warn('⚠️ No onboarding context found - creating basic context for new user');
+        fullContext = `USER PROFILE: New user seeking life organization and productivity improvement. Looking to establish better systems for managing tasks, goals, and daily routines.
+
+CONTEXT QUALITY ASSESSMENT:
+- Input richness: minimal
+- Has conversation responses: false
+- Has uploaded documents: false (0 files)
+- Has connected integrations: false (none)
+- Onboarding type: unknown
+
+PERSONALIZATION GUIDANCE:
+Create foundational categories focused on general productivity and life organization.`;
       }
 
       // Step 1: Analyze responses
@@ -813,27 +853,55 @@ Return ONLY pure JSON (no markdown, no function calls):
   // Main orchestration function using Gemini Agent Mode
   const createCategories = async (fullContext: string) => {
     try {
-      console.log('🤖 Using Gemini Agent Mode for comprehensive personalization...');
+      console.log('🤖 Using Gemini Agent Mode for comprehensive dashboard creation...');
       
-      // Single agent prompt that handles everything intelligently
-      const agentPrompt = `You are a life management AI agent. Create a comprehensive, personalized dashboard for this user based on their context.
+      // Enhanced agent prompt that handles ALL onboarding scenarios intelligently
+      const agentPrompt = `You are a life management AI agent creating a comprehensive, personalized dashboard. Analyze ALL available user context and create a cohesive life management system.
 
 USER CONTEXT:
 ${fullContext}
 
-AGENT INSTRUCTIONS:
-1. Analyze the user's context to extract themes, interests, tools, projects, and goals
-2. Create 4-6 specific, personalized categories (NOT generic ones)
-3. For each category, create 2-3 goals, 1-2 routines, 2-3 todos, 1-2 notes, and 1-2 events
-4. Make everything specific to their actual situation - use exact project names, tools, interests
-5. If minimal context, focus on what IS mentioned and build around it
+CONTEXT ANALYSIS INSTRUCTIONS:
+1. **Assess input richness**: Determine if context is rich (detailed answers + files + integrations), moderate (some answers + maybe files), or minimal (mostly files/brief responses)
+2. **Extract key themes**: Look for specific projects, tools, interests, goals, challenges, and life areas mentioned
+3. **Identify patterns**: Notice connections between different inputs (e.g., mentions Notion + productivity goals = workspace optimization focus)
+4. **Consider integrations**: Factor in connected apps to understand their existing workflow preferences
 
-CRITICAL REQUIREMENTS:
-- Categories must be SPECIFIC to their life (e.g., "Notion Workspace Optimization" not "Productivity")
-- Goals must be actionable with realistic timelines (1-6 months)
-- Todos must be immediate actions for THIS WEEK
-- Notes must provide real value (templates, best practices, resources)
-- Events must be relevant milestones or planning sessions (1-7 days out)
+PERSONALIZATION REQUIREMENTS:
+1. **Categories (4-6)**: Create SPECIFIC categories based on their actual life areas
+   - Rich context: Use exact project names, company names, specific interests
+   - Moderate context: Combine mentioned areas with logical workflow categories  
+   - Minimal context: Build around whatever IS mentioned, avoid pure generic categories
+   
+2. **Goals (2-3 per category)**: Actionable objectives with realistic timelines
+   - Reference specific projects, tools, or interests they mentioned
+   - Mix process goals (habits) with outcome goals (results)
+   - Timelines: 1-3 months for tasks, 3-6 months for major goals
+   
+3. **Routines (1-2 per category)**: Daily/weekly habits that support their goals
+   - Consider their mentioned schedule preferences or existing tools
+   - Align with connected integrations (e.g., calendar integration = scheduling routines)
+   
+4. **Todos (2-3 per category)**: Immediate actions for THIS WEEK
+   - Create specific next steps based on their mentioned projects/goals
+   - If tools mentioned: setup/optimization tasks for those tools
+   - Focus on quick wins that build momentum
+   
+5. **Notes (1-2 per category)**: Valuable reference content
+   - Templates, best practices, or resource lists relevant to their situation
+   - If specific tools mentioned: optimization guides for those tools
+   - Strategic insights based on their mentioned interests/projects
+   
+6. **Events (1-2 per category)**: Relevant calendar items
+   - Planning sessions, milestone reviews, or deadline reminders
+   - Consider connected calendar integrations for scheduling preferences
+   - Set dates 1-7 days out for immediate relevance
+
+QUALITY STANDARDS:
+- **Specificity over generic**: Always prefer "ColdOutbound.io Growth Strategy" over "Business Development"
+- **Context consistency**: Ensure all items relate back to something they actually mentioned
+- **Actionable content**: Every item should be immediately useful and implementable
+- **Workflow integration**: Consider their connected apps and tools in recommendations
 
 Return ONLY pure JSON in this exact format:
 {
@@ -887,50 +955,130 @@ Return ONLY pure JSON in this exact format:
       return agentResult;
       
     } catch (error) {
-      console.error('❌ Multi-step category creation failed:', error);
+      console.error('❌ Gemini Agent dashboard creation failed:', error);
       
-      // Intelligent fallback based on whatever context we do have
-      console.log('🤖 Creating intelligent fallback categories based on available context...');
+      // Intelligent fallback system for all onboarding scenarios
+      console.log('🤖 Creating intelligent fallback dashboard based on available context...');
       
-      // Try to extract any useful info from the context for fallback
+      // Analyze context for keywords and themes
       const contextLower = fullContext.toLowerCase();
-      const hasBusinessContext = contextLower.includes('business') || contextLower.includes('company') || contextLower.includes('startup') || contextLower.includes('revenue');
-      const hasDevContext = contextLower.includes('code') || contextLower.includes('dev') || contextLower.includes('programming') || contextLower.includes('app');
-      const hasContentContext = contextLower.includes('content') || contextLower.includes('youtube') || contextLower.includes('writing') || contextLower.includes('blog');
-      const hasDesignContext = contextLower.includes('design') || contextLower.includes('figma') || contextLower.includes('ui') || contextLower.includes('ux');
-      const hasStudentContext = contextLower.includes('student') || contextLower.includes('university') || contextLower.includes('college') || contextLower.includes('study');
+      const hasBusinessContext = contextLower.includes('business') || contextLower.includes('company') || contextLower.includes('startup') || contextLower.includes('revenue') || contextLower.includes('entrepreneur');
+      const hasDevContext = contextLower.includes('code') || contextLower.includes('dev') || contextLower.includes('programming') || contextLower.includes('app') || contextLower.includes('software');
+      const hasContentContext = contextLower.includes('content') || contextLower.includes('youtube') || contextLower.includes('writing') || contextLower.includes('blog') || contextLower.includes('creator');
+      const hasDesignContext = contextLower.includes('design') || contextLower.includes('figma') || contextLower.includes('ui') || contextLower.includes('ux') || contextLower.includes('creative');
+      const hasStudentContext = contextLower.includes('student') || contextLower.includes('university') || contextLower.includes('college') || contextLower.includes('study') || contextLower.includes('academic');
+      const hasFitnessContext = contextLower.includes('fitness') || contextLower.includes('workout') || contextLower.includes('gym') || contextLower.includes('health') || contextLower.includes('exercise');
+      const hasFinanceContext = contextLower.includes('finance') || contextLower.includes('investment') || contextLower.includes('money') || contextLower.includes('budget') || contextLower.includes('financial');
+      
+      // Check for specific tools/platforms mentioned
+      const hasNotionContext = contextLower.includes('notion');
+      const fallbackConnectedIntegrations = getUserData(user?.id || '', 'lifely_onboarding_integrations', []);
+      const hasCalendarContext = fallbackConnectedIntegrations.some((int: string) => int.includes('calendar'));
+      const hasProductivityTools = contextLower.includes('productivity') || contextLower.includes('task') || contextLower.includes('organization');
       
       let fallbackCategories = [];
       
+      // Create context-aware categories
       if (hasBusinessContext) {
-        fallbackCategories.push({ id: 'business-ops', name: 'Business Operations', purpose: 'Grow and scale business activities', priority: 9, icon: 'briefcase', color: 'blue' });
+        fallbackCategories.push({ 
+          id: 'business-growth', 
+          name: hasNotionContext ? 'Business Operations & Planning' : 'Business Development', 
+          purpose: 'Scale business activities and achieve growth goals', 
+          priority: 9, 
+          icon: 'briefcase', 
+          color: 'blue' 
+        });
       }
       if (hasDevContext) {
-        fallbackCategories.push({ id: 'development', name: 'Development Projects', purpose: 'Code, build and ship projects', priority: 8, icon: 'computer', color: 'green' });
+        fallbackCategories.push({ 
+          id: 'development-projects', 
+          name: 'Development & Engineering', 
+          purpose: 'Build, code, and ship software projects', 
+          priority: 8, 
+          icon: 'computer', 
+          color: 'green' 
+        });
       }
       if (hasContentContext) {
-        fallbackCategories.push({ id: 'content-creation', name: 'Content Creation', purpose: 'Create and share valuable content', priority: 7, icon: 'video', color: 'red' });
+        fallbackCategories.push({ 
+          id: 'content-strategy', 
+          name: 'Content Creation & Strategy', 
+          purpose: 'Create valuable content and grow audience', 
+          priority: 7, 
+          icon: 'video', 
+          color: 'red' 
+        });
       }
       if (hasDesignContext) {
-        fallbackCategories.push({ id: 'design-work', name: 'Design Work', purpose: 'Create beautiful and functional designs', priority: 6, icon: 'palette', color: 'purple' });
+        fallbackCategories.push({ 
+          id: 'design-creative', 
+          name: 'Design & Creative Work', 
+          purpose: 'Create beautiful and functional designs', 
+          priority: 6, 
+          icon: 'palette', 
+          color: 'purple' 
+        });
       }
       if (hasStudentContext) {
-        fallbackCategories.push({ id: 'academics', name: 'Academic Excellence', purpose: 'Excel in studies and coursework', priority: 9, icon: 'graduation-cap', color: 'indigo' });
+        fallbackCategories.push({ 
+          id: 'academic-success', 
+          name: 'Academic Excellence', 
+          purpose: 'Excel in studies and achieve academic goals', 
+          priority: 9, 
+          icon: 'graduation-cap', 
+          color: 'indigo' 
+        });
+      }
+      if (hasFitnessContext) {
+        fallbackCategories.push({ 
+          id: 'fitness-health', 
+          name: 'Fitness & Health', 
+          purpose: 'Maintain physical fitness and overall wellbeing', 
+          priority: 8, 
+          icon: 'dumbbell', 
+          color: 'orange' 
+        });
+      }
+      if (hasFinanceContext) {
+        fallbackCategories.push({ 
+          id: 'financial-growth', 
+          name: 'Financial Management', 
+          purpose: 'Manage finances and build wealth', 
+          priority: 7, 
+          icon: 'dollar-sign', 
+          color: 'green' 
+        });
       }
       
-      // Always add these foundational categories
-      fallbackCategories.push(
-        { id: 'personal-systems', name: 'Personal Systems', purpose: 'Organize life and optimize workflows', priority: 5, icon: 'settings', color: 'gray' },
-        { id: 'health-wellness', name: 'Health & Wellness', purpose: 'Maintain physical and mental wellbeing', priority: 4, icon: 'heart', color: 'pink' }
-      );
+      // Always include productivity/organization if tools are mentioned or minimal context
+      if (hasProductivityTools || hasNotionContext || hasCalendarContext || fallbackCategories.length === 0) {
+        fallbackCategories.push({ 
+          id: 'productivity-systems', 
+          name: hasNotionContext ? 'Notion Workspace & Systems' : 'Productivity & Organization', 
+          purpose: 'Optimize workflows and organize life effectively', 
+          priority: 6, 
+          icon: 'settings', 
+          color: 'gray' 
+        });
+      }
       
-      // If we have no specific context, use general but useful categories
-      if (fallbackCategories.length <= 2) {
+      // Always include personal development
+      fallbackCategories.push({ 
+        id: 'personal-development', 
+        name: 'Personal Growth & Development', 
+        purpose: 'Continuous learning and self-improvement', 
+        priority: 5, 
+        icon: 'brain', 
+        color: 'pink' 
+      });
+      
+      // If still no specific context, use general productive categories
+      if (fallbackCategories.length <= 1) {
         fallbackCategories = [
-          { id: 'productivity', name: 'Productivity & Focus', purpose: 'Optimize workflow and get things done', priority: 9, icon: 'target', color: 'blue' },
-          { id: 'skill-development', name: 'Skill Development', purpose: 'Learn and grow professionally', priority: 8, icon: 'book', color: 'green' },
-          { id: 'personal-projects', name: 'Personal Projects', purpose: 'Work on meaningful side projects', priority: 7, icon: 'rocket', color: 'purple' },
-          { id: 'health-wellness', name: 'Health & Wellness', purpose: 'Maintain physical and mental wellbeing', priority: 6, icon: 'heart', color: 'pink' }
+          { id: 'goal-achievement', name: 'Goal Achievement', purpose: 'Set and accomplish meaningful goals', priority: 9, icon: 'target', color: 'blue' },
+          { id: 'skill-building', name: 'Skill Development', purpose: 'Learn new skills and grow professionally', priority: 8, icon: 'book', color: 'green' },
+          { id: 'life-organization', name: 'Life Organization', purpose: 'Create structure and systems for daily life', priority: 7, icon: 'calendar', color: 'purple' },
+          { id: 'personal-wellness', name: 'Personal Wellness', purpose: 'Maintain physical and mental wellbeing', priority: 6, icon: 'heart', color: 'pink' }
         ];
       }
       
