@@ -2,10 +2,46 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle, Loader2, ChevronRight, BarChart3, Target, Calendar, NotebookPen, CheckSquare, Clock, Code } from 'lucide-react';
 import { geminiService } from '../../services/geminiService';
+import { voiceService } from '../../services/voiceService';
 // Using localStorage-first pattern instead of direct Supabase calls
 import { useAuthContext } from '../AuthProvider';
 import LifelyLogo from '../LifelyLogo';
 import { getUserData, setUserData } from '../../utils/userStorage';
+
+// Import the questions from VoiceMemoOnboarding
+const ONBOARDING_QUESTIONS = [
+  {
+    id: 1,
+    question: "What brought you here? What's going on in your life that made you look for a better way to stay organized?",
+    focus: "Understanding your motivation and current pain points"
+  },
+  {
+    id: 2,
+    question: "What's your biggest challenge with staying on top of everything? Where do things usually fall through the cracks?",
+    focus: "Identifying workflow gaps and problem areas"
+  },
+  {
+    id: 3,
+    question: "Walk me through what a typical day looks like for you right now.",
+    focus: "Learning your current routine and schedule patterns"
+  },
+  {
+    id: 4,
+    question: "What would need to change for you to feel like you're actually in control of your schedule and tasks?",
+    focus: "Defining your ideal productivity state"
+  },
+  {
+    id: 5,
+    question: "What are you working toward in the next few months that you don't want to lose track of?",
+    focus: "Capturing important goals and projects"
+  }
+];
+
+// Helper function to convert base64 to blob for transcription
+const base64ToBlob = async (base64Data: string): Promise<Blob> => {
+  const response = await fetch(base64Data);
+  return response.blob();
+};
 
 interface DashboardData {
   categories: Array<{id: string; name: string; purpose: string; priority: number; icon: string; color: string}>;
@@ -71,7 +107,48 @@ export default function OnboardingProcessingNew() {
           ).join('\\n\\n');
         }
       } else if (onboardingType === 'voice_memo') {
-        conversationText = 'Voice memo responses about life organization and goals';
+        // CRITICAL FIX: Use actual Whisper transcription instead of placeholder text
+        const voiceMemoData = getUserData(user.id, 'lifely_voice_memo_recording', null);
+        
+        if (voiceMemoData && typeof voiceMemoData === 'object') {
+          const memoData = voiceMemoData as any;
+          
+          // Check if we already have a transcription
+          if (memoData.transcription) {
+            console.log('✅ Using existing voice memo transcription');
+            conversationText = `VOICE MEMO TRANSCRIPTION (90% WEIGHT - PRIMARY CONTEXT):\n"${memoData.transcription}"\n\nQUESTIONS ANSWERED IN VOICE MEMO:\n${ONBOARDING_QUESTIONS.map(q => `${q.id}. ${q.question}`).join('\n')}`;
+          } else if (memoData.audioData) {
+            console.log('🎙️ Voice memo found - transcribing with Whisper...');
+            try {
+              // Convert base64 audio data back to blob for transcription
+              const audioBlob = await base64ToBlob(memoData.audioData);
+              
+              // Transcribe using OpenAI Whisper with context about onboarding questions
+              const transcriptionResult = await voiceService.transcribeWithContext(
+                audioBlob, 
+                'life-organization'
+              );
+              
+              if (transcriptionResult.text) {
+                console.log('✅ Voice memo transcribed successfully');
+                // Save transcription for future use
+                const updatedMemoData = { ...memoData, transcription: transcriptionResult.text };
+                setUserData(user.id, 'lifely_voice_memo_recording', updatedMemoData);
+                
+                conversationText = `VOICE MEMO TRANSCRIPTION (90% WEIGHT - PRIMARY CONTEXT):\n"${transcriptionResult.text}"\n\nQUESTIONS ANSWERED IN VOICE MEMO:\n${ONBOARDING_QUESTIONS.map(q => `${q.id}. ${q.question}`).join('\n')}`;
+              } else {
+                throw new Error('No transcription text returned');
+              }
+            } catch (transcriptionError) {
+              console.error('❌ Voice memo transcription failed:', transcriptionError);
+              conversationText = `VOICE MEMO RECORDED (90% WEIGHT - PRIMARY CONTEXT):\nUser recorded a ${Math.floor(memoData.duration || 0)} second voice memo answering the following questions:\n${ONBOARDING_QUESTIONS.map(q => `${q.id}. ${q.question}`).join('\n')}\n\nNote: Transcription failed - using fallback context.`;
+            }
+          }
+        }
+        
+        if (!conversationText) {
+          conversationText = 'Voice memo responses about life organization and goals (transcription pending)';
+        }
       }
       
       // 3. Get document context (enhanced extraction)

@@ -360,10 +360,15 @@ export default function OnboardingComplete() {
                   key={goal.id || index}
                   className="bg-white/90 dark:bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-slate-200 dark:border-white/20 shadow-lg"
                 >
-                  <h3 className="text-lg font-semibold text-slate-800 dark:text-white mb-2">
-                    {goal.title}
-                  </h3>
-                  <div className="flex items-center gap-4 text-sm">
+                  <div className="flex items-start gap-3 mb-2">
+                    <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <span className="text-lg">🎯</span>
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-800 dark:text-white">
+                      {goal.title}
+                    </h3>
+                  </div>
+                  <div className="flex items-center gap-4 text-sm ml-11">
                     <span className="bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 px-2 py-1 rounded">
                       {extractedData.categories?.find(cat => cat.id === goal.category)?.name || goal.category || 'Goal'}
                     </span>
