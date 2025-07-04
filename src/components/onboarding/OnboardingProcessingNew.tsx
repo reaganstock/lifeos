@@ -5,6 +5,7 @@ import { geminiService } from '../../services/geminiService';
 // Using localStorage-first pattern instead of direct Supabase calls
 import { useAuthContext } from '../AuthProvider';
 import LifelyLogo from '../LifelyLogo';
+import { getUserData, setUserData } from '../../utils/userStorage';
 
 interface DashboardData {
   categories: Array<{id: string; name: string; purpose: string; priority: number; icon: string; color: string}>;
@@ -50,23 +51,22 @@ export default function OnboardingProcessingNew() {
 
   const processOnboardingData = async () => {
     try {
-      // Get ALL onboarding data
-      const onboardingType = localStorage.getItem('lifely_onboarding_type');
+      if (!user?.id) {
+        throw new Error('No authenticated user found');
+      }
+      
+      // Get ALL onboarding data (user-specific)
+      const onboardingType = getUserData(user.id, 'lifely_onboarding_type', null);
       
       // 1. Get initial onboarding data (role, source, goals)
-      const initialDataRaw = localStorage.getItem('lifely_onboarding_data');
-      let initialData = null;
-      if (initialDataRaw) {
-        initialData = JSON.parse(initialDataRaw);
-      }
+      const initialData = getUserData(user.id, 'lifely_onboarding_data', null);
       
       // 2. Get conversation/voice memo responses  
       let conversationText = '';
       if (onboardingType === 'conversation') {
-        const convData = localStorage.getItem('lifely_onboarding_conversation');
-        if (convData) {
-          const data = JSON.parse(convData);
-          conversationText = data.answers.map((answer: any) => 
+        const convData = getUserData(user.id, 'lifely_onboarding_conversation', null);
+        if (convData && typeof convData === 'object' && (convData as any).answers) {
+          conversationText = (convData as any).answers.map((answer: any) => 
             `Q: ${answer.question}\\nA: ${answer.answer}`
           ).join('\\n\\n');
         }
@@ -75,11 +75,10 @@ export default function OnboardingProcessingNew() {
       }
       
       // 3. Get document context
-      const documentsRaw = localStorage.getItem('lifely_onboarding_documents');
+      const documents = getUserData(user.id, 'lifely_onboarding_documents', []);
       let documentContext = '';
-      if (documentsRaw) {
-        const docs = JSON.parse(documentsRaw);
-        documentContext = docs.map((doc: any) => {
+      if (documents.length > 0) {
+        documentContext = documents.map((doc: any) => {
           if (doc.type === 'youtube') {
             return `YouTube Video: ${doc.content}`;
           } else if (doc.type === 'text') {
@@ -93,11 +92,12 @@ export default function OnboardingProcessingNew() {
       // Build complete context
       let fullContext = '';
       
-      if (initialData) {
+      if (initialData && typeof initialData === 'object') {
+        const data = initialData as any;
         fullContext += `USER PROFILE:\\n`;
-        fullContext += `Role: ${initialData.role}\\n`;
-        fullContext += `How they found us: ${initialData.source}\\n`;
-        fullContext += `Selected goals: ${initialData.goals?.join(', ') || 'None'}\\n\\n`;
+        fullContext += `Role: ${data.role || 'Not specified'}\\n`;
+        fullContext += `How they found us: ${data.source || 'Not specified'}\\n`;
+        fullContext += `Selected goals: ${data.goals?.join(', ') || 'None'}\\n\\n`;
       }
       
       if (conversationText) {
@@ -270,9 +270,9 @@ return dashboard;`
         // Continue with navigation even if database creation fails
       }
       
-      // Save data for the completion screen
-      localStorage.setItem('lifely_extracted_data', JSON.stringify(finalData));
-      localStorage.setItem('lifely_onboarding_completed', 'true');
+      // Save data for the completion screen (user-specific)
+      setUserData(user.id, 'lifely_extracted_data', finalData);
+      // Note: Don't set lifely_onboarding_completed here - let OnboardingComplete do it
       
       // Navigate to OnboardingComplete to show results and finalize setup
       setTimeout(() => {
@@ -300,13 +300,17 @@ return dashboard;`
 
   const createRealDashboardData = async (dashboardData: DashboardData) => {
     try {
+      if (!user?.id) {
+        throw new Error('No authenticated user found');
+      }
+      
       setCreatingDatabase(true);
       console.log('🚀 Creating real dashboard data using localStorage-first pattern...', dashboardData);
       
       // FOLLOW HYBRID SYNC PATTERN: LocalStorage first, then sync to Supabase
       
-      // Step 1: Create categories in localStorage (with timestamp IDs like hybrid sync)
-      const existingCategories = JSON.parse(localStorage.getItem('lifeStructureCategories') || '[]');
+      // Step 1: Create categories in user-specific localStorage (with timestamp IDs like hybrid sync)
+      const existingCategories = getUserData(user.id, 'lifeStructureCategories', []);
       const newCategories: any[] = [];
       const categoryMapping = new Map<string, string>();
       
@@ -316,9 +320,9 @@ return dashboard;`
         
         if (existingCategory) {
           // Use existing category
-          categoryMapping.set(category.id, existingCategory.id);
-          categoryMapping.set(category.name.toLowerCase(), existingCategory.id);
-          console.log('✅ Using existing category:', category.name, 'with ID:', existingCategory.id);
+          categoryMapping.set(category.id, (existingCategory as any).id);
+          categoryMapping.set(category.name.toLowerCase(), (existingCategory as any).id);
+          console.log('✅ Using existing category:', category.name, 'with ID:', (existingCategory as any).id);
         } else {
           // Create new category with timestamp ID (like hybrid sync pattern)
           const newCategoryId = `cat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -378,13 +382,13 @@ return dashboard;`
         }
       }
       
-      // Save updated categories to localStorage
+      // Save updated categories to user-specific localStorage
       const allCategories = [...existingCategories, ...newCategories];
-      localStorage.setItem('lifeStructureCategories', JSON.stringify(allCategories));
-      console.log('💾 Saved', allCategories.length, 'categories to localStorage');
+      setUserData(user.id, 'lifeStructureCategories', allCategories);
+      console.log('💾 Saved', allCategories.length, 'categories to user-specific localStorage for', user.email);
       
-      // Step 2: Create items in localStorage (with timestamp IDs like hybrid sync)
-      const existingItems = JSON.parse(localStorage.getItem('lifeStructureItems') || '[]');
+      // Step 2: Create items in user-specific localStorage (with timestamp IDs like hybrid sync)
+      const existingItems = getUserData(user.id, 'lifeStructureItems', []);
       const newItems: any[] = [];
       
       // Helper function to find category ID
@@ -523,10 +527,10 @@ return dashboard;`
         }
       });
       
-      // Save all items to localStorage (existing + new)
+      // Save all items to user-specific localStorage (existing + new)
       const allItems = [...existingItems, ...newItems];
-      localStorage.setItem('lifeStructureItems', JSON.stringify(allItems));
-      console.log('💾 Saved', allItems.length, 'items to localStorage (', newItems.length, 'new items)');
+      setUserData(user.id, 'lifeStructureItems', allItems);
+      console.log('💾 Saved', allItems.length, 'items to user-specific localStorage for', user.email, '(', newItems.length, 'new items)');
       
       // Trigger a manual sync to push to Supabase immediately
       console.log('🔄 Triggering manual sync to push data to Supabase...');

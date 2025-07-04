@@ -1,9 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import LifelyLogo from "../LifelyLogo";
+import { useAuthContext } from '../AuthProvider';
+import { getUserData, setUserData } from '../../utils/userStorage';
 
 export default function Onboarding() {
   const navigate = useNavigate();
+  const { user } = useAuthContext();
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState({
     role: "",
@@ -11,30 +14,29 @@ export default function Onboarding() {
     goals: [] as string[]
   });
 
-  // Load saved progress on component mount
+  // Load saved progress on component mount (user-specific)
   useEffect(() => {
-    const savedProgress = localStorage.getItem('lifely_onboarding_step');
-    const savedData = localStorage.getItem('lifely_onboarding_data');
+    if (!user?.id) return;
     
-    if (savedProgress) {
-      const step = parseInt(savedProgress);
-      setCurrentStep(step);
-    }
+    const savedProgress = getUserData(user.id, 'lifely_onboarding_step', 0);
+    const savedData = getUserData(user.id, 'lifely_onboarding_data', {
+      role: "",
+      source: "",
+      goals: []
+    });
     
-    if (savedData) {
-      try {
-        const parsedData = JSON.parse(savedData);
-        setFormData(parsedData);
-      } catch (error) {
-        console.error('Error parsing saved onboarding data:', error);
-      }
-    }
-  }, []);
+    setCurrentStep(savedProgress);
+    setFormData(savedData);
+    
+    console.log(`🔄 Loaded onboarding progress for ${user.email}: step ${savedProgress}`);
+  }, [user?.id]);
 
-  // Save progress whenever step or data changes
+  // Save progress whenever step or data changes (user-specific)
   useEffect(() => {
-    localStorage.setItem('lifely_onboarding_step', currentStep.toString());
-    localStorage.setItem('lifely_onboarding_data', JSON.stringify(formData));
+    if (!user?.id) return;
+    
+    setUserData(user.id, 'lifely_onboarding_step', currentStep);
+    setUserData(user.id, 'lifely_onboarding_data', formData);
     
     // Save current progress URL for App.tsx redirect logic
     const progressUrls = [
@@ -43,8 +45,10 @@ export default function Onboarding() {
       '/onboarding',
       '/onboarding'
     ];
-    localStorage.setItem('lifely_onboarding_progress', progressUrls[Math.min(currentStep, progressUrls.length - 1)]);
-  }, [currentStep, formData]);
+    setUserData(user.id, 'lifely_onboarding_progress', progressUrls[Math.min(currentStep, progressUrls.length - 1)]);
+    
+    console.log(`💾 Saved onboarding progress for ${user.email}: step ${currentStep}`);
+  }, [currentStep, formData, user?.id]);
 
   const roles = [
     {
@@ -197,20 +201,30 @@ export default function Onboarding() {
       setCurrentStep(currentStep + 1);
     } else {
       // This shouldn't be reached as step 3 uses direct method selection
-      localStorage.setItem('lifely_onboarding_data', JSON.stringify(formData));
+      if (user?.id) {
+        setUserData(user.id, 'lifely_onboarding_data', formData);
+      }
       navigate('/onboarding/chat-mode');
     }
   };
 
+  const handleBack = () => {
+    if (currentStep > 0) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
   const handleOnboardingMethod = (method: 'voice-memo' | 'ai-conversation') => {
-    localStorage.setItem('lifely_onboarding_data', JSON.stringify(formData));
-    localStorage.setItem('lifely_onboarding_method', method);
+    if (!user?.id) return;
+    
+    setUserData(user.id, 'lifely_onboarding_data', formData);
+    setUserData(user.id, 'lifely_onboarding_method', method);
     
     if (method === 'voice-memo') {
-      localStorage.setItem('lifely_onboarding_progress', '/onboarding/voice-memo');
+      setUserData(user.id, 'lifely_onboarding_progress', '/onboarding/voice-memo');
       navigate('/onboarding/voice-memo');
     } else {
-      localStorage.setItem('lifely_onboarding_progress', '/onboarding/conversation');
+      setUserData(user.id, 'lifely_onboarding_progress', '/onboarding/conversation');
       navigate('/onboarding/conversation');
     }
   };
@@ -257,9 +271,11 @@ export default function Onboarding() {
         <div className="w-full max-w-4xl relative">
         {/* Header */}
         <div className="text-center mb-12">
-          <div className="flex items-center justify-center gap-3 mb-6">
-            <LifelyLogo size={48} />
-            <span className="text-2xl font-bold text-lifeos-dark">Lifely</span>
+          <div className="flex items-center justify-center gap-4 mb-8">
+            <div className="w-16 h-16 bg-white/90 backdrop-blur-sm rounded-2xl flex items-center justify-center shadow-xl border border-white/20">
+              <LifelyLogo size={40} />
+            </div>
+            <span className="text-3xl font-bold text-lifeos-dark tracking-tight">Lifely</span>
           </div>
 
           {/* Progress Bar */}
@@ -457,15 +473,32 @@ export default function Onboarding() {
         </div>
 
         {/* Navigation */}
-        {currentStep < 3 && (
-          <div className="text-center mt-8">
-            <p className="text-lifeos-gray-400">
-              {currentStep === 0 ? "Click any option to continue" : 
-               currentStep === 1 ? "Almost there! Two more questions..." : 
-               "Last step! Choose your setup method..."}
-            </p>
-          </div>
-        )}
+        <div className="flex items-center justify-between mt-8">
+          {/* Back Button */}
+          {currentStep > 0 ? (
+            <button
+              onClick={handleBack}
+              className="flex items-center gap-2 px-6 py-3 bg-white/60 backdrop-blur-sm hover:bg-white/80 text-lifeos-dark rounded-xl font-medium transition-all duration-200 border border-white/20 hover:scale-105"
+            >
+              ← Back
+            </button>
+          ) : (
+            <div></div>
+          )}
+          
+          {/* Progress Text */}
+          {currentStep < 3 && (
+            <div className="text-center">
+              <p className="text-lifeos-gray-400">
+                {currentStep === 0 ? "Click any option to continue" : 
+                 currentStep === 1 ? "Almost there! Two more questions..." : 
+                 "Last step! Choose your setup method..."}
+              </p>
+            </div>
+          )}
+          
+          <div></div>
+        </div>
         </div>
       </div>
     </div>

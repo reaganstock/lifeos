@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle, ArrowRight, Target, Calendar, User, Sparkles } from 'lucide-react';
 import LifelyLogo from '../LifelyLogo';
+import { useAuthContext } from '../AuthProvider';
+import { getUserData, setUserData, clearUserOnboardingData } from '../../utils/userStorage';
 
 interface ExtractedData {
   categories: Array<{id?: string; name: string; purpose: string; priority: number; icon?: string; color?: string}>;
@@ -18,18 +20,21 @@ interface ExtractedData {
 
 export default function OnboardingComplete() {
   const navigate = useNavigate();
+  const { user } = useAuthContext();
   const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
   const [isCreatingDashboard, setIsCreatingDashboard] = useState(false);
 
   useEffect(() => {
-    // Load the ACTUAL dashboard data that was created (not just extracted data)
-    const categoriesData = localStorage.getItem('lifeStructureCategories');
-    const itemsData = localStorage.getItem('lifeStructureItems');
-    const extractedDataRaw = localStorage.getItem('lifely_extracted_data');
+    if (!user?.id) return;
     
-    if (categoriesData && itemsData) {
-      const categories = JSON.parse(categoriesData);
-      const items = JSON.parse(itemsData);
+    // Load the ACTUAL dashboard data that was created (not just extracted data) - user-specific
+    const categoriesData = getUserData(user.id, 'lifeStructureCategories', []);
+    const itemsData = getUserData(user.id, 'lifeStructureItems', []);
+    const extractedDataRaw = getUserData(user.id, 'lifely_extracted_data', null);
+    
+    if (categoriesData.length > 0 && itemsData.length > 0) {
+      const categories = categoriesData;
+      const items = itemsData;
       
       // Remove duplicates and clean up categories
       const uniqueCategories = categories.reduce((acc: any[], category: any) => {
@@ -64,10 +69,9 @@ export default function OnboardingComplete() {
         "You value both productivity and personal development"
       ];
       
-      if (extractedDataRaw) {
-        const extracted = JSON.parse(extractedDataRaw);
-        workStyle = extracted.workStyle || workStyle;
-        personalInsights = extracted.personalInsights || personalInsights;
+      if (extractedDataRaw && typeof extractedDataRaw === 'object' && extractedDataRaw !== null) {
+        workStyle = (extractedDataRaw as any).workStyle || workStyle;
+        personalInsights = (extractedDataRaw as any).personalInsights || personalInsights;
       }
       
       // Create dashboard data structure from ACTUAL created data
@@ -84,7 +88,7 @@ export default function OnboardingComplete() {
         personalInsights: personalInsights
       };
       
-      console.log('🎯 OnboardingComplete: Loaded ACTUAL dashboard data:', dashboardData);
+      console.log('🎯 OnboardingComplete: Loaded ACTUAL dashboard data for user:', user.email);
       console.log('📊 Categories found:', uniqueCategories.length, uniqueCategories.map((c: any) => c.name));
       console.log('📝 Items found:', uniqueItems.length, 'by type:', {
         goals: uniqueItems.filter((i: any) => i.type === 'goal').length,
@@ -95,9 +99,9 @@ export default function OnboardingComplete() {
       });
       setExtractedData(dashboardData);
     } else {
-      console.error('❌ OnboardingComplete: No dashboard data found in localStorage');
+      console.error('❌ OnboardingComplete: No dashboard data found for user:', user.email);
     }
-  }, []);
+  }, [user?.id]);
 
   const createDashboard = async () => {
     setIsCreatingDashboard(true);
@@ -116,18 +120,18 @@ export default function OnboardingComplete() {
       window.dispatchEvent(new CustomEvent('hybridSyncComplete'));
       window.dispatchEvent(new CustomEvent('onboardingComplete'));
       
-      // Mark onboarding as complete
-      localStorage.setItem('lifely_onboarding_completed', 'true');
+      // Mark onboarding as complete (user-specific)
+      if (!user?.id) {
+        console.error('❌ No user ID found - cannot complete onboarding');
+        return;
+      }
+      
+      setUserData(user.id, 'lifely_onboarding_completed', true);
       
       // Clean up temporary onboarding data (but keep categories and items)
-      localStorage.removeItem('lifely_voice_memo_recordings');
-      localStorage.removeItem('lifely_onboarding_mode');
-      localStorage.removeItem('lifely_onboarding_instructions');
-      localStorage.removeItem('lifely_onboarding_data');
-      localStorage.removeItem('lifely_onboarding_conversation');
-      localStorage.removeItem('lifely_onboarding_documents');
-      localStorage.removeItem('lifely_onboarding_type');
-      localStorage.removeItem('lifely_extracted_data');
+      clearUserOnboardingData(user.id);
+      
+      console.log('✅ Onboarding completed for user:', user.email);
       
       console.log('🎉 Dashboard creation complete! Navigating to main app...');
       

@@ -34,6 +34,7 @@ import { useHybridSync } from './hooks/useHybridSync';
 import { cleanupOldAudio } from './utils/audioStorage';
 import { cleanupOldImages } from './utils/imageStorage';
 import { IntegrationManager } from './services/integrations/IntegrationManager';
+import { getUserData, setUserData, getUserStorageKey } from './utils/userStorage';
 
 function AppContent() {
   const { user, loading: authLoading, initialized: authInitialized } = useAuthContext();
@@ -57,47 +58,15 @@ function AppContent() {
     ensureProfileExists
   } = useSupabaseData();
 
-  // Legacy localStorage state for unauthenticated users or migration
+  // User-specific localStorage state to prevent data contamination
   const [localItems, setLocalItems] = useState<Item[]>(() => {
-    const savedItems = localStorage.getItem('lifeStructureItems');
-    if (savedItems) {
-      try {
-        const parsedItems = JSON.parse(savedItems);
-        return parsedItems.map((item: any) => ({
-          ...item,
-          createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
-          updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
-          dueDate: item.dueDate ? new Date(item.dueDate) : undefined,
-          dateTime: item.dateTime ? new Date(item.dateTime) : undefined,
-          metadata: {
-            ...item.metadata,
-            eventDate: item.metadata?.eventDate ? new Date(item.metadata.eventDate) : undefined
-          }
-        }));
-      } catch (error) {
-        console.error('Error parsing saved items:', error);
-        return [];
-      }
-    }
+    // Don't load any data until user is initialized to prevent contamination
     return [];
   });
 
-  // localStorage categories state (localStorage-first pattern)
+  // User-specific localStorage categories state to prevent data contamination
   const [localCategories, setLocalCategories] = useState<any[]>(() => {
-    const savedCategories = localStorage.getItem('lifeStructureCategories');
-    if (savedCategories) {
-      try {
-        const parsedCategories = JSON.parse(savedCategories);
-        return parsedCategories.map((category: any) => ({
-          ...category,
-          createdAt: category.createdAt ? new Date(category.createdAt) : new Date(),
-          updatedAt: category.updatedAt ? new Date(category.updatedAt) : new Date()
-        }));
-      } catch (error) {
-        console.error('Error parsing saved categories:', error);
-        return [];
-      }
-    }
+    // Don't load any data until user is initialized to prevent contamination
     return [];
   });
 
@@ -114,9 +83,9 @@ function AppContent() {
   // Check if we're in onboarding or auth flows
   const isOnboardingFlow = location.pathname.startsWith('/onboarding') || location.pathname.startsWith('/auth');
   
-  // Check onboarding completion status
-  const isOnboardingCompleted = localStorage.getItem('lifely_onboarding_completed') === 'true';
-  const onboardingProgress = localStorage.getItem('lifely_onboarding_progress') || '/onboarding';
+  // Check onboarding completion status (user-specific)
+  const isOnboardingCompleted = getUserData(user?.id || null, 'lifely_onboarding_completed', false);
+  const onboardingProgress = getUserData(user?.id || null, 'lifely_onboarding_progress', '/onboarding');
   
   // Removed showAuthModal - now using AuthScreen directly
   const [showMigrationModal, setShowMigrationModal] = useState(false);
@@ -144,6 +113,43 @@ function AppContent() {
     return saved ? Math.min(parseInt(saved), window.innerWidth / 2) : Math.min(400, window.innerWidth / 2);
   });
   const [isAiSidebarCollapsed, setIsAiSidebarCollapsed] = useState(false);
+
+  // Load user-specific data when user changes
+  useEffect(() => {
+    if (user?.id) {
+      console.log('🔄 Loading user-specific data for:', user.email);
+      
+      // Load user-specific items
+      const userItems = getUserData(user.id, 'lifeStructureItems', []);
+      const formattedItems = userItems.map((item: any) => ({
+        ...item,
+        createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
+        updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
+        dueDate: item.dueDate ? new Date(item.dueDate) : undefined,
+        dateTime: item.dateTime ? new Date(item.dateTime) : undefined,
+        metadata: {
+          ...item.metadata,
+          eventDate: item.metadata?.eventDate ? new Date(item.metadata.eventDate) : undefined
+        }
+      }));
+      setLocalItems(formattedItems);
+      
+      // Load user-specific categories
+      const userCategories = getUserData(user.id, 'lifeStructureCategories', []);
+      const formattedCategories = userCategories.map((category: any) => ({
+        ...category,
+        createdAt: category.createdAt ? new Date(category.createdAt) : new Date(),
+        updatedAt: category.updatedAt ? new Date(category.updatedAt) : new Date()
+      }));
+      setLocalCategories(formattedCategories);
+      
+      console.log(`📊 Loaded ${formattedItems.length} items and ${formattedCategories.length} categories for user ${user.email}`);
+    } else {
+      // Clear data when no user
+      setLocalItems([]);
+      setLocalCategories([]);
+    }
+  }, [user?.id]);
 
   // OAuth callback handling
   useEffect(() => {
@@ -413,17 +419,21 @@ function AppContent() {
 
   // Auth is now handled by direct AuthScreen rendering, no modal needed
 
-  // Save localStorage items (primary data source for all users)
+  // Save user-specific localStorage items
   useEffect(() => {
-    localStorage.setItem('lifeStructureItems', JSON.stringify(localItems));
-    console.log('💾 Saved', localItems.length, 'items to localStorage');
-  }, [localItems]);
+    if (user?.id) {
+      setUserData(user.id, 'lifeStructureItems', localItems);
+      console.log('💾 Saved', localItems.length, 'items to user-specific localStorage for', user.email);
+    }
+  }, [localItems, user?.id]);
 
-  // Save localStorage categories (primary data source for all users)
+  // Save user-specific localStorage categories
   useEffect(() => {
-    localStorage.setItem('lifeStructureCategories', JSON.stringify(localCategories));
-    console.log('💾 Saved', localCategories.length, 'categories to localStorage');
-  }, [localCategories]);
+    if (user?.id) {
+      setUserData(user.id, 'lifeStructureCategories', localCategories);
+      console.log('💾 Saved', localCategories.length, 'categories to user-specific localStorage for', user.email);
+    }
+  }, [localCategories, user?.id]);
 
   // Global keyboard shortcuts - only for authenticated users who are not in onboarding
   useEffect(() => {
@@ -534,15 +544,16 @@ function AppContent() {
 
   const { rehydrateVoiceNotes, syncStatus } = useHybridSync();
 
-  // Listen for localStorage changes from sync service
+  // Listen for localStorage changes from sync service (user-specific)
   useEffect(() => {
     const handleStorageSync = () => {
-      console.log('🔄 Sync detected - reloading localStorage data...');
-      const savedItems = localStorage.getItem('lifeStructureItems');
-      if (savedItems) {
+      if (!user?.id) return;
+      
+      console.log('🔄 Sync detected - reloading user-specific localStorage data...');
+      const userItems = getUserData(user.id, 'lifeStructureItems', []);
+      if (userItems.length > 0) {
         try {
-          const parsedItems = JSON.parse(savedItems);
-          const formattedItems = parsedItems.map((item: any) => ({
+          const formattedItems = userItems.map((item: any) => ({
             ...item,
             createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
             updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
@@ -554,7 +565,7 @@ function AppContent() {
             }
           }));
           
-          console.log(`📊 Loaded ${formattedItems.length} items from localStorage after sync`);
+          console.log(`📊 Loaded ${formattedItems.length} items from user-specific localStorage after sync for ${user.email}`);
           setLocalItems(formattedItems);
         } catch (error) {
           console.error('Error parsing synced items:', error);
@@ -576,7 +587,7 @@ function AppContent() {
       window.removeEventListener('hybridSyncComplete', handleStorageSync);
       window.removeEventListener('forceDataRefresh', handleStorageSync);
     };
-  }, []);
+  }, [user?.id]);
 
   // Add this useEffect to handle post-refresh rehydration
   useEffect(() => {
@@ -684,10 +695,18 @@ function AppContent() {
                 } />
               </>
             ) : (
-              // Redirect to onboarding progress if not completed
+              // Redirect ALL routes to onboarding progress if not completed - NO BYPASS
               <>
                 <Route path="/" element={<Navigate to={onboardingProgress} replace />} />
                 <Route path="/dashboard" element={<Navigate to={onboardingProgress} replace />} />
+                <Route path="/todos" element={<Navigate to={onboardingProgress} replace />} />
+                <Route path="/calendar" element={<Navigate to={onboardingProgress} replace />} />
+                <Route path="/life-categories" element={<Navigate to={onboardingProgress} replace />} />
+                <Route path="/goals" element={<Navigate to={onboardingProgress} replace />} />
+                <Route path="/routines" element={<Navigate to={onboardingProgress} replace />} />
+                <Route path="/notes" element={<Navigate to={onboardingProgress} replace />} />
+                <Route path="/settings" element={<Navigate to={onboardingProgress} replace />} />
+                <Route path="/category/:categoryId" element={<Navigate to={onboardingProgress} replace />} />
                 <Route path="*" element={<Navigate to={onboardingProgress} replace />} />
               </>
             )}
