@@ -17,12 +17,13 @@ import AuthCallback from './components/onboarding/AuthCallback';
 import Onboarding from './components/onboarding/Onboarding';
 import DocumentUpload from './components/onboarding/DocumentUpload';
 import IntegrationsSetup from './components/onboarding/IntegrationsSetup';
-import OnboardingProcessing from './components/onboarding/OnboardingProcessing';
+// import OnboardingProcessing from './components/onboarding/OnboardingProcessing';
 import OnboardingProcessingNew from './components/onboarding/OnboardingProcessingNew';
 import OnboardingComplete from './components/onboarding/OnboardingComplete';
 import OnboardingConversation from './components/onboarding/OnboardingConversation';
 import VoiceMemoOnboarding from './components/onboarding/VoiceMemoOnboarding';
-import SignInRequired from './components/SignInRequired';
+import OAuthCallback from './components/onboarding/OAuthCallback';
+// import SignInRequired from './components/SignInRequired';
 import { AuthProvider, useAuthContext } from './components/AuthProvider';
 import { ThemeProvider } from './contexts/ThemeContext';
 // Removed initialData import - users create their own categories
@@ -34,7 +35,8 @@ import { useHybridSync } from './hooks/useHybridSync';
 import { cleanupOldAudio } from './utils/audioStorage';
 import { cleanupOldImages } from './utils/imageStorage';
 import { IntegrationManager } from './services/integrations/IntegrationManager';
-import { getUserData, setUserData, getUserStorageKey } from './utils/userStorage';
+import { getUserData, setUserData } from './utils/userStorage';
+import { supabase } from './lib/supabase';
 
 function AppContent() {
   const { user, loading: authLoading, initialized: authInitialized } = useAuthContext();
@@ -42,7 +44,7 @@ function AppContent() {
   const navigate = useNavigate();
   const {
     categories: supabaseCategories,
-    loading: dataLoading,
+    loading: _dataLoading,
     error: dataError,
     initialized: dataInitialized,
     createCategory,
@@ -83,9 +85,49 @@ function AppContent() {
   // Check if we're in onboarding or auth flows
   const isOnboardingFlow = location.pathname.startsWith('/onboarding') || location.pathname.startsWith('/auth');
   
-  // Check onboarding completion status (user-specific)
-  const isOnboardingCompleted = getUserData(user?.id || null, 'lifely_onboarding_completed', false);
+  // Check onboarding completion status (user-specific) - hybrid localStorage + Supabase
+  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState(() => 
+    getUserData(user?.id || null, 'lifely_onboarding_completed', false)
+  );
   const onboardingProgress = getUserData(user?.id || null, 'lifely_onboarding_progress', '/onboarding');
+  
+  // Check Supabase for onboarding completion as fallback/sync
+  useEffect(() => {
+    const checkOnboardingStatusInSupabase = async () => {
+      if (!user?.id || !dataInitialized) return;
+      
+      // If localStorage says completed, trust it (faster)
+      const localCompleted = getUserData(user.id, 'lifely_onboarding_completed', false);
+      if (localCompleted) {
+        setIsOnboardingCompleted(true);
+        return;
+      }
+      
+      try {
+        console.log('🔍 Checking onboarding status in Supabase for user:', user.email);
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('has_completed_onboarding')
+          .eq('id', user.id)
+          .single();
+          
+        if (error) {
+          console.warn('⚠️ Could not check onboarding status in Supabase:', error);
+          return;
+        }
+        
+        if ((data as any)?.has_completed_onboarding) {
+          console.log('✅ User has completed onboarding according to Supabase, syncing to localStorage');
+          setUserData(user.id, 'lifely_onboarding_completed', true);
+          setIsOnboardingCompleted(true);
+        }
+      } catch (error) {
+        console.warn('⚠️ Exception checking onboarding status in Supabase:', error);
+      }
+    };
+    
+    checkOnboardingStatusInSupabase();
+  }, [user?.id, dataInitialized]);
   
   // Removed showAuthModal - now using AuthScreen directly
   const [showMigrationModal, setShowMigrationModal] = useState(false);
@@ -211,8 +253,9 @@ function AppContent() {
             
             showNotification(`✅ Successfully connected to Notion workspace: ${tokenResponse.workspace_name}`, 'success');
             
-            // Clean up URL and redirect back to app
-            window.history.replaceState({}, document.title, '/');
+            // Clean up URL params only (don't change page)
+            const currentPath = window.location.pathname;
+            window.history.replaceState({}, document.title, currentPath);
             
             // Set a flag to auto-connect when user opens integration manager
             sessionStorage.setItem('notion_auto_connect', 'true');
@@ -222,7 +265,7 @@ function AppContent() {
             
             const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID!;
             const clientSecret = process.env.REACT_APP_GOOGLE_CLIENT_SECRET!;
-            const redirectUri = `https://app.lifely.dev/oauth/callback`;
+            const redirectUri = `${window.location.origin}/oauth/callback`;
             
             // Exchange code for access token
             const tokenResponse = await IntegrationManager.exchangeGoogleCode(code, clientId, clientSecret, redirectUri);
@@ -240,8 +283,9 @@ function AppContent() {
             
             showNotification('✅ Successfully connected to Google Calendar', 'success');
             
-            // Clean up URL and redirect back to app
-            window.history.replaceState({}, document.title, '/');
+            // Clean up URL params only (don't change page)
+            const currentPath = window.location.pathname;
+            window.history.replaceState({}, document.title, currentPath);
             
             // Set a flag to auto-connect when user opens integration manager
             sessionStorage.setItem('google_auto_connect', 'true');
@@ -252,7 +296,7 @@ function AppContent() {
             console.log('🕐 Code received at:', new Date().toISOString());
             
             const clientId = process.env.REACT_APP_MICROSOFT_CLIENT_ID!;
-            const redirectUri = `https://app.lifely.dev/oauth/callback`;
+            const redirectUri = `${window.location.origin}/oauth/callback`;
             
             console.log('🔄 Starting token exchange immediately (PKCE flow - no client secret)...');
             // Exchange code for access token using PKCE (no client secret for SPA)
@@ -271,11 +315,11 @@ function AppContent() {
             
             showNotification('✅ Successfully connected to Microsoft Calendar', 'success');
             
-            // Clean up URL and redirect back to app
-            window.history.replaceState({}, document.title, '/');
-            
             // Set a flag to auto-connect when user opens integration manager
             sessionStorage.setItem('microsoft_auto_connect', 'true');
+            
+            // Navigate back to integrations screen for onboarding flow
+            // Note: OAuthCallback component will handle navigation
             
           } else if (isOneNoteCallback) {
             console.log('🔗 Processing OneNote OAuth callback...');
@@ -283,7 +327,7 @@ function AppContent() {
             console.log('🕐 Code received at:', new Date().toISOString());
             
             const clientId = process.env.REACT_APP_MICROSOFT_CLIENT_ID!;
-            const redirectUri = `https://app.lifely.dev/oauth/callback`;
+            const redirectUri = `${window.location.origin}/oauth/callback`;
             
             console.log('🔄 Starting OneNote token exchange immediately (PKCE flow - no client secret)...');
             // Exchange code for access token using PKCE (no client secret for SPA)
@@ -296,11 +340,11 @@ function AppContent() {
             
             showNotification('✅ Successfully connected to OneNote', 'success');
             
-            // Clean up URL and redirect back to app
-            window.history.replaceState({}, document.title, '/');
-            
             // Set a flag to auto-connect when user opens integration manager
             sessionStorage.setItem('onenote_auto_connect', 'true');
+            
+            // Navigate back to integrations screen for onboarding flow
+            // Note: OAuthCallback component will handle navigation
             
           } else if (isGeneralMicrosoftCallback) {
             // For general Microsoft OAuth, default to Microsoft Calendar for backward compatibility
@@ -309,7 +353,7 @@ function AppContent() {
             console.log('🕐 Code received at:', new Date().toISOString());
             
             const clientId = process.env.REACT_APP_MICROSOFT_CLIENT_ID!;
-            const redirectUri = `https://app.lifely.dev/oauth/callback`;
+            const redirectUri = `${window.location.origin}/oauth/callback`;
             
             console.log('🔄 Starting token exchange immediately (PKCE flow - no client secret)...');
             // Exchange code for access token using PKCE (no client secret for SPA)
@@ -322,11 +366,11 @@ function AppContent() {
             
             showNotification('✅ Successfully connected to Microsoft Calendar', 'success');
             
-            // Clean up URL and redirect back to app
-            window.history.replaceState({}, document.title, '/');
-            
             // Set a flag to auto-connect when user opens integration manager
             sessionStorage.setItem('microsoft_auto_connect', 'true');
+            
+            // Navigate back to integrations screen for onboarding flow
+            // Note: OAuthCallback component will handle navigation
             
           } else {
             console.log('🔗 Unknown OAuth provider in callback');
@@ -342,8 +386,8 @@ function AppContent() {
           
           showNotification(`❌ Authentication failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
           
-          // Clean up URL even on error
-          window.history.replaceState({}, document.title, '/');
+          // Navigate back to integrations screen even on error
+          navigate('/onboarding/integrations');
         }
       }
     };
@@ -659,6 +703,12 @@ function AppContent() {
       <Routes>
         <Route path="/auth" element={<AuthScreen />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
+        
+        {/* OAuth Integration Callbacks - process and redirect to integrations */}
+        <Route path="/oauth/callback" element={<OAuthCallback />} />
+        <Route path="/auth/notion/callback" element={<OAuthCallback />} />
+        <Route path="/auth/google/callback" element={<OAuthCallback />} />
+        <Route path="/auth/microsoft/callback" element={<OAuthCallback />} />
         {user ? (
           // Authenticated routes
           <>

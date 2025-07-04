@@ -180,7 +180,14 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
       return localCategories
     } catch (err) {
       console.error('Error fetching categories:', err)
-      setError('Failed to fetch categories')
+      
+      // Check if it's a network connectivity issue
+      if (err instanceof Error && (err.message.includes('NetworkError') || err.message.includes('Failed to fetch') || err.message.includes('ERR_NAME_NOT_RESOLVED'))) {
+        console.warn('🌐 Network connectivity issue detected - app will work in offline mode with localStorage')
+        setError('Working offline - network connectivity issue')
+      } else {
+        setError('Failed to fetch categories')
+      }
       return []
     }
   }, [user, buildCategoryMappings])
@@ -199,7 +206,14 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
       return (data || []).map(item => dbItemToLocal(item, reverseMapping))
     } catch (err) {
       console.error('Error fetching items:', err)
-      setError('Failed to fetch items')
+      
+      // Check if it's a network connectivity issue
+      if (err instanceof Error && (err.message.includes('NetworkError') || err.message.includes('Failed to fetch') || err.message.includes('ERR_NAME_NOT_RESOLVED'))) {
+        console.warn('🌐 Network connectivity issue detected - app will work in offline mode with localStorage')
+        setError('Working offline - network connectivity issue')
+      } else {
+        setError('Failed to fetch items')
+      }
       return []
     }
   }, [user, reverseMapping])

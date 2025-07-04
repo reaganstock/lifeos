@@ -115,7 +115,7 @@ export default function DocumentUpload() {
               Add Context for Your AI Agent
             </h1>
             <p className="text-lifeos-gray-400 text-lg max-w-2xl mx-auto leading-relaxed">
-              Upload documents, paste text, or add YouTube videos to help our AI build a more personalized dashboard for you.
+              Upload documents, paste text, or add YouTube videos to help our AI build a more personalized dashboard for you. We want to know as much as possible about you to give our AI context of your life. Feel free to ask ChatGPT to write a summary of who you are, and paste it here.
             </p>
           </div>
 

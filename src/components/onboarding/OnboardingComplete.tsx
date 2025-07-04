@@ -4,6 +4,7 @@ import { CheckCircle, ArrowRight, Target, Calendar, User, Sparkles } from 'lucid
 import LifelyLogo from '../LifelyLogo';
 import { useAuthContext } from '../AuthProvider';
 import { getUserData, setUserData, clearUserOnboardingData } from '../../utils/userStorage';
+import { supabase } from '../../lib/supabase';
 
 interface ExtractedData {
   categories: Array<{id?: string; name: string; purpose: string; priority: number; icon?: string; color?: string}>;
@@ -103,6 +104,36 @@ export default function OnboardingComplete() {
     }
   }, [user?.id]);
 
+  const markOnboardingCompleteInSupabase = async (): Promise<boolean> => {
+    if (!user?.id) {
+      console.error('❌ No user ID found - cannot mark onboarding complete in Supabase');
+      return false;
+    }
+
+    try {
+      console.log('🎯 Marking onboarding complete in Supabase for user:', user.email);
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update({ 
+          has_completed_onboarding: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      if (error) {
+        console.error('❌ Error updating onboarding status in Supabase:', error);
+        return false;
+      }
+
+      console.log('✅ Onboarding completion status synced to Supabase successfully');
+      return true;
+    } catch (error) {
+      console.error('❌ Exception marking onboarding complete in Supabase:', error);
+      return false;
+    }
+  };
+
   const createDashboard = async () => {
     setIsCreatingDashboard(true);
     
@@ -126,7 +157,14 @@ export default function OnboardingComplete() {
         return;
       }
       
+      // Mark complete in localStorage (for immediate UI updates)
       setUserData(user.id, 'lifely_onboarding_completed', true);
+      
+      // Mark complete in Supabase (for cross-device sync and data consistency)
+      const supabaseSuccess = await markOnboardingCompleteInSupabase();
+      if (!supabaseSuccess) {
+        console.warn('⚠️ Failed to sync onboarding completion to Supabase, but continuing with localStorage');
+      }
       
       // Clean up temporary onboarding data (but keep categories and items)
       clearUserOnboardingData(user.id);

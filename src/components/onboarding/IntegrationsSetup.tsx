@@ -1,16 +1,68 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowRight, 
   Check, 
   ExternalLink,
-  Settings
+  Settings,
+  Loader2
 } from 'lucide-react';
+import { IntegrationManager } from '../../services/integrations/IntegrationManager';
+import { useAuthContext } from '../AuthProvider';
+import { getUserData, setUserData } from '../../utils/userStorage';
 
 export default function IntegrationsSetup() {
   const navigate = useNavigate();
+  const { user } = useAuthContext();
   const [connectedIntegrations, setConnectedIntegrations] = useState<string[]>([]);
   const [connecting, setConnecting] = useState<string | null>(null);
+  const [notification, setNotification] = useState<{
+    message: string;
+    type: 'success' | 'error' | 'info';
+    isVisible: boolean;
+  }>({ message: '', type: 'info', isVisible: false });
+
+  // Load saved connections on mount
+  useEffect(() => {
+    if (user?.id) {
+      const savedConnections = getUserData(user.id, 'lifely_onboarding_integrations', []);
+      setConnectedIntegrations(savedConnections);
+      console.log('🔗 Loaded saved integrations for user:', user.email, savedConnections);
+    }
+  }, [user?.id]);
+
+  // Handle OAuth callback success
+  useEffect(() => {
+    // Check for auto-connect flags set by App.tsx OAuth callback handler
+    const autoConnectIntegrations = [
+      { flag: 'google_auto_connect', id: 'google-calendar', name: 'Google Calendar' },
+      { flag: 'microsoft_auto_connect', id: 'microsoft-calendar', name: 'Microsoft Calendar' },
+      { flag: 'notion_auto_connect', id: 'notion', name: 'Notion' },
+      { flag: 'onenote_auto_connect', id: 'onenote', name: 'OneNote' }
+    ];
+
+    autoConnectIntegrations.forEach(({ flag, id, name }) => {
+      if (sessionStorage.getItem(flag) === 'true') {
+        console.log('✅ Auto-connecting integration:', name);
+        
+        // Add to connected integrations if not already connected
+        if (!connectedIntegrations.includes(id)) {
+          const newConnections = [...connectedIntegrations, id];
+          setConnectedIntegrations(newConnections);
+          
+          if (user?.id) {
+            setUserData(user.id, 'lifely_onboarding_integrations', newConnections);
+          }
+          
+          // Show success notification
+          showNotification(`✅ Successfully connected to ${name}!`, 'success');
+        }
+        
+        // Clear the auto-connect flag
+        sessionStorage.removeItem(flag);
+      }
+    });
+  }, [connectedIntegrations, user?.id]);
 
   const integrations = [
     {
@@ -19,23 +71,17 @@ export default function IntegrationsSetup() {
       description: 'Sync events and create smart scheduling',
       icon: '/google-calendar.svg',
       color: 'from-blue-500 to-blue-600',
-      status: 'available'
+      status: 'available',
+      authType: 'oauth'
     },
     {
-      id: 'outlook-calendar', 
-      name: 'Outlook Calendar',
-      description: 'Microsoft Calendar integration',
+      id: 'microsoft-calendar', 
+      name: 'Microsoft Calendar',
+      description: 'Outlook Calendar integration',
       icon: '/outlook-calendar.png',
       color: 'from-blue-600 to-blue-700',
-      status: 'available'
-    },
-    {
-      id: 'apple-calendar',
-      name: 'Apple Calendar',
-      description: 'iCloud Calendar sync',
-      icon: '/apple-calendar.png',
-      color: 'from-gray-700 to-gray-800',
-      status: 'coming-soon'
+      status: 'available',
+      authType: 'oauth'
     },
     {
       id: 'notion',
@@ -43,7 +89,44 @@ export default function IntegrationsSetup() {
       description: 'Import pages and databases',
       icon: '/notion.svg',
       color: 'from-gray-800 to-black',
-      status: 'available'
+      status: 'available',
+      authType: 'oauth'
+    },
+    {
+      id: 'onenote',
+      name: 'OneNote',
+      description: 'Import your notes and ideas',
+      icon: '/onenote.svg',
+      color: 'from-purple-500 to-purple-600',
+      status: 'available',
+      authType: 'oauth'
+    },
+    {
+      id: 'todoist',
+      name: 'Todoist',
+      description: 'Import tasks and projects',
+      icon: '/todoist.svg',
+      color: 'from-red-500 to-red-600',
+      status: 'available',
+      authType: 'api_key'
+    },
+    {
+      id: 'youtube',
+      name: 'YouTube',
+      description: 'Extract insights from your videos',
+      icon: '/youtube.svg',
+      color: 'from-red-600 to-red-700',
+      status: 'available',
+      authType: 'api_key'
+    },
+    {
+      id: 'apple-calendar',
+      name: 'Apple Calendar',
+      description: 'iCloud Calendar sync',
+      icon: '/apple-calendar.png',
+      color: 'from-gray-700 to-gray-800',
+      status: 'coming-soon',
+      authType: 'oauth'
     },
     {
       id: 'apple-notes',
@@ -51,40 +134,137 @@ export default function IntegrationsSetup() {
       description: 'Import your notes and ideas',
       icon: '/apple-notes.svg',
       color: 'from-yellow-500 to-orange-500',
-      status: 'coming-soon'
-    },
-    {
-      id: 'youtube',
-      name: 'YouTube',
-      description: 'Extract insights from your videos',
-      icon: '/youtube.svg',
-      color: 'from-red-500 to-red-600',
-      status: 'available'
+      status: 'coming-soon',
+      authType: 'oauth'
     }
   ];
 
   const handleConnect = async (integrationId: string) => {
+    if (!user?.id) {
+      console.error('❌ No authenticated user found');
+      return;
+    }
+
+    const integration = integrations.find(i => i.id === integrationId);
+    if (!integration) {
+      console.error('❌ Integration not found:', integrationId);
+      return;
+    }
+
     setConnecting(integrationId);
     
-    // Simulate connection process
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    try {
+      console.log('🔗 Starting OAuth flow for:', integration.name);
+
+      if (integration.authType === 'oauth') {
+        await handleOAuthConnection(integration);
+      } else if (integration.authType === 'api_key') {
+        await handleApiKeyConnection(integration);
+      }
+    } catch (error) {
+      console.error('❌ Connection failed:', error);
+      setConnecting(null);
+      showNotification(`Failed to connect to ${integration.name}: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    }
+  };
+
+  const handleOAuthConnection = async (integration: any) => {
+    const redirectUri = `${window.location.origin}/oauth/callback`;
     
-    setConnectedIntegrations(prev => [...prev, integrationId]);
+    try {
+      let oauthUrl = '';
+      
+      switch (integration.id) {
+        case 'google-calendar':
+          const googleClientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
+          if (!googleClientId) {
+            throw new Error('Google Client ID not configured');
+          }
+          oauthUrl = IntegrationManager.getGoogleCalendarOAuthUrl(googleClientId, redirectUri);
+          break;
+          
+        case 'microsoft-calendar':
+          const microsoftClientId = process.env.REACT_APP_MICROSOFT_CLIENT_ID;
+          if (!microsoftClientId) {
+            throw new Error('Microsoft Client ID not configured');
+          }
+          oauthUrl = await IntegrationManager.getMicrosoftCalendarOAuthUrl(microsoftClientId, redirectUri);
+          break;
+          
+        case 'notion':
+          oauthUrl = IntegrationManager.getNotionOAuthUrl();
+          break;
+          
+        case 'onenote':
+          const oneNoteClientId = process.env.REACT_APP_MICROSOFT_CLIENT_ID;
+          if (!oneNoteClientId) {
+            throw new Error('Microsoft Client ID not configured for OneNote');
+          }
+          oauthUrl = await IntegrationManager.getOneNoteOAuthUrl(oneNoteClientId, redirectUri);
+          break;
+          
+        default:
+          throw new Error(`OAuth not implemented for ${integration.id}`);
+      }
+      
+      console.log('🔗 Redirecting to OAuth URL for:', integration.name);
+      // Store which integration we're connecting for callback handling
+      sessionStorage.setItem('connecting_integration', integration.id);
+      sessionStorage.setItem('connecting_integration_name', integration.name);
+      
+      // Redirect to OAuth
+      window.location.href = oauthUrl;
+      
+    } catch (error) {
+      console.error('❌ OAuth setup failed:', error);
+      throw error;
+    }
+  };
+
+  const handleApiKeyConnection = async (integration: any) => {
+    // For API key integrations, show a prompt (in a real app, you'd use a modal)
+    const apiKey = prompt(`Enter your ${integration.name} API key:`);
+    
+    if (!apiKey) {
+      setConnecting(null);
+      return;
+    }
+    
+    // Simulate API key validation
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Add to connected integrations
+    const newConnections = [...connectedIntegrations, integration.id];
+    setConnectedIntegrations(newConnections);
+    setUserData(user!.id, 'lifely_onboarding_integrations', newConnections);
+    
+    console.log('✅ Connected via API key:', integration.name);
     setConnecting(null);
   };
 
   const handleContinue = () => {
-    // Save connected integrations
-    localStorage.setItem('lifely_onboarding_integrations', JSON.stringify(connectedIntegrations));
+    if (!user?.id) return;
+    
+    // Save connected integrations (user-specific)
+    setUserData(user.id, 'lifely_onboarding_integrations', connectedIntegrations);
     
     // Save progress and navigate to processing
-    localStorage.setItem('lifely_onboarding_progress', '/onboarding/processing');
+    setUserData(user.id, 'lifely_onboarding_progress', '/onboarding/processing');
     navigate('/onboarding/processing');
   };
 
   const handleSkipAll = () => {
-    localStorage.setItem('lifely_onboarding_progress', '/onboarding/processing');
+    if (!user?.id) return;
+    
+    setUserData(user.id, 'lifely_onboarding_progress', '/onboarding/processing');
     navigate('/onboarding/processing');
+  };
+
+  const showNotification = (message: string, type: 'success' | 'error' | 'info') => {
+    setNotification({ message, type, isVisible: true });
+    setTimeout(() => {
+      setNotification(prev => ({ ...prev, isVisible: false }));
+    }, 5000);
   };
 
   return (
@@ -149,9 +329,16 @@ export default function IntegrationsSetup() {
                   <h3 className={`text-lifeos-dark font-semibold mb-2 ${isComingSoon ? 'opacity-60' : ''}`}>
                     {integration.name}
                   </h3>
-                  <p className={`text-lifeos-gray-400 text-sm mb-4 ${isComingSoon ? 'opacity-60' : ''}`}>
+                  <p className={`text-lifeos-gray-400 text-sm mb-2 ${isComingSoon ? 'opacity-60' : ''}`}>
                     {integration.description}
                   </p>
+                  {!isComingSoon && (
+                    <p className={`text-lifeos-gray-500 text-xs mb-4 ${
+                      integration.authType === 'oauth' ? 'text-blue-600' : 'text-orange-600'
+                    }`}>
+                      {integration.authType === 'oauth' ? '🔐 Secure OAuth authentication' : '🔑 Requires API key'}
+                    </p>
+                  )}
                   
                   {isComingSoon ? (
                     <div className="w-full bg-lifeos-gray-200 text-lifeos-gray-400 py-3 px-4 rounded-xl font-medium text-center border border-lifeos-gray-300">
@@ -172,13 +359,13 @@ export default function IntegrationsSetup() {
                     >
                       {isConnecting ? (
                         <>
-                          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          Connecting...
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          {integration.authType === 'oauth' ? 'Redirecting...' : 'Connecting...'}
                         </>
                       ) : (
                         <>
                           <ExternalLink className="w-5 h-5" />
-                          Connect
+                          {integration.authType === 'oauth' ? 'Connect with OAuth' : 'Enter API Key'}
                         </>
                       )}
                     </button>
@@ -232,6 +419,34 @@ export default function IntegrationsSetup() {
           </div>
         </div>
       </div>
+
+      {/* Notification */}
+      {notification.isVisible && (
+        <div className={`fixed top-4 right-4 z-50 p-4 rounded-xl shadow-lg border ${
+          notification.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' :
+          notification.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' :
+          'bg-blue-50 border-blue-200 text-blue-800'
+        } max-w-md animate-in slide-in-from-top-5 duration-300`}>
+          <div className="flex items-center gap-3">
+            <div className={`w-5 h-5 ${
+              notification.type === 'success' ? 'text-green-500' :
+              notification.type === 'error' ? 'text-red-500' :
+              'text-blue-500'
+            }`}>
+              {notification.type === 'success' ? <Check className="w-5 h-5" /> :
+               notification.type === 'error' ? '❌' :
+               'ℹ️'}
+            </div>
+            <p className="text-sm font-medium">{notification.message}</p>
+            <button
+              onClick={() => setNotification(prev => ({ ...prev, isVisible: false }))}
+              className="ml-auto text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

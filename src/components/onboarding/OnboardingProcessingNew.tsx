@@ -74,19 +74,25 @@ export default function OnboardingProcessingNew() {
         conversationText = 'Voice memo responses about life organization and goals';
       }
       
-      // 3. Get document context
+      // 3. Get document context (enhanced extraction)
       const documents = getUserData(user.id, 'lifely_onboarding_documents', []);
       let documentContext = '';
       if (documents.length > 0) {
         documentContext = documents.map((doc: any) => {
           if (doc.type === 'youtube') {
-            return `YouTube Video: ${doc.content}`;
+            return `YOUTUBE VIDEO CONTEXT:\nTitle/URL: ${doc.name || 'YouTube content'}\nContent: ${doc.content}`;
           } else if (doc.type === 'text') {
-            return `User Note: ${doc.content}`;
+            return `USER-ADDED NOTE:\n"${doc.content}"`;
           } else {
-            return `Document "${doc.name}": ${doc.content.substring(0, 500)}...`;
+            // For files, include more context and key details
+            const content = doc.content || '';
+            const preview = content.length > 1000 ? content.substring(0, 1000) + '...' : content;
+            return `UPLOADED DOCUMENT: "${doc.name}"\nContent: ${preview}\n[Document provides context about user's current work/projects/interests]`;
           }
         }).join('\\n\\n');
+        
+        // Add a summary note about the documents
+        documentContext += `\n\nDOCUMENT SUMMARY: User uploaded ${documents.length} file(s) which likely contain details about their current projects, workflows, interests, or professional context. Extract specific details from these documents to create personalized categories.`;
       }
       
       // Build complete context
@@ -107,46 +113,101 @@ export default function OnboardingProcessingNew() {
       if (documentContext) {
         fullContext += `ADDITIONAL CONTEXT:\\n${documentContext}\\n\\n`;
       }
+      
+      // 4. Get connected integrations context
+      const connectedIntegrations = getUserData(user.id, 'lifely_onboarding_integrations', []);
+      if (connectedIntegrations.length > 0) {
+        fullContext += `CONNECTED INTEGRATIONS:\\n`;
+        fullContext += `User has connected: ${connectedIntegrations.join(', ')}\\n`;
+        fullContext += `This indicates they use these tools for: ${connectedIntegrations.map((int: string) => {
+          switch(int) {
+            case 'google-calendar': return 'Google Calendar for scheduling';
+            case 'microsoft-calendar': return 'Microsoft Calendar for scheduling';
+            case 'notion': return 'Notion for notes and project management';
+            case 'onenote': return 'OneNote for note-taking';
+            case 'todoist': return 'Todoist for task management';
+            case 'youtube': return 'YouTube for content creation/consumption';
+            default: return int;
+          }
+        }).join(', ')}\\n\\n`;
+      }
 
+      // Debug: Show what context we're working with
+      console.log('📋 ONBOARDING CONTEXT ANALYSIS:');
+      console.log('- Conversation text length:', conversationText.length);
+      console.log('- Document context length:', documentContext.length);
+      console.log('- Has initial data:', !!initialData);
+      console.log('- Connected integrations:', connectedIntegrations.length);
+      console.log('- Full context preview:', fullContext.substring(0, 200) + '...');
+      
       if (!fullContext.trim()) {
-        throw new Error('No onboarding data found');
+        console.warn('⚠️ No onboarding context found - user may have skipped all steps');
+        // For minimal context users, create a basic context
+        fullContext = 'USER PROFILE: New user seeking life organization and productivity improvement. Looking to establish better systems for managing tasks, goals, and daily routines.';
       }
 
       // Step 1: Analyze responses
       setCurrentStep(0);
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // Step 2: Create categories
+      // Step 2: Create categories (multi-step process)
       setCurrentStep(1);
-      const categoriesFunction: FunctionCall = {
-        id: 'create-categories',
-        name: 'createCategories',
-        description: 'Generate personalized life categories based on user responses',
-        status: 'executing',
-        code: `const categories = analyzeUserNeeds(responses)
-  .map(need => createCategory(need))
-  .filter(cat => cat.priority > 5)
-  .sort((a, b) => b.priority - a.priority);
+      const multiStepFunctions: FunctionCall[] = [
+        {
+          id: 'analyze-profile',
+          name: 'analyzeProfile',
+          description: 'Extract key themes and specific details from user profile',
+          status: 'executing',
+          code: `const analysis = extractPersonalityAndThemes(userProfile);
+return { themes, specificDetails, personality };`
+        },
+        {
+          id: 'create-categories',
+          name: 'createPersonalizedCategories',
+          description: 'Generate categories specific to user\'s actual life areas',
+          status: 'pending',
+          code: `const categories = createCategoriesFrom(analysis.themes, analysis.specificDetails);
+return personalizedCategories;`
+        },
+        {
+          id: 'create-goals',
+          name: 'createGoalsForCategories',
+          description: 'Generate specific, actionable goals for each category',
+          status: 'pending',
+          code: `categories.forEach(cat => createSpecificGoals(cat, userContext));
+return personalizedGoals;`
+        },
+        {
+          id: 'create-routines',
+          name: 'createRoutinesForCategories',
+          description: 'Design daily/weekly routines for each life area',
+          status: 'pending',
+          code: `categories.forEach(cat => createRoutines(cat, userPreferences));
+return personalizedRoutines;`
+        },
+        {
+          id: 'create-todos',
+          name: 'createTodosForCategories',
+          description: 'Generate immediate action items for each category',
+          status: 'pending',
+          code: `categories.forEach(cat => createActionItems(cat, userContext));
+return actionableItems;`
+        }
+      ];
 
-return categories.slice(0, 6);`
-      };
+      setFunctionCalls(multiStepFunctions);
 
-      setFunctionCalls([categoriesFunction]);
-
-      // Simulate real Gemini call for categories
+      // Execute multi-step Gemini calls
       const categoriesResult = await createCategories(fullContext);
       
-      setFunctionCalls(prev => prev.map(fc => 
-        fc.id === 'create-categories' 
-          ? { ...fc, status: 'completed', result: categoriesResult.categories }
-          : fc
-      ));
+      // Update all functions as completed
+      setFunctionCalls(prev => prev.map(fc => ({ ...fc, status: 'completed' })));
 
       // Step 3: Generate content
       setCurrentStep(2);
       const contentFunctions: FunctionCall[] = [
         {
-          id: 'create-goals-step',
+          id: `create-goals-step-${Date.now()}`,
           name: 'createGoals',
           description: 'Generate specific, actionable goals for each category',
           status: 'executing',
@@ -164,7 +225,7 @@ return categories.slice(0, 6);`
 });`
         },
         {
-          id: 'create-routines-step',
+          id: `create-routines-step-${Date.now()}-2`,
           name: 'createRoutines',
           description: 'Build daily and weekly routines that support user goals',
           status: 'pending',
@@ -177,7 +238,7 @@ return categories.slice(0, 6);`
   .filter(routine => routine.feasible);`
         },
         {
-          id: 'create-todos-step',
+          id: `create-todos-step-${Date.now()}-3`,
           name: 'createTodos',
           description: 'Generate immediate action items to get started',
           status: 'pending',
@@ -212,8 +273,9 @@ return categories.slice(0, 6);`
 
       // Step 4: Build dashboard
       setCurrentStep(3);
+      const dashboardFunctionId = `build-dashboard-${Date.now()}`;
       const dashboardFunction: FunctionCall = {
-        id: 'build-dashboard',
+        id: dashboardFunctionId,
         name: 'buildDashboard',
         description: 'Assemble all components into final dashboard',
         status: 'executing',
@@ -255,7 +317,7 @@ return dashboard;`
       setDashboardData(finalData);
       
       setFunctionCalls(prev => prev.map(fc => 
-        fc.id === 'build-dashboard' ? { ...fc, status: 'completed', result: finalData } : fc
+        fc.id === dashboardFunctionId ? { ...fc, status: 'completed', result: finalData } : fc
       ));
 
       setIsComplete(true);
@@ -563,73 +625,343 @@ return dashboard;`
     }
   };
 
-  const createCategories = async (fullContext: string) => {
-    const prompt = `You are creating a personalized life management system. Based on this user profile: "${fullContext}"
+  // Step 1: Analyze user profile and extract key themes
+  const analyzeProfile = async (fullContext: string) => {
+    // Enhanced prompt specifically for file upload scenarios
+    const prompt = `IMPORTANT: You must respond with ONLY pure JSON. Do not use function calls. Do not use markdown formatting.
 
-CRITICAL INSTRUCTIONS:
-1. Create 4-6 categories that match this specific user's life areas and goals
-2. If they're a student, include "Academics" or "Studies" category
-3. If they mention business/work, include "Business" or "Career" category  
-4. If they mention fitness/health, include "Health & Fitness" category
-5. Create specific, actionable items that match their actual situation and challenges
-6. Use their exact words and goals from their responses
-7. Create realistic timelines based on their role (student = shorter academic cycles)
+You are analyzing a user's life context from documents, uploads, and any available profile data. Even if they didn't answer detailed questions, extract meaningful life themes from whatever context is available.
 
-Create PERSONALIZED content based on their responses. For example:
-- Student → Study schedules, assignment tracking, exam prep
-- Business person → Client meetings, revenue goals, networking
-- Fitness focused → Workout routines, meal planning, progress tracking
+Context to analyze: "${fullContext}"
 
-Return ONLY valid JSON in this exact format:
+INSTRUCTIONS:
+1. Look for ANY mentions of: work/business, hobbies, goals, current projects, interests, skills, challenges
+2. If documents mention specific tools/apps they use, infer their workflow preferences
+3. Extract concrete details like company names, project names, specific interests, locations, technologies
+4. If minimal context, focus on creating categories around what IS mentioned
+5. Avoid generic categories - make them specific to any concrete details found
+
+Return ONLY pure JSON (no markdown, no function calls):
 {
-  "categories": [{"id": "academics", "name": "Academics", "purpose": "Excel in studies", "priority": 9, "icon": "graduation-cap", "color": "blue"}],
-  "goals": [{"id": "goal-1", "title": "Achieve 3.8 GPA this semester", "category": "academics", "timeline": "4 months", "priority": 5}],
-  "routines": [{"id": "routine-1", "title": "Daily study session", "frequency": "daily", "time": "evening", "category": "academics"}],
-  "todos": [{"id": "todo-1", "title": "Complete chemistry assignment", "category": "academics", "priority": 3}],
-  "events": [{"id": "event-1", "title": "Midterm exam - Biology", "category": "academics", "date": "${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()}"}],
-  "notes": [{"id": "note-1", "title": "Study strategies that work", "category": "academics", "content": "Active recall and spaced repetition"}],
-  "workStyle": "Describe their work style based on their responses (e.g. 'Detail-oriented and methodical' or 'Creative and collaborative')",
-  "personalInsights": ["Insight about their approach to life management", "Insight about their priorities", "Insight about their goals and aspirations"]
+  "themes": ["specific_work_area", "specific_interest", "mentioned_goal_area", "tool_workflow"],
+  "specificDetails": {
+    "businessName": "extracted company/project name or null",
+    "toolsUsed": ["specific tools mentioned"],
+    "interests": ["specific interests found"],
+    "currentProjects": ["any projects mentioned"],
+    "skillAreas": ["technical or professional skills mentioned"],
+    "location": "if mentioned",
+    "personalValues": "any values/beliefs mentioned"
+  },
+  "personality": "inferred from writing style and content focus",
+  "contextQuality": "rich|moderate|minimal",
+  "primaryFocus": "the main area of focus detected"
 }`;
     
-    try {
-      // Use regular Gemini call - no special tools needed
+    const result = await geminiService.processMessage(prompt, [], [], [], false, false);
+    // Clean markdown formatting before parsing JSON
+    const cleanResponse = result.response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    return JSON.parse(cleanResponse);
+  };
+
+  // Step 2: Create personalized categories based on analysis
+  const createPersonalizedCategories = async (analysis: any) => {
+    // Build context quality assessment
+    const contextQuality = analysis.contextQuality || 'minimal';
+    const primaryFocus = analysis.primaryFocus || 'general productivity';
+    
+    const prompt = `IMPORTANT: You must respond with ONLY pure JSON. Do not use function calls. Do not use markdown formatting.
+
+Create 4-6 personalized life categories for this user based on their ${contextQuality} context:
+
+Analysis Results:
+- Themes: ${analysis.themes.join(', ')}
+- Primary Focus: ${primaryFocus}
+- Specific Details: ${JSON.stringify(analysis.specificDetails)}
+- Personality: ${analysis.personality}
+- Context Quality: ${contextQuality}
+
+CATEGORY CREATION RULES:
+1. If businessName exists: Create specific business category with exact name
+2. If toolsUsed mentioned: Create workflow/productivity category around those tools
+3. If currentProjects exist: Create project-specific categories
+4. If skillAreas mentioned: Create skill development categories
+5. For minimal context: Focus on the primary theme detected and build around it
+6. Always include at least one personal development/health category
+7. Use specific names, never generic ones like "Work" or "Personal"
+
+Examples of GOOD categories for file-only context:
+- "Notion Workspace Organization" (if Notion mentioned)
+- "Frontend Development Projects" (if coding mentioned)
+- "Content Creation Pipeline" (if creating content)
+- "Real Estate Investment Research" (if property mentioned)
+
+Return ONLY pure JSON (no markdown, no function calls):
+{
+  "categories": [
+    {"id": "specific-work-area", "name": "Actual Specific Name Based on Context", "purpose": "Clear purpose from their context", "priority": 9, "icon": "relevant-icon", "color": "blue"},
+    {"id": "detected-interest", "name": "Their Actual Interest Area", "purpose": "Based on what they mentioned", "priority": 8, "icon": "relevant-icon", "color": "green"}
+  ]
+}`;
+    
+    const result = await geminiService.processMessage(prompt, [], [], [], false, false);
+    // Clean markdown formatting before parsing JSON
+    const cleanResponse = result.response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    return JSON.parse(cleanResponse);
+  };
+
+  // Step 3: Create specific goals for each category
+  const createGoalsForCategories = async (categories: any[], analysis: any) => {
+    const goals = [];
+    const contextQuality = analysis.contextQuality || 'minimal';
+    
+    for (const category of categories) {
+      const prompt = `IMPORTANT: You must respond with ONLY pure JSON. Do not use function calls. Do not use markdown formatting.
+
+Create 2-3 specific, actionable goals for "${category.name}" category based on ${contextQuality} context.
+
+Available Context:
+- User Details: ${JSON.stringify(analysis.specificDetails)}
+- Category Purpose: ${category.purpose}
+- Primary Focus: ${analysis.primaryFocus}
+- Tools Used: ${analysis.specificDetails.toolsUsed?.join(', ') || 'none specified'}
+- Current Projects: ${analysis.specificDetails.currentProjects?.join(', ') || 'none specified'}
+
+GOAL CREATION RULES:
+1. If specific projects mentioned: Create goals around completing/improving them
+2. If tools mentioned: Create goals around mastering/optimizing those tools
+3. If business mentioned: Create revenue/growth goals with realistic numbers
+4. For minimal context: Create foundational goals that make sense for the category
+5. Make timelines realistic (1-3 months for specific tasks, 3-6 months for major goals)
+6. Include both process goals (habits) and outcome goals (results)
+
+Return ONLY pure JSON (no markdown, no function calls):
+{
+  "goals": [
+    {"id": "goal-${Date.now()}-1", "title": "Specific goal based on their context", "category": "${category.id}", "timeline": "realistic timeframe", "priority": 4}
+  ]
+}`;
+      
       const result = await geminiService.processMessage(prompt, [], [], [], false, false);
+      // Clean markdown formatting before parsing JSON
+      const cleanResponse = result.response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const categoryGoals = JSON.parse(cleanResponse);
+      goals.push(...categoryGoals.goals);
+    }
+    
+    return goals;
+  };
+
+  // Step 4: Create routines for each category
+  const createRoutinesForCategories = async (categories: any[], analysis: any) => {
+    const routines = [];
+    
+    for (const category of categories) {
+      const prompt = `IMPORTANT: You must respond with ONLY pure JSON. Do not use function calls. Do not use markdown formatting.
+
+Create 1-2 daily/weekly routines for "${category.name}" category.
+User context: ${JSON.stringify(analysis.specificDetails)}
+
+Make routines SPECIFIC and actionable.
+
+Return ONLY pure JSON (no markdown, no function calls):
+{
+  "routines": [
+    {"id": "routine-1", "title": "Daily Rosary and Mass", "frequency": "daily", "time": "morning", "category": "${category.id}"}
+  ]
+}`;
       
-      console.log('Gemini response for categories:', result.response);
+      const result = await geminiService.processMessage(prompt, [], [], [], false, false);
+      // Clean markdown formatting before parsing JSON
+      const cleanResponse = result.response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const categoryRoutines = JSON.parse(cleanResponse);
+      routines.push(...categoryRoutines.routines);
+    }
+    
+    return routines;
+  };
+
+  // Step 5: Create todos and immediate actions
+  const createTodosForCategories = async (categories: any[], analysis: any) => {
+    const todos = [];
+    const contextQuality = analysis.contextQuality || 'minimal';
+    
+    for (const category of categories) {
+      const prompt = `IMPORTANT: You must respond with ONLY pure JSON. Do not use function calls. Do not use markdown formatting.
+
+Create 2-3 immediate, actionable todos for "${category.name}" category based on ${contextQuality} context.
+
+Available Context:
+- User Details: ${JSON.stringify(analysis.specificDetails)}
+- Category Purpose: ${category.purpose}
+- Tools Used: ${analysis.specificDetails.toolsUsed?.join(', ') || 'none specified'}
+- Current Projects: ${analysis.specificDetails.currentProjects?.join(', ') || 'none specified'}
+- Skill Areas: ${analysis.specificDetails.skillAreas?.join(', ') || 'none specified'}
+
+TODO CREATION RULES:
+1. Create immediate actions that can be done THIS WEEK
+2. If specific tools mentioned: Create todos around organizing/optimizing those tools
+3. If projects mentioned: Create next steps for those specific projects
+4. If minimal context: Create foundational/setup todos for the category
+5. Make them specific and actionable (not vague like "improve X")
+6. Focus on quick wins that build momentum
+
+Examples of GOOD todos for file-only context:
+- "Set up project tracking board in Notion"
+- "Review and organize current client files"
+- "Schedule 30-min planning session for [specific project]"
+- "Research top 3 tools for [mentioned workflow]"
+
+Return ONLY pure JSON (no markdown, no function calls):
+{
+  "todos": [
+    {"id": "todo-${Date.now()}-1", "title": "Specific actionable task", "category": "${category.id}", "priority": 3}
+  ]
+}`;
       
-      // Try to parse JSON from response
-      try {
-        const cleanResponse = result.response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        const parsed = JSON.parse(cleanResponse);
-        console.log('Successfully parsed categories:', parsed);
-        return parsed;
-      } catch (parseError) {
-        console.log('JSON parsing failed, using fallback data');
+      const result = await geminiService.processMessage(prompt, [], [], [], false, false);
+      // Clean markdown formatting before parsing JSON
+      const cleanResponse = result.response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const categoryTodos = JSON.parse(cleanResponse);
+      todos.push(...categoryTodos.todos);
+    }
+    
+    return todos;
+  };
+
+  // Main orchestration function
+  const createCategories = async (fullContext: string) => {
+    try {
+      console.log('🎯 Step 1: Analyzing user profile...');
+      const analysis = await analyzeProfile(fullContext);
+      
+      console.log('📂 Step 2: Creating personalized categories...');
+      const categoriesResult = await createPersonalizedCategories(analysis);
+      
+      console.log('🎯 Step 3: Creating specific goals...');
+      const goals = await createGoalsForCategories(categoriesResult.categories, analysis);
+      
+      console.log('🔄 Step 4: Creating personalized routines...');
+      const routines = await createRoutinesForCategories(categoriesResult.categories, analysis);
+      
+      console.log('✅ Step 5: Creating immediate todos...');
+      const todos = await createTodosForCategories(categoriesResult.categories, analysis);
+
+      // Create some sample events and notes
+      const events = [{
+        id: "event-1",
+        title: "Weekly business review",
+        category: categoriesResult.categories[0]?.id || "business",
+        date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+      }];
+
+      const notes = [{
+        id: "note-1", 
+        title: "Personal growth insights",
+        category: categoriesResult.categories[0]?.id || "personal",
+        content: "Key strategies for achieving goals"
+      }];
+
+      return {
+        categories: categoriesResult.categories,
+        goals,
+        routines,
+        todos,
+        events,
+        notes,
+        workStyle: analysis.personality,
+        personalInsights: [
+          `Strong focus on ${analysis.themes.join(' and ')}`,
+          `Demonstrates ${analysis.personality}`,
+          `Values systematic approaches to growth`
+        ]
+      };
+    } catch (error) {
+      console.error('❌ Multi-step category creation failed:', error);
+      
+      // Intelligent fallback based on whatever context we do have
+      console.log('🤖 Creating intelligent fallback categories based on available context...');
+      
+      // Try to extract any useful info from the context for fallback
+      const contextLower = fullContext.toLowerCase();
+      const hasBusinessContext = contextLower.includes('business') || contextLower.includes('company') || contextLower.includes('startup') || contextLower.includes('revenue');
+      const hasDevContext = contextLower.includes('code') || contextLower.includes('dev') || contextLower.includes('programming') || contextLower.includes('app');
+      const hasContentContext = contextLower.includes('content') || contextLower.includes('youtube') || contextLower.includes('writing') || contextLower.includes('blog');
+      const hasDesignContext = contextLower.includes('design') || contextLower.includes('figma') || contextLower.includes('ui') || contextLower.includes('ux');
+      const hasStudentContext = contextLower.includes('student') || contextLower.includes('university') || contextLower.includes('college') || contextLower.includes('study');
+      
+      let fallbackCategories = [];
+      
+      if (hasBusinessContext) {
+        fallbackCategories.push({ id: 'business-ops', name: 'Business Operations', purpose: 'Grow and scale business activities', priority: 9, icon: 'briefcase', color: 'blue' });
+      }
+      if (hasDevContext) {
+        fallbackCategories.push({ id: 'development', name: 'Development Projects', purpose: 'Code, build and ship projects', priority: 8, icon: 'computer', color: 'green' });
+      }
+      if (hasContentContext) {
+        fallbackCategories.push({ id: 'content-creation', name: 'Content Creation', purpose: 'Create and share valuable content', priority: 7, icon: 'video', color: 'red' });
+      }
+      if (hasDesignContext) {
+        fallbackCategories.push({ id: 'design-work', name: 'Design Work', purpose: 'Create beautiful and functional designs', priority: 6, icon: 'palette', color: 'purple' });
+      }
+      if (hasStudentContext) {
+        fallbackCategories.push({ id: 'academics', name: 'Academic Excellence', purpose: 'Excel in studies and coursework', priority: 9, icon: 'graduation-cap', color: 'indigo' });
       }
       
-      // Personalized fallback data based on user context (student with academic/business/fitness goals)
+      // Always add these foundational categories
+      fallbackCategories.push(
+        { id: 'personal-systems', name: 'Personal Systems', purpose: 'Organize life and optimize workflows', priority: 5, icon: 'settings', color: 'gray' },
+        { id: 'health-wellness', name: 'Health & Wellness', purpose: 'Maintain physical and mental wellbeing', priority: 4, icon: 'heart', color: 'pink' }
+      );
+      
+      // If we have no specific context, use general but useful categories
+      if (fallbackCategories.length <= 2) {
+        fallbackCategories = [
+          { id: 'productivity', name: 'Productivity & Focus', purpose: 'Optimize workflow and get things done', priority: 9, icon: 'target', color: 'blue' },
+          { id: 'skill-development', name: 'Skill Development', purpose: 'Learn and grow professionally', priority: 8, icon: 'book', color: 'green' },
+          { id: 'personal-projects', name: 'Personal Projects', purpose: 'Work on meaningful side projects', priority: 7, icon: 'rocket', color: 'purple' },
+          { id: 'health-wellness', name: 'Health & Wellness', purpose: 'Maintain physical and mental wellbeing', priority: 6, icon: 'heart', color: 'pink' }
+        ];
+      }
+      
       return {
-        categories: [
-          { id: 'academics', name: 'Academics', purpose: 'Excel in studies and coursework', priority: 9, icon: 'graduation-cap', color: 'blue' },
-          { id: 'business', name: 'Business & Career', purpose: 'Scale business and professional growth', priority: 8, icon: 'briefcase', color: 'green' },
-          { id: 'health-fitness', name: 'Health & Fitness', purpose: 'Physical fitness and wellbeing', priority: 7, icon: 'dumbbell', color: 'red' },
-          { id: 'personal-growth', name: 'Personal Development', purpose: 'Self-improvement and life balance', priority: 6, icon: 'brain', color: 'purple' }
-        ],
-        goals: [
-          { id: 'goal-1', title: 'Achieve excellent grades this semester', category: 'academics', timeline: '4 months', priority: 5 },
-          { id: 'goal-2', title: 'Grow business revenue by 20%', category: 'business', timeline: '3 months', priority: 5 },
-          { id: 'goal-3', title: 'Train consistently 4-5x per week', category: 'health-fitness', timeline: '1 month', priority: 4 }
-        ],
-        routines: [
-          { id: 'routine-1', title: 'Daily study sessions', frequency: 'daily', time: 'evening', category: 'academics' },
-          { id: 'routine-2', title: 'Morning workout', frequency: 'daily', time: 'morning', category: 'health-fitness' }
-        ],
-        todos: [
-          { id: 'todo-1', title: 'Complete upcoming assignment', category: 'academics', priority: 4 },
-          { id: 'todo-2', title: 'Follow up on client prospects', category: 'business', priority: 3 },
-          { id: 'todo-3', title: 'Plan this week\'s workouts', category: 'health-fitness', priority: 3 }
-        ],
+        categories: fallbackCategories,
+        goals: fallbackCategories.slice(0, 3).map((cat, idx) => ({
+          id: `goal-fallback-${idx + 1}`,
+          title: cat.name === 'Business Operations' ? 'Streamline business processes and grow revenue' :
+                 cat.name === 'Development Projects' ? 'Complete current development project' :
+                 cat.name === 'Content Creation' ? 'Build consistent content creation workflow' :
+                 cat.name === 'Academic Excellence' ? 'Achieve excellent academic performance' :
+                 cat.name === 'Productivity & Focus' ? 'Optimize daily productivity systems' :
+                 `Establish strong foundation for ${cat.name.toLowerCase()}`,
+          category: cat.id,
+          timeline: '2-3 months',
+          priority: cat.priority > 7 ? 5 : 4
+        })),
+        routines: fallbackCategories.slice(0, 2).map((cat, idx) => ({
+          id: `routine-fallback-${idx + 1}`,
+          title: cat.name === 'Business Operations' ? 'Daily business review and planning' :
+                 cat.name === 'Development Projects' ? 'Daily coding session' :
+                 cat.name === 'Content Creation' ? 'Daily content creation time' :
+                 cat.name === 'Academic Excellence' ? 'Daily study and review session' :
+                 cat.name === 'Health & Wellness' ? 'Morning wellness routine' :
+                 `Daily ${cat.name.toLowerCase()} session`,
+          frequency: 'daily',
+          time: cat.name.includes('Health') ? 'morning' : 'evening',
+          category: cat.id
+        })),
+        todos: fallbackCategories.slice(0, 4).map((cat, idx) => ({
+          id: `todo-fallback-${idx + 1}`,
+          title: cat.name === 'Business Operations' ? 'Review and organize current business processes' :
+                 cat.name === 'Development Projects' ? 'Set up development environment and plan next sprint' :
+                 cat.name === 'Content Creation' ? 'Plan this week\'s content topics and schedule' :
+                 cat.name === 'Academic Excellence' ? 'Organize study materials and create study schedule' :
+                 cat.name === 'Personal Systems' ? 'Set up task management and organization system' :
+                 cat.name === 'Health & Wellness' ? 'Plan weekly fitness and wellness activities' :
+                 `Set up basic organization for ${cat.name.toLowerCase()}`,
+          category: cat.id,
+          priority: cat.priority > 7 ? 4 : 3
+        })),
         events: [
           { id: 'event-1', title: 'Study group session', category: 'academics', date: new Date(Date.now() + 86400000).toISOString() },
           { id: 'event-2', title: 'Business development call', category: 'business', date: new Date(Date.now() + 172800000).toISOString() }
@@ -645,9 +977,6 @@ Return ONLY valid JSON in this exact format:
           "You value systematic approaches and consistent habits for long-term growth"
         ]
       };
-    } catch (error) {
-      console.error('Category creation error:', error);
-      throw error;
     }
   };
 
@@ -799,8 +1128,8 @@ Return ONLY valid JSON in this exact format:
           <div className="mt-12 bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-white/20 shadow-lg">
             <h3 className="text-xl font-semibold text-lifeos-dark mb-6">Live Dashboard Preview</h3>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {Object.entries(dashboardData).map(([type, items]) => (
-                <div key={type} className="bg-gradient-to-br from-lifeos-primary/10 to-lifeos-secondary/10 border border-lifeos-primary/20 rounded-xl p-4 text-center hover:scale-105 transition-transform">
+              {Object.entries(dashboardData).map(([type, items], index) => (
+                <div key={`dashboard-${type}-${index}`} className="bg-gradient-to-br from-lifeos-primary/10 to-lifeos-secondary/10 border border-lifeos-primary/20 rounded-xl p-4 text-center hover:scale-105 transition-transform">
                   <div className="w-10 h-10 bg-gradient-to-r from-lifeos-primary to-lifeos-secondary rounded-lg flex items-center justify-center mx-auto mb-2">
                     {getTypeIcon(type)}
                   </div>

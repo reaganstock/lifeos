@@ -21,9 +21,18 @@ export const getUserData = <T>(userId: string | null, baseKey: string, defaultVa
   }
   
   try {
+    // Try to parse as JSON first
     return JSON.parse(stored);
   } catch (error) {
+    // If JSON parsing fails, check if it's a simple string value that should be returned as-is
+    if (typeof defaultValue === 'string') {
+      console.warn(`Using raw string value for key ${key}:`, stored);
+      return stored as T;
+    }
+    
     console.error(`Error parsing stored data for key ${key}:`, error);
+    // Clean up corrupted data
+    localStorage.removeItem(key);
     return defaultValue;
   }
 };
