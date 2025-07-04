@@ -3104,10 +3104,10 @@ User message: ${messageWithContext}`;
                   onClick={toggleVoiceMode}
                   className={`w-14 h-14 rounded-2xl shadow-xl border flex items-center justify-center transition-all duration-300 transform hover:scale-110 active:scale-95 group relative overflow-hidden ${
                     isVoiceMode 
-                      ? 'bg-gradient-to-br from-purple-500 via-purple-600 to-indigo-600 border-purple-400/50'
+                      ? 'bg-gradient-to-br from-blue-600 to-blue-700 border-blue-400/50'
                       : isDarkMode
-                        ? 'bg-gradient-to-br from-gray-800/80 via-gray-700/80 to-gray-800/80 border-gray-600/50 hover:from-purple-900/60 hover:via-purple-800/60 hover:to-indigo-900/60 backdrop-blur-xl'
-                        : 'bg-gradient-to-br from-white/80 via-gray-50/80 to-white/80 border-gray-200/50 hover:from-purple-50/80 hover:via-purple-100/80 hover:to-indigo-50/80 backdrop-blur-xl'
+                        ? 'bg-gradient-to-br from-gray-800/80 via-gray-700/80 to-gray-800/80 border-gray-600/50 hover:from-blue-900/60 hover:via-blue-800/60 hover:to-blue-700/60 backdrop-blur-xl'
+                        : 'bg-gradient-to-br from-white/80 via-gray-50/80 to-white/80 border-gray-200/50 hover:from-blue-50/80 hover:via-blue-100/80 hover:to-blue-50/80 backdrop-blur-xl'
                   }`}
                   style={{
                     boxShadow: isVoiceMode 
@@ -3121,8 +3121,8 @@ User message: ${messageWithContext}`;
                   {/* Background glow effect */}
                   <div className={`absolute inset-0 rounded-2xl transition-opacity duration-300 ${
                     isVoiceMode 
-                      ? 'bg-gradient-to-r from-purple-400/20 to-indigo-400/20 opacity-100'
-                      : 'bg-gradient-to-r from-purple-400/10 to-indigo-400/10 opacity-0 group-hover:opacity-100'
+                      ? 'bg-gradient-to-r from-blue-400/20 to-blue-500/20 opacity-100'
+                      : 'bg-gradient-to-r from-blue-400/10 to-blue-500/10 opacity-0 group-hover:opacity-100'
                    }`}></div>
                     
                     <div className="flex items-center justify-center relative z-10">
@@ -3140,19 +3140,19 @@ User message: ${messageWithContext}`;
                           // Normal sound waves for voice chat
                           <div className="absolute inset-0 flex items-center justify-center space-x-0.5">
                           <div className={`w-0.5 h-2.5 rounded-full animate-pulse ${
-                            isDarkMode ? 'bg-gradient-to-t from-purple-400 to-purple-300' : 'bg-gradient-to-t from-purple-600 to-purple-500'
+                            isDarkMode ? 'bg-gradient-to-t from-blue-400 to-blue-300' : 'bg-gradient-to-t from-blue-600 to-blue-500'
                           }`}></div>
                           <div className={`w-0.5 h-5 rounded-full animate-pulse ${
-                            isDarkMode ? 'bg-gradient-to-t from-purple-300 to-indigo-300' : 'bg-gradient-to-t from-purple-500 to-indigo-400'
+                            isDarkMode ? 'bg-gradient-to-t from-blue-400 to-blue-500' : 'bg-gradient-to-t from-blue-600 to-blue-700'
                           }`} style={{animationDelay: '0.1s'}}></div>
                           <div className={`w-0.5 h-3.5 rounded-full animate-pulse ${
-                            isDarkMode ? 'bg-gradient-to-t from-purple-400 to-purple-300' : 'bg-gradient-to-t from-purple-600 to-purple-500'
+                            isDarkMode ? 'bg-gradient-to-t from-blue-400 to-blue-300' : 'bg-gradient-to-t from-blue-600 to-blue-500'
                           }`} style={{animationDelay: '0.2s'}}></div>
                           <div className={`w-0.5 h-6 rounded-full animate-pulse ${
-                            isDarkMode ? 'bg-gradient-to-t from-purple-300 to-indigo-300' : 'bg-gradient-to-t from-purple-500 to-indigo-400'
+                            isDarkMode ? 'bg-gradient-to-t from-blue-400 to-blue-500' : 'bg-gradient-to-t from-blue-600 to-blue-700'
                           }`} style={{animationDelay: '0.3s'}}></div>
                           <div className={`w-0.5 h-3 rounded-full animate-pulse ${
-                            isDarkMode ? 'bg-gradient-to-t from-purple-400 to-purple-300' : 'bg-gradient-to-t from-purple-600 to-purple-500'
+                            isDarkMode ? 'bg-gradient-to-t from-blue-400 to-blue-300' : 'bg-gradient-to-t from-blue-600 to-blue-500'
                           }`} style={{animationDelay: '0.4s'}}></div>
                           </div>
                         )}
@@ -3164,14 +3164,14 @@ User message: ${messageWithContext}`;
                 <button
                   onClick={handleSendMessage}
                   disabled={!inputMessage.trim() || isProcessing}
-                  className="w-14 h-14 bg-gradient-to-br from-indigo-500 via-purple-600 to-purple-700 text-white rounded-2xl hover:from-indigo-600 hover:via-purple-700 hover:to-purple-800 disabled:opacity-50 transition-all duration-300 transform hover:scale-110 active:scale-95 disabled:hover:scale-100 shadow-xl flex items-center justify-center relative overflow-hidden group"
+                  className="w-14 h-14 bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-2xl hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 transition-all duration-300 transform hover:scale-110 active:scale-95 disabled:hover:scale-100 shadow-xl flex items-center justify-center relative overflow-hidden group"
                   style={{
-                    boxShadow: '0 12px 40px rgba(99, 102, 241, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
+                    boxShadow: '0 12px 40px rgba(59, 130, 246, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
                   }}
                   title="Send Message"
                 >
                   {/* Background glow effect */}
-                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-indigo-400/20 to-purple-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-blue-400/20 to-blue-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                   
                   <Send className="w-6 h-6 relative z-10 transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform duration-200" />
                 </button>
@@ -3249,7 +3249,7 @@ User message: ${messageWithContext}`;
                         }}
                         className={`w-full px-3 py-2 text-left text-sm transition-all flex items-center space-x-2 ${
                           isAgenticMode
-                            ? 'bg-gradient-to-r from-purple-500 to-indigo-600 text-white'
+                            ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white'
                             : isDarkMode ? 'hover:bg-gray-700 text-white' : 'hover:bg-gray-100 text-gray-700'
                         }`}
                       >
@@ -3272,7 +3272,7 @@ User message: ${messageWithContext}`;
                 )}
                 {isVoiceMode && (
                   <div className="flex items-center space-x-2 mt-1 text-blue-600">
-                    <div className="w-3 h-3 bg-purple-600 rounded-full animate-pulse"></div>
+                    <div className="w-3 h-3 bg-blue-600 rounded-full animate-pulse"></div>
                     <span>Voice chat active</span>
                   </div>
                 )}
