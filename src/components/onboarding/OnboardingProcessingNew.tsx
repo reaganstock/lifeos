@@ -43,9 +43,9 @@ export default function OnboardingProcessingNew() {
   const [hasStartedProcessing, setHasStartedProcessing] = useState(false);
 
   const steps = [
-    { title: 'Analyzing Responses', description: 'Processing your onboarding data' },
-    { title: 'Creating Categories', description: 'Building your life organization structure' },
-    { title: 'Generating Content', description: 'Creating goals, tasks, and routines' },
+    { title: 'Analyzing Context', description: 'Processing your uploaded files and preferences' },
+    { title: 'AI Personalization', description: 'Creating your tailored dashboard with Gemini Agent' },
+    { title: 'Finalizing Data', description: 'Preparing categories, goals, and tasks' },
     { title: 'Building Dashboard', description: 'Assembling your personalized interface' }
   ];
 
@@ -150,151 +150,40 @@ export default function OnboardingProcessingNew() {
       setCurrentStep(0);
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // Step 2: Create categories (multi-step process)
+      // Step 2: Create comprehensive dashboard using Gemini Agent
       setCurrentStep(1);
-      const multiStepFunctions: FunctionCall[] = [
-        {
-          id: 'analyze-profile',
-          name: 'analyzeProfile',
-          description: 'Extract key themes and specific details from user profile',
-          status: 'executing',
-          code: `const analysis = extractPersonalityAndThemes(userProfile);
-return { themes, specificDetails, personality };`
-        },
-        {
-          id: 'create-categories',
-          name: 'createPersonalizedCategories',
-          description: 'Generate categories specific to user\'s actual life areas',
-          status: 'pending',
-          code: `const categories = createCategoriesFrom(analysis.themes, analysis.specificDetails);
-return personalizedCategories;`
-        },
-        {
-          id: 'create-goals',
-          name: 'createGoalsForCategories',
-          description: 'Generate specific, actionable goals for each category',
-          status: 'pending',
-          code: `categories.forEach(cat => createSpecificGoals(cat, userContext));
-return personalizedGoals;`
-        },
-        {
-          id: 'create-routines',
-          name: 'createRoutinesForCategories',
-          description: 'Design daily/weekly routines for each life area',
-          status: 'pending',
-          code: `categories.forEach(cat => createRoutines(cat, userPreferences));
-return personalizedRoutines;`
-        },
-        {
-          id: 'create-todos',
-          name: 'createTodosForCategories',
-          description: 'Generate immediate action items for each category',
-          status: 'pending',
-          code: `categories.forEach(cat => createActionItems(cat, userContext));
-return actionableItems;`
-        }
-      ];
-
-      setFunctionCalls(multiStepFunctions);
-
-      // Execute multi-step Gemini calls
-      const categoriesResult = await createCategories(fullContext);
-      
-      // Update all functions as completed
-      setFunctionCalls(prev => prev.map(fc => ({ ...fc, status: 'completed' })));
-
-      // Step 3: Generate content
-      setCurrentStep(2);
-      const contentFunctions: FunctionCall[] = [
-        {
-          id: `create-goals-step-${Date.now()}`,
-          name: 'createGoals',
-          description: 'Generate specific, actionable goals for each category',
-          status: 'executing',
-          code: `categories.forEach(category => {
-  const goals = extractGoalsFromContext(userContext, category)
-    .map(goal => ({
-      id: generateId(),
-      title: goal.title,
-      category: category.id,
-      timeline: determineTimeline(goal.scope),
-      priority: calculatePriority(goal.importance)
-    }));
-  
-  return goals;
-});`
-        },
-        {
-          id: `create-routines-step-${Date.now()}-2`,
-          name: 'createRoutines',
-          description: 'Build daily and weekly routines that support user goals',
-          status: 'pending',
-          code: `const routines = userPreferences.schedule
-  .map(timeblock => createRoutine({
-    time: timeblock.preferred,
-    frequency: determineBestFrequency(timeblock),
-    category: matchToCategory(timeblock.activity)
-  }))
-  .filter(routine => routine.feasible);`
-        },
-        {
-          id: `create-todos-step-${Date.now()}-3`,
-          name: 'createTodos',
-          description: 'Generate immediate action items to get started',
-          status: 'pending',
-          code: `const todos = goals.flatMap(goal => 
-  breakDownIntoSteps(goal)
-    .slice(0, 2) // First 2 steps only
-    .map(step => ({
-      id: generateId(),
-      title: step.action,
-      category: goal.category,
-      priority: goal.priority
-    }))
-);`
-        }
-      ];
-
-      setFunctionCalls(prev => [...prev, ...contentFunctions]);
-
-      // Execute content creation functions
-      for (let i = 0; i < contentFunctions.length; i++) {
-        const currentFunction = contentFunctions[i];
-        setFunctionCalls(prev => prev.map(fc => 
-          fc.id === currentFunction.id ? { ...fc, status: 'executing' } : fc
-        ));
-        
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        setFunctionCalls(prev => prev.map(fc => 
-          fc.id === currentFunction.id ? { ...fc, status: 'completed' } : fc
-        ));
-      }
-
-      // Step 4: Build dashboard
-      setCurrentStep(3);
-      const dashboardFunctionId = `build-dashboard-${Date.now()}`;
-      const dashboardFunction: FunctionCall = {
-        id: dashboardFunctionId,
-        name: 'buildDashboard',
-        description: 'Assemble all components into final dashboard',
+      const agentFunction: FunctionCall = {
+        id: 'agent-personalization',
+        name: 'createPersonalizedDashboard',
+        description: 'Generate comprehensive personalized dashboard using AI agent',
         status: 'executing',
-        code: `const dashboard = {
-  categories: createdCategories,
-  goals: createdGoals,
-  routines: createdRoutines,
-  todos: createdTodos,
-  events: generateUpcomingEvents(),
-  notes: createWelcomeNotes()
-};
-
-localStorage.setItem('lifely_dashboard_data', JSON.stringify(dashboard));
-return dashboard;`
+        code: `const dashboard = await geminiAgent.createPersonalizedDashboard({
+  userContext: fullContext,
+  includeCategories: true,
+  includeGoals: true,
+  includeRoutines: true,
+  includeTodos: true,
+  includeNotes: true,
+  includeEvents: true
+});
+return comprehensiveDashboard;`
       };
 
-      setFunctionCalls(prev => [...prev, dashboardFunction]);
+      setFunctionCalls([agentFunction]);
+
+      // Execute single agent call for everything
+      const categoriesResult = await createCategories(fullContext);
       
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Update function as completed
+      setFunctionCalls(prev => prev.map(fc => ({ ...fc, status: 'completed', result: categoriesResult })));
+
+      // Step 3: Finalize dashboard (agent already created everything)
+      setCurrentStep(2);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Step 4: Assemble final data
+      setCurrentStep(3);
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       const finalData = {
         categories: categoriesResult.categories,
@@ -317,7 +206,7 @@ return dashboard;`
       setDashboardData(finalData);
       
       setFunctionCalls(prev => prev.map(fc => 
-        fc.id === dashboardFunctionId ? { ...fc, status: 'completed', result: finalData } : fc
+        fc.id === 'agent-personalization' ? { ...fc, status: 'completed', result: finalData } : fc
       ));
 
       setIsComplete(true);
@@ -829,53 +718,174 @@ Return ONLY pure JSON (no markdown, no function calls):
     return todos;
   };
 
-  // Main orchestration function
+  // Step 6: Create reference notes for each category
+  const createNotesForCategories = async (categories: any[], analysis: any) => {
+    const notes = [];
+    const contextQuality = analysis.contextQuality || 'minimal';
+    
+    for (const category of categories) {
+      const prompt = `IMPORTANT: You must respond with ONLY pure JSON. Do not use function calls. Do not use markdown formatting.
+
+Create 1-2 useful reference notes for "${category.name}" category based on ${contextQuality} context.
+
+Available Context:
+- User Details: ${JSON.stringify(analysis.specificDetails)}
+- Category Purpose: ${category.purpose}
+- Tools Used: ${analysis.specificDetails.toolsUsed?.join(', ') || 'none specified'}
+- Current Projects: ${analysis.specificDetails.currentProjects?.join(', ') || 'none specified'}
+
+NOTES CREATION RULES:
+1. Create knowledge/reference notes that will be useful long-term
+2. If specific tools mentioned: Create notes about optimizing those tools
+3. If projects mentioned: Create planning/strategy notes for those projects
+4. Include actionable insights, templates, or best practices
+5. Make content substantial enough to be valuable reference material
+
+Examples of GOOD notes for file-only context:
+- "Project Management Best Practices" with specific workflow tips
+- "Weekly Review Template" for the user's specific situation
+- "Key Resources for [Their Skill Area]" with relevant links/strategies
+
+Return ONLY pure JSON (no markdown, no function calls):
+{
+  "notes": [
+    {"id": "note-${Date.now()}-1", "title": "Useful reference title", "category": "${category.id}", "content": "Detailed content that provides real value"}
+  ]
+}`;
+      
+      const result = await geminiService.processMessage(prompt, [], [], [], false, false);
+      // Clean markdown formatting before parsing JSON
+      const cleanResponse = result.response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const categoryNotes = JSON.parse(cleanResponse);
+      notes.push(...categoryNotes.notes);
+    }
+    
+    return notes;
+  };
+
+  // Step 7: Create calendar events for each category
+  const createEventsForCategories = async (categories: any[], analysis: any) => {
+    const events = [];
+    const contextQuality = analysis.contextQuality || 'minimal';
+    const connectedIntegrations = getUserData(user?.id || '', 'lifely_onboarding_integrations', []);
+    const hasCalendarIntegration = connectedIntegrations.some((int: string) => int.includes('calendar'));
+    
+    for (const category of categories) {
+      const prompt = `IMPORTANT: You must respond with ONLY pure JSON. Do not use function calls. Do not use markdown formatting.
+
+Create 1-2 relevant calendar events/milestones for "${category.name}" category based on ${contextQuality} context.
+
+Available Context:
+- User Details: ${JSON.stringify(analysis.specificDetails)}
+- Category Purpose: ${category.purpose}
+- Has Calendar Integration: ${hasCalendarIntegration}
+- Connected Integrations: ${connectedIntegrations.join(', ') || 'none'}
+
+EVENTS CREATION RULES:
+1. Create realistic events that make sense for the category
+2. If calendar integration connected: Create recurring review/planning sessions
+3. If projects mentioned: Create milestone/deadline events
+4. Set dates 1-7 days in the future for immediate relevance
+5. Focus on planning, review, or key milestone events
+
+Examples of GOOD events for file-only context:
+- "Weekly [Category] Planning Session" (recurring)
+- "[Specific Project] Milestone Review"
+- "Monthly [Skill Area] Progress Check"
+
+Return ONLY pure JSON (no markdown, no function calls):
+{
+  "events": [
+    {"id": "event-${Date.now()}-1", "title": "Specific event title", "category": "${category.id}", "date": "${new Date(Date.now() + Math.floor(Math.random() * 7) * 24 * 60 * 60 * 1000).toISOString()}"}
+  ]
+}`;
+      
+      const result = await geminiService.processMessage(prompt, [], [], [], false, false);
+      // Clean markdown formatting before parsing JSON
+      const cleanResponse = result.response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const categoryEvents = JSON.parse(cleanResponse);
+      events.push(...categoryEvents.events);
+    }
+    
+    return events;
+  };
+
+  // Main orchestration function using Gemini Agent Mode
   const createCategories = async (fullContext: string) => {
     try {
-      console.log('🎯 Step 1: Analyzing user profile...');
-      const analysis = await analyzeProfile(fullContext);
+      console.log('🤖 Using Gemini Agent Mode for comprehensive personalization...');
       
-      console.log('📂 Step 2: Creating personalized categories...');
-      const categoriesResult = await createPersonalizedCategories(analysis);
-      
-      console.log('🎯 Step 3: Creating specific goals...');
-      const goals = await createGoalsForCategories(categoriesResult.categories, analysis);
-      
-      console.log('🔄 Step 4: Creating personalized routines...');
-      const routines = await createRoutinesForCategories(categoriesResult.categories, analysis);
-      
-      console.log('✅ Step 5: Creating immediate todos...');
-      const todos = await createTodosForCategories(categoriesResult.categories, analysis);
+      // Single agent prompt that handles everything intelligently
+      const agentPrompt = `You are a life management AI agent. Create a comprehensive, personalized dashboard for this user based on their context.
 
-      // Create some sample events and notes
-      const events = [{
-        id: "event-1",
-        title: "Weekly business review",
-        category: categoriesResult.categories[0]?.id || "business",
-        date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-      }];
+USER CONTEXT:
+${fullContext}
 
-      const notes = [{
-        id: "note-1", 
-        title: "Personal growth insights",
-        category: categoriesResult.categories[0]?.id || "personal",
-        content: "Key strategies for achieving goals"
-      }];
+AGENT INSTRUCTIONS:
+1. Analyze the user's context to extract themes, interests, tools, projects, and goals
+2. Create 4-6 specific, personalized categories (NOT generic ones)
+3. For each category, create 2-3 goals, 1-2 routines, 2-3 todos, 1-2 notes, and 1-2 events
+4. Make everything specific to their actual situation - use exact project names, tools, interests
+5. If minimal context, focus on what IS mentioned and build around it
 
-      return {
-        categories: categoriesResult.categories,
-        goals,
-        routines,
-        todos,
-        events,
-        notes,
-        workStyle: analysis.personality,
-        personalInsights: [
-          `Strong focus on ${analysis.themes.join(' and ')}`,
-          `Demonstrates ${analysis.personality}`,
-          `Values systematic approaches to growth`
-        ]
-      };
+CRITICAL REQUIREMENTS:
+- Categories must be SPECIFIC to their life (e.g., "Notion Workspace Optimization" not "Productivity")
+- Goals must be actionable with realistic timelines (1-6 months)
+- Todos must be immediate actions for THIS WEEK
+- Notes must provide real value (templates, best practices, resources)
+- Events must be relevant milestones or planning sessions (1-7 days out)
+
+Return ONLY pure JSON in this exact format:
+{
+  "categories": [
+    {"id": "specific-id", "name": "Specific Category Name", "purpose": "Clear purpose", "priority": 9, "icon": "icon-name", "color": "color"}
+  ],
+  "goals": [
+    {"id": "goal-id", "title": "Specific goal title", "category": "category-id", "timeline": "realistic timeframe", "priority": 4}
+  ],
+  "routines": [
+    {"id": "routine-id", "title": "Daily/weekly routine", "frequency": "daily|weekly", "time": "morning|evening", "category": "category-id"}
+  ],
+  "todos": [
+    {"id": "todo-id", "title": "Immediate action", "category": "category-id", "priority": 3}
+  ],
+  "notes": [
+    {"id": "note-id", "title": "Reference note title", "category": "category-id", "content": "Valuable content"}
+  ],
+  "events": [
+    {"id": "event-id", "title": "Event title", "category": "category-id", "date": "ISO date string"}
+  ],
+  "workStyle": "Inferred work style from context",
+  "personalInsights": ["insight1", "insight2", "insight3"]
+}`;
+
+      // Use Gemini agent mode for intelligent processing
+      const result = await geminiService.processMessage(
+        agentPrompt, 
+        [], // No existing items for onboarding
+        [], // No conversation history 
+        [], // No existing categories
+        true, // Enable agent mode for intelligent processing
+        false // Not ask mode
+      );
+      
+      console.log('🤖 Agent response:', result.response);
+      
+      // Parse the agent's response
+      const cleanResponse = result.response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const agentResult = JSON.parse(cleanResponse);
+      
+      console.log('✅ Agent created comprehensive dashboard:', {
+        categories: agentResult.categories?.length || 0,
+        goals: agentResult.goals?.length || 0,
+        routines: agentResult.routines?.length || 0,
+        todos: agentResult.todos?.length || 0,
+        notes: agentResult.notes?.length || 0,
+        events: agentResult.events?.length || 0
+      });
+      
+      return agentResult;
+      
     } catch (error) {
       console.error('❌ Multi-step category creation failed:', error);
       
