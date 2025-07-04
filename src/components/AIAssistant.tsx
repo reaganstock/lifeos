@@ -14,6 +14,7 @@ import { openaiRealtimeService } from '../services/openaiRealtimeService';
 import { geminiService } from '../services/geminiService';
 import ContextAwareInput, { ContextAwareInputRef } from './ContextAwareInput';
 import FunctionCallUI from './FunctionCallUI';
+import { useAuthContext } from './AuthProvider';
 
 // Modern conversational detection - simple but effective
 const isConversationalMessage = (message: string): boolean => {
@@ -181,6 +182,36 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   // Supabase operations
   supabaseCallbacks
 }) => {
+  
+  // Auth context for user access
+  const { user } = useAuthContext();
+  
+  // User context state
+  const [userContext, setUserContext] = useState<string>('');
+  
+  // Load user context from localStorage
+  useEffect(() => {
+    if (user?.id) {
+      const savedContext = localStorage.getItem(`lifely_user_context_${user.id}`);
+      if (savedContext) {
+        try {
+          const parsed = JSON.parse(savedContext);
+          // Convert the user context object to a formatted string for the AI
+          const contextString = `Personal Summary: ${parsed.summary || 'Not provided'}
+Work Style: ${parsed.workStyle || 'Not provided'}
+Working Hours: ${parsed.workingHours || 'Not provided'}
+Current Priorities: ${parsed.priorities?.join(', ') || 'Not provided'}
+Interests: ${parsed.interests?.join(', ') || 'Not provided'}
+Goals: ${parsed.goals?.join(', ') || 'Not provided'}
+Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
+          setUserContext(contextString);
+        } catch (error) {
+          console.error('Error parsing user context:', error);
+          setUserContext('');
+        }
+      }
+    }
+  }, [user?.id]);
   
   // Configure AI services with Supabase callbacks for authenticated users
   // Memoize supabase callbacks configuration to prevent constant re-renders
@@ -451,7 +482,7 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
       console.log('🎯 Action message detected, processing with function calling:', transcript);
       
       // Process message through Gemini service with function calling
-      const result = await geminiService.processMessage(transcript, items, [], categories, isAgenticMode, isAskMode);
+      const result = await geminiService.processMessage(transcript, items, [], categories, isAgenticMode, isAskMode, userContext);
       
       console.log('✅ Function calling result:', result);
       
@@ -1516,7 +1547,8 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
           [],
           [],
           false, // Force non-agentic mode for safety
-          true // Always use Ask mode for conversational responses
+          true, // Always use Ask mode for conversational responses
+          userContext
         );
         
         await chatService.addMessage('assistant', conversationalResponse.message || "Hi there! How can I help you today?");
@@ -1665,7 +1697,8 @@ User message: ${messageWithContext}`;
           items,
           categories,
           isAgenticMode && !isAskMode,
-          isAskMode
+          isAskMode,
+          userContext
         );
 
         console.log('🔧 Fullscreen note mode - got response:', response);
@@ -1774,7 +1807,8 @@ User message: ${messageWithContext}`;
           items,
           categories,
           isAgenticMode && !isAskMode, // Disable function calling for Ask mode
-          isAskMode
+          isAskMode,
+          userContext
         );
 
         console.log('📥 AIAssistant: Received response from chatService:', response);
@@ -1982,7 +2016,8 @@ User message: ${messageWithContext}`;
           items,
           categories,
           false, // Voice mode is always Ask mode, not Agent mode
-          true   // isAskMode = true for voice mode
+          true,  // isAskMode = true for voice mode
+          userContext
         );
 
         // Handle item creation
@@ -2865,6 +2900,7 @@ User message: ${messageWithContext}`;
                     items={items}
                     currentView={currentView}
                     setIsAIThinking={setIsAIThinking}
+                    userContext={userContext}
                   />
                 ))}
                 
@@ -3312,7 +3348,8 @@ const MessageBubble: React.FC<{
   items?: any[];
   currentView?: string;
   setIsAIThinking?: (thinking: boolean) => void;
-}> = ({ message, onEdit, onStartEdit, onCancelEdit, onNavigateVersion, onExecuteFunction, isDarkMode, isAgenticMode = false, isAskMode = false, categories = [], items = [], currentView = '', setIsAIThinking }) => {
+  userContext?: string;
+}> = ({ message, onEdit, onStartEdit, onCancelEdit, onNavigateVersion, onExecuteFunction, isDarkMode, isAgenticMode = false, isAskMode = false, categories = [], items = [], currentView = '', setIsAIThinking, userContext = '' }) => {
   const currentVersion = message.versions[message.currentVersionIndex];
   const [editContent, setEditContent] = useState(currentVersion.content);
   const versionInfo = chatService.getVersionInfo(message.id);
@@ -3377,6 +3414,9 @@ const MessageBubble: React.FC<{
                 if (isAgenticMode) {
                   console.log('🔄 SMART REJECTION: User rejected function, seeking alternative approach...');
                   
+                  // Capture userContext for the setTimeout closure
+                  const currentUserContext = userContext;
+                  
                   // Add a small delay then continue with alternative approach
                   setTimeout(async () => {
                     try {
@@ -3399,7 +3439,8 @@ const MessageBubble: React.FC<{
                         items,
                         categories,
                         isAgenticMode && !isAskMode, // Keep agentic mode active
-                        isAskMode
+                        isAskMode,
+                        currentUserContext
                       );
                       
                       // Handle the alternative response

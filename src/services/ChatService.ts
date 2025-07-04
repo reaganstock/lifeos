@@ -700,7 +700,8 @@ class ChatService {
     allItems?: Item[],
     allCategories?: Category[],
     isAgenticMode?: boolean,
-    isAskMode?: boolean
+    isAskMode?: boolean,
+    userContext?: string
   ): Promise<AIResponse> {
     try {
       // Get recent items for context
@@ -755,7 +756,8 @@ class ChatService {
             conversationHistory,
             Array.isArray(allCategories) ? allCategories : [],
             isAgenticMode || false,
-            isAskMode || false
+            isAskMode || false,
+            userContext || ''
           );
           console.log('✅ ChatService: Gemini Direct API result:', result);
         } else {
@@ -766,7 +768,8 @@ class ChatService {
             allItems || [], 
             conversationHistory,
             allCategories || [],
-            isAskMode || false
+            isAskMode || false,
+            userContext || ''
           );
           console.log('✅ ChatService: AIActions result:', result);
         }

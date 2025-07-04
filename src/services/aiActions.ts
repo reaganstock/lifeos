@@ -1592,7 +1592,7 @@ export class AIActions {
   }
 
   // Build system prompt with current items context
-  private buildSystemPrompt(items: Item[], isAskMode: boolean = false): string {
+  private buildSystemPrompt(items: Item[], isAskMode: boolean = false, userContext: string = ''): string {
     if (isAskMode) {
       return `🎯 **LIFELY AI - ASK MODE** (Life Guidance & Insights)
 You are Lifely AI in ASK MODE - a life management consultant providing insights, advice, and guidance based on the user's existing life structure.
@@ -1642,7 +1642,12 @@ ${items.slice(0, 8).map(item =>
   ).join('\n')}${items.length > 8 ? `\n... and ${items.length - 8} more items` : ''}`;
 })()}
 
-**RESPONSE STYLE:**
+${userContext ? `**USER CONTEXT & PERSONAL INFORMATION:**
+${userContext}
+
+**IMPORTANT:** Use the user context above to personalize your advice and insights. Reference their goals, interests, preferences, and background when providing guidance.
+
+` : ''}**RESPONSE STYLE:**
 Be insightful, encouraging, and strategic. Focus on helping them understand and improve their life management system. Reference their actual data to provide personalized guidance.`;
     }
     
@@ -1715,11 +1720,16 @@ IF user wants simple tasks → Use standard functions
 4. **EXECUTE**: Use the most appropriate function
 5. **CONFIRM**: Show what was actually created
 
-END OF NATURAL LANGUAGE REVOLUTION PROMPT - UNDERSTAND EVERYTHING! 🧠💪`;
+${userContext ? `**USER CONTEXT & PERSONAL INFORMATION:**
+${userContext}
+
+**IMPORTANT:** Use the user context above to personalize your function calls and responses. Reference their goals, interests, preferences, and background when creating, updating, or managing their items.
+
+` : ''}END OF NATURAL LANGUAGE REVOLUTION PROMPT - UNDERSTAND EVERYTHING! 🧠💪`;
   }
 
   // Process a message with function calling
-  async processMessage(message: string, items: Item[], conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [], categories: any[] = [], isAskMode: boolean = false): Promise<any> {
+  async processMessage(message: string, items: Item[], conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [], categories: any[] = [], isAskMode: boolean = false, userContext: string = ''): Promise<any> {
     console.log('🎯 Message:', message);
     
     if (!OPENROUTER_API_KEY) {
@@ -1729,7 +1739,7 @@ END OF NATURAL LANGUAGE REVOLUTION PROMPT - UNDERSTAND EVERYTHING! 🧠💪`;
     const history = this.buildConversationHistory(conversationHistory);
     console.log('📚 Built conversation history with', history.length, 'messages');
     
-    const systemPrompt = this.buildSystemPrompt(items, isAskMode);
+    const systemPrompt = this.buildSystemPrompt(items, isAskMode, userContext);
     
     // Smart function calling detection
     const taskKeywords = [

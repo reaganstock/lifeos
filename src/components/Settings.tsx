@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Moon, Sun, LogOut, User, Database, Zap, Link } from 'lucide-react';
+import { Moon, Sun, LogOut, User, Database, Zap, Link, Brain, Edit3, Save, X } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuthContext } from './AuthProvider';
 import IntegrationManager from './IntegrationManager';
@@ -49,6 +49,19 @@ const Settings: React.FC<SettingsProps> = ({ items, setItems, categories = [] })
   // Help & Support state
   const [showHelpModal, setShowHelpModal] = useState(false);
   
+  // User Context/Summary state
+  const [showUserContext, setShowUserContext] = useState(false);
+  const [userContext, setUserContext] = useState({
+    summary: '',
+    workStyle: '',
+    priorities: [] as string[],
+    interests: [] as string[],
+    goals: [] as string[],
+    preferredTools: [] as string[],
+    workingHours: '',
+    personalInsights: [] as string[]
+  });
+  
   // Load auto-approve setting from localStorage
   useEffect(() => {
     const savedAutoApprove = localStorage.getItem('georgetownAI_autoApprove');
@@ -57,12 +70,91 @@ const Settings: React.FC<SettingsProps> = ({ items, setItems, categories = [] })
     }
   }, []);
   
+  // Load user context from localStorage
+  useEffect(() => {
+    if (user?.id) {
+      const savedContext = localStorage.getItem(`lifely_user_context_${user.id}`);
+      if (savedContext) {
+        try {
+          const parsed = JSON.parse(savedContext);
+          setUserContext(parsed);
+        } catch (error) {
+          console.error('Error parsing user context:', error);
+        }
+      } else {
+        // Try to build initial context from onboarding data
+        generateInitialUserContext();
+      }
+    }
+  }, [user?.id]);
+  
+  // Generate initial user context from available data
+  const generateInitialUserContext = () => {
+    if (!user?.id) return;
+    
+    // Get onboarding data
+    const onboardingData = localStorage.getItem(`lifely_onboarding_data_${user.id}`);
+    const conversationData = localStorage.getItem(`lifely_onboarding_conversation_${user.id}`);
+    const dashboardData = localStorage.getItem(`lifely_dashboard_data_${user.id}`);
+    
+    let initialContext = { ...userContext };
+    
+    // Extract from onboarding
+    if (onboardingData) {
+      try {
+        const data = JSON.parse(onboardingData);
+        if (data.role) initialContext.workStyle = `${data.role} focused`;
+        if (data.goals) initialContext.goals = Array.isArray(data.goals) ? data.goals : [data.goals];
+      } catch (e) {}
+    }
+    
+    // Extract from conversation
+    if (conversationData) {
+      try {
+        const data = JSON.parse(conversationData);
+        if (data.answers) {
+          const answers = data.answers.map((a: any) => a.answer).join(' ');
+          if (answers.length > 10) {
+            initialContext.summary = answers.substring(0, 200) + '...';
+          }
+        }
+      } catch (e) {}
+    }
+    
+    // Extract from dashboard data
+    if (dashboardData) {
+      try {
+        const data = JSON.parse(dashboardData);
+        if (data.workStyle) initialContext.workStyle = data.workStyle;
+        if (data.priorities) initialContext.priorities = data.priorities;
+        if (data.interests) initialContext.interests = data.interests;
+        if (data.personalInsights) initialContext.personalInsights = data.personalInsights;
+      } catch (e) {}
+    }
+    
+    // Extract from categories
+    if (categories.length > 0) {
+      initialContext.priorities = categories.map(c => c.name);
+    }
+    
+    setUserContext(initialContext);
+  };
+  
   // Save auto-approve setting to localStorage
   const toggleAutoApprove = () => {
     const newValue = !autoApprove;
     setAutoApprove(newValue);
     localStorage.setItem('georgetownAI_autoApprove', JSON.stringify(newValue));
     console.log('🤖 Auto-approve setting changed to:', newValue);
+  };
+  
+  // Save user context to localStorage
+  const saveUserContext = () => {
+    if (!user?.id) return;
+    
+    localStorage.setItem(`lifely_user_context_${user.id}`, JSON.stringify(userContext));
+    console.log('💾 User context saved:', userContext);
+    alert('User context saved successfully!');
   };
 
   const handleSignOut = async () => {
@@ -337,6 +429,38 @@ const Settings: React.FC<SettingsProps> = ({ items, setItems, categories = [] })
             </div>
           </div>
 
+          {/* User Context & Summary */}
+          <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-3xl border border-white/20 dark:border-gray-700/30 p-8 shadow-2xl hover:bg-white/80 dark:hover:bg-gray-800/80 hover:shadow-3xl hover:scale-[1.02] transition-all duration-500 group cursor-pointer">
+            <div className="flex items-center space-x-3 mb-6">
+              <div className="w-12 h-12 bg-gradient-to-br from-lifeos-primary to-lifeos-secondary rounded-2xl flex items-center justify-center group-hover:scale-110 group-hover:rotate-6 transition-all duration-300">
+                <Brain className="w-6 h-6 text-white" />
+              </div>
+              <h2 className="text-xl font-bold text-lifeos-dark dark:text-white group-hover:text-lifeos-primary transition-colors duration-300">AI Context</h2>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between py-2">
+                <div>
+                  <p className="font-medium text-lifeos-dark dark:text-white">Personal Context Summary</p>
+                  <p className="text-sm text-lifeos-gray-400 dark:text-gray-300">Help the AI understand you better with your personal context and preferences</p>
+                </div>
+                <button 
+                  onClick={() => setShowUserContext(true)}
+                  className="px-6 py-3 bg-gradient-to-r from-gray-100 to-gray-200 text-gray-700 rounded-xl font-medium hover:from-lifeos-50 hover:to-lifeos-100 hover:text-lifeos-primary transition-all duration-300 hover:scale-105 hover:shadow-lg flex items-center space-x-2"
+                >
+                  <Edit3 className="w-4 h-4" />
+                  <span>Edit Context</span>
+                </button>
+              </div>
+              {userContext.summary && (
+                <div className="bg-lifeos-50 dark:bg-lifeos-primary/20 rounded-lg p-3">
+                  <p className="text-xs text-lifeos-primary dark:text-lifeos-primary">
+                    <strong>Current Summary:</strong> {userContext.summary.substring(0, 100)}...
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Account */}
           <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-3xl border border-white/20 dark:border-gray-700/30 p-8 shadow-2xl hover:bg-white/80 dark:hover:bg-gray-800/80 hover:shadow-3xl hover:scale-[1.02] transition-all duration-500 group cursor-pointer">
             <div className="flex items-center space-x-3 mb-6">
@@ -578,6 +702,110 @@ const Settings: React.FC<SettingsProps> = ({ items, setItems, categories = [] })
                 className="px-6 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-all duration-300"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Context Modal */}
+      {showUserContext && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-3xl p-8 max-w-2xl w-full shadow-2xl max-h-[80vh] overflow-y-auto">
+            <h3 className="text-2xl font-bold text-lifeos-dark dark:text-white mb-6 flex items-center space-x-2">
+              <Brain className="w-6 h-6" />
+              <span>AI Context & Summary</span>
+            </h3>
+            
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-lifeos-gray-400 dark:text-gray-300 mb-2">
+                  Personal Summary
+                </label>
+                <textarea
+                  value={userContext.summary}
+                  onChange={(e) => setUserContext({...userContext, summary: e.target.value})}
+                  placeholder="Tell the AI about yourself, your role, current projects, and what you're working on..."
+                  className="w-full p-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-lifeos-primary focus:border-transparent resize-none"
+                  rows={4}
+                />
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-lifeos-gray-400 dark:text-gray-300 mb-2">
+                    Work Style
+                  </label>
+                  <input
+                    type="text"
+                    value={userContext.workStyle}
+                    onChange={(e) => setUserContext({...userContext, workStyle: e.target.value})}
+                    placeholder="e.g., Focused, Creative, Analytical..."
+                    className="w-full p-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-lifeos-primary focus:border-transparent"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-lifeos-gray-400 dark:text-gray-300 mb-2">
+                    Working Hours
+                  </label>
+                  <input
+                    type="text"
+                    value={userContext.workingHours}
+                    onChange={(e) => setUserContext({...userContext, workingHours: e.target.value})}
+                    placeholder="e.g., 9am-5pm EST, Flexible..."
+                    className="w-full p-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-lifeos-primary focus:border-transparent"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-lifeos-gray-400 dark:text-gray-300 mb-2">
+                  Current Priorities (one per line)
+                </label>
+                <textarea
+                  value={userContext.priorities.join('\n')}
+                  onChange={(e) => setUserContext({...userContext, priorities: e.target.value.split('\n').filter(p => p.trim())})}
+                  placeholder="List your current main priorities..."
+                  className="w-full p-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-lifeos-primary focus:border-transparent resize-none"
+                  rows={3}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-lifeos-gray-400 dark:text-gray-300 mb-2">
+                  Tools & Platforms You Use
+                </label>
+                <textarea
+                  value={userContext.preferredTools.join('\n')}
+                  onChange={(e) => setUserContext({...userContext, preferredTools: e.target.value.split('\n').filter(t => t.trim())})}
+                  placeholder="e.g., Notion, Slack, Google Calendar..."
+                  className="w-full p-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-lifeos-primary focus:border-transparent resize-none"
+                  rows={2}
+                />
+              </div>
+              
+              <div className="bg-lifeos-50 dark:bg-lifeos-primary/20 rounded-lg p-4">
+                <p className="text-sm text-lifeos-primary dark:text-lifeos-primary">
+                  <strong>How this helps:</strong> This context will be available to the AI Assistant to provide more personalized and relevant suggestions. Your data stays private and is only used to enhance your experience.
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex space-x-3 mt-8">
+              <button
+                onClick={saveUserContext}
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-lifeos-primary to-lifeos-secondary text-white rounded-xl font-medium hover:from-lifeos-primary hover:to-lifeos-secondary transition-all duration-300 hover:scale-105 hover:shadow-lg flex items-center justify-center space-x-2"
+              >
+                <Save className="w-4 h-4" />
+                <span>Save Context</span>
+              </button>
+              <button
+                onClick={() => setShowUserContext(false)}
+                className="px-6 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-all duration-300 flex items-center space-x-2"
+              >
+                <X className="w-4 h-4" />
+                <span>Cancel</span>
               </button>
             </div>
           </div>

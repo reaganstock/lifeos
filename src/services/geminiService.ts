@@ -165,7 +165,8 @@ export class GeminiService {
     conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [],
     categories: any[] = [],
     isAgenticMode: boolean = false,
-    isAskMode: boolean = false
+    isAskMode: boolean = false,
+    userContext: string = ''
   ): Promise<GeminiResponse> {
     console.log('🚀 GEMINI DIRECT API - Processing:', message);
     
@@ -180,7 +181,7 @@ export class GeminiService {
     
     // Build system prompt with better instructions for conversational responses
     console.log('🎯 GEMINI SERVICE: Building system prompt with isAskMode =', isAskMode);
-    const systemPrompt = this.buildSmartSystemPrompt(items, categories, isAskMode, isAgenticMode) + (isAskMode ? '' : `
+    const systemPrompt = this.buildSmartSystemPrompt(items, categories, isAskMode, isAgenticMode, userContext) + (isAskMode ? '' : `
 
 CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
 - Keep responses natural and conversational, not robotic
@@ -454,7 +455,7 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
     }
   }
 
-  private buildSmartSystemPrompt(items: Item[], categories: any[] = [], isAskMode: boolean = false, isAgenticMode: boolean = false): string {
+  private buildSmartSystemPrompt(items: Item[], categories: any[] = [], isAskMode: boolean = false, isAgenticMode: boolean = false, userContext: string = ''): string {
     console.log('🎯 GEMINI SERVICE: buildSmartSystemPrompt called with isAskMode =', isAskMode, 'isAgenticMode =', isAgenticMode);
     if (isAskMode) {
       console.log('✅ GEMINI SERVICE: Using ASK MODE system prompt');
@@ -507,7 +508,12 @@ ${items.slice(0, 8).map(item =>
   ).join('\n')}${items.length > 8 ? `\n... and ${items.length - 8} more items` : ''}`;
 })()}
 
-**RESPONSE STYLE:**
+${userContext ? `**USER CONTEXT & PERSONAL INFORMATION:**
+${userContext}
+
+**IMPORTANT:** Use the user context above to personalize your advice and insights. Reference their goals, interests, preferences, and background when providing guidance.
+
+` : ''}**RESPONSE STYLE:**
 Be insightful, encouraging, and strategic. Focus on helping them understand and improve their life management system. Reference their actual data to provide personalized guidance.`;
     }
 
@@ -576,7 +582,12 @@ ${items.slice(0, 12).map(item =>
 4. 📊 Include progress tracking and optimization suggestions
 5. 🧠 Think several steps ahead when planning user's life improvements
 
-**RESPONSE STYLE - AGENT MODE:**
+${userContext ? `**USER CONTEXT & PERSONAL INFORMATION:**
+${userContext}
+
+**IMPORTANT:** Use the user context above to personalize your autonomous assistance. Reference their goals, interests, preferences, and background when making decisions and suggestions.
+
+` : ''}**RESPONSE STYLE - AGENT MODE:**
 - Be confident, insightful, and autonomously helpful
 - Reference your deep understanding of their complete life structure
 - Proactively suggest improvements and optimizations
@@ -1115,7 +1126,14 @@ CATEGORY INTELLIGENCE:
 EXAMPLES:
 "I want to create a Health & Fitness category" → Use createCategory with name="Health & Fitness", icon="💪", color="#10b981"
 "Change my work category color to red" → Use updateCategory with explicit confirmation
-"Delete my old hobby category" → Check for items, warn about impact, require confirmDeletion=true`;
+"Delete my old hobby category" → Check for items, warn about impact, require confirmDeletion=true
+
+${userContext ? `**USER CONTEXT & PERSONAL INFORMATION:**
+${userContext}
+
+**IMPORTANT:** Use the user context above to personalize your function calls and responses. Reference their goals, interests, preferences, and background when creating, updating, or managing their items.
+
+` : ''}`;
   }
 
   getTools(categories: any[] = []) {
