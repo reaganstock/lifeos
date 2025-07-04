@@ -99,12 +99,30 @@ export default function OnboardingProcessingNew() {
       
       // 2. Get conversation/voice memo responses  
       let conversationText = '';
+      
+      // ENHANCED DEBUGGING: Track conversation data extraction
+      console.log('🔍 DEBUG: Onboarding type detected:', onboardingType);
+      
       if (onboardingType === 'conversation') {
         const convData = getUserData(user.id, 'lifely_onboarding_conversation', null);
+        
+        console.log('🔍 DEBUG: Raw conversation data from localStorage:', convData);
+        console.log('🔍 DEBUG: Conversation data type:', typeof convData);
+        console.log('🔍 DEBUG: Has answers property:', !!(convData && typeof convData === 'object' && (convData as any).answers));
+        
         if (convData && typeof convData === 'object' && (convData as any).answers) {
-          conversationText = (convData as any).answers.map((answer: any) => 
+          const answers = (convData as any).answers;
+          console.log('🔍 DEBUG: Number of answers found:', answers.length);
+          console.log('🔍 DEBUG: Sample answers:', answers.slice(0, 2));
+          
+          conversationText = answers.map((answer: any) => 
             `Q: ${answer.question}\\nA: ${answer.answer}`
           ).join('\\n\\n');
+          
+          console.log('🔍 DEBUG: Formatted conversation text length:', conversationText.length);
+          console.log('🔍 DEBUG: Conversation text preview:', conversationText.substring(0, 200) + '...');
+        } else {
+          console.warn('⚠️ DEBUG: No valid conversation data found');
         }
       } else if (onboardingType === 'voice_memo') {
         // CRITICAL FIX: Use actual Whisper transcription instead of placeholder text
@@ -249,7 +267,7 @@ ${contextQuality === 'rich' ? 'Create highly specific, detailed personalization 
   contextQuality === 'moderate' ? 'Create targeted personalization focusing on the strongest available signals.' :
   'Create foundational personalization around whatever specific details are available, avoiding generic categories.'}`;
 
-      // Debug: Show what context we're working with
+      // CRITICAL DEBUG: Show what context we're working with
       console.log('📋 COMPREHENSIVE ONBOARDING ANALYSIS:');
       console.log('- Context quality:', contextQuality);
       console.log('- Onboarding type:', onboardingType);
@@ -257,7 +275,28 @@ ${contextQuality === 'rich' ? 'Create highly specific, detailed personalization 
       console.log('- Documents uploaded:', documents.length);
       console.log('- Connected integrations:', connectedIntegrations.length);
       console.log('- Total context length:', fullContext.length);
-      console.log('- Context preview:', fullContext.substring(0, 300) + '...');
+      console.log('- Context preview:', fullContext.substring(0, 500) + '...');
+      
+      // CRITICAL DEBUG: Show the FULL CONTEXT being sent to AI
+      console.log('🎯 FULL CONTEXT BEING SENT TO AI:');
+      console.log('=====================================');
+      console.log(fullContext);
+      console.log('=====================================');
+      
+      // CRITICAL DEBUG: Check if conversation text contains user's specific mentions
+      if (conversationText) {
+        console.log('🔍 CONVERSATION CONTENT ANALYSIS:');
+        console.log('- Contains "catholic":', conversationText.toLowerCase().includes('catholic'));
+        console.log('- Contains "workout":', conversationText.toLowerCase().includes('workout'));
+        console.log('- Contains "fitness":', conversationText.toLowerCase().includes('fitness'));
+        console.log('- Contains "faith":', conversationText.toLowerCase().includes('faith'));
+        console.log('- Contains "gym":', conversationText.toLowerCase().includes('gym'));
+        console.log('- Contains "prayer":', conversationText.toLowerCase().includes('prayer'));
+        console.log('- Actual conversation text:');
+        console.log(conversationText);
+      } else {
+        console.error('❌ NO CONVERSATION TEXT FOUND - This is why AI creates generic categories!');
+      }
       
       if (!fullContext.trim()) {
         console.warn('⚠️ No onboarding context found - creating basic context for new user');
@@ -393,6 +432,14 @@ return comprehensiveDashboard;`
       const newCategories: any[] = [];
       const categoryMapping = new Map<string, string>();
       
+      // Track used emojis to ensure uniqueness across all categories
+      const usedEmojis = new Set<string>();
+      
+      // Add existing category emojis to tracking set
+      existingCategories.forEach((cat: any) => {
+        if (cat.icon) usedEmojis.add(cat.icon);
+      });
+      
       for (const category of dashboardData.categories) {
         // Check if category already exists (by name)
         const existingCategory = existingCategories.find((c: any) => c.name.toLowerCase() === category.name.toLowerCase());
@@ -406,68 +453,134 @@ return comprehensiveDashboard;`
           // Create new category with timestamp ID (like hybrid sync pattern)
           const newCategoryId = `cat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           
-          // Convert AI icon names to actual emojis for consistent display
-          const convertIconToEmoji = (iconName: string) => {
-            // If it's already an emoji, return it
-            if (iconName && /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/u.test(iconName)) {
-              return iconName;
+          // Smart emoji selection system that ensures unique and contextually appropriate icons
+          const selectSmartEmoji = (categoryName: string, categoryPurpose: string, usedEmojis: Set<string>) => {
+            // If it's already an emoji, check if it's unique
+            if (categoryName && /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/u.test(categoryName)) {
+              if (!usedEmojis.has(categoryName)) {
+                usedEmojis.add(categoryName);
+                return categoryName;
+              }
             }
             
-            const iconMap: Record<string, string> = {
-              // Common categories
-              'graduation-cap': '🎓',
-              'briefcase': '💼',
-              'dumbbell': '💪',
-              'brain': '🧠',
-              'heart': '❤️',
-              'user': '👤',
-              'book': '📚',
-              'home': '🏠',
-              'fitness': '💪',
-              'target': '🎯',
-              'dollar-sign': '💰',
-              'calendar': '📅',
-              'computer': '💻',
-              'music': '🎵',
-              'work': '💼',
-              'career': '💼',
-              'business': '💼',
-              'health': '💚',
-              'wellness': '💚',
-              'gym': '💪',
-              'exercise': '💪',
-              'learning': '📚',
-              'education': '🎓',
-              'study': '📚',
-              'personal': '👤',
-              'growth': '🌱',
-              'development': '🌱',
-              'finance': '💰',
-              'money': '💰',
-              'family': '👨‍👩‍👧‍👦',
-              'relationship': '❤️',
-              'social': '👥',
-              'hobby': '🎨',
-              'creative': '🎨',
-              'travel': '✈️',
-              'project': '📋',
-              'productivity': '⚡'
+            // Comprehensive contextual emoji mapping
+            const contextualEmojiMap: Record<string, string[]> = {
+              // Work & Business
+              business: ['💼', '🏢', '📈', '💰', '🎯'],
+              work: ['💼', '🏢', '👨‍💼', '📊', '💻'],
+              career: ['🚀', '📈', '🎯', '💼', '🌟'],
+              entrepreneur: ['🚀', '💡', '💰', '🎯', '📈'],
+              startup: ['🚀', '💡', '⚡', '🎯', '📱'],
+              finance: ['💰', '💸', '📊', '💳', '🏦'],
+              
+              // Health & Fitness
+              health: ['🏥', '💊', '🩺', '❤️', '🧬'],
+              fitness: ['💪', '🏋️', '🏃', '⚽', '🎾'],
+              gym: ['💪', '🏋️', '🏃‍♂️', '⚽', '🥊'],
+              wellness: ['🧘', '🌿', '💚', '☮️', '🌸'],
+              nutrition: ['🥗', '🍎', '🥑', '🌱', '💚'],
+              
+              // Education & Learning
+              education: ['🎓', '📚', '✏️', '🔬', '🧠'],
+              academic: ['🎓', '📚', '✏️', '🏫', '📝'],
+              study: ['📚', '✏️', '📝', '🔍', '💡'],
+              learning: ['🧠', '📚', '💡', '🔍', '📖'],
+              research: ['🔬', '🔍', '📊', '📈', '🧪'],
+              
+              // Technology & Development
+              technology: ['💻', '⚙️', '🔧', '💾', '🌐'],
+              development: ['💻', '⚙️', '🔧', '📱', '🖥️'],
+              coding: ['💻', '⌨️', '🖥️', '📱', '⚙️'],
+              software: ['💻', '📱', '🖥️', '💾', '⚙️'],
+              design: ['🎨', '🖌️', '✏️', '🌈', '📐'],
+              
+              // Creative & Arts
+              creative: ['🎨', '🖌️', '✨', '🌈', '🎭'],
+              art: ['🎨', '🖌️', '🖼️', '✏️', '🌈'],
+              music: ['🎵', '🎶', '🎸', '🎹', '🎤'],
+              writing: ['✏️', '📝', '📖', '📄', '✍️'],
+              content: ['📹', '📸', '📱', '🎬', '📺'],
+              
+              // Personal & Lifestyle
+              personal: ['👤', '🌟', '💫', '🦋', '🌱'],
+              lifestyle: ['🌟', '☀️', '🌸', '🦋', '💫'],
+              hobby: ['🎨', '🎮', '📚', '🎵', '⚽'],
+              travel: ['✈️', '🌍', '🏖️', '🗺️', '🎒'],
+              family: ['👨‍👩‍👧‍👦', '❤️', '🏠', '👶', '🤗'],
+              
+              // Spiritual & Religious
+              spiritual: ['🙏', '☮️', '🕊️', '✨', '🌟'],
+              religious: ['🙏', '⛪', '✝️', '☮️', '🕊️'],
+              catholic: ['✝️', '⛪', '🙏', '📿', '🕊️'],
+              faith: ['🙏', '✨', '🌟', '☮️', '🕊️'],
+              
+              // Organization & Productivity
+              organization: ['📋', '📊', '🗂️', '📅', '⚡'],
+              productivity: ['⚡', '🎯', '📈', '🚀', '⚙️'],
+              planning: ['📅', '📋', '🗂️', '📊', '🎯'],
+              goals: ['🎯', '🏆', '🌟', '🚀', '📈'],
+              
+              // Social & Community
+              social: ['👥', '🤝', '💬', '🌐', '🎉'],
+              community: ['👥', '🤝', '🌍', '🏘️', '💬'],
+              networking: ['🤝', '🌐', '📱', '💬', '👥'],
+              
+              // Sports & Activities
+              sports: ['⚽', '🏀', '🎾', '🏈', '⚾'],
+              gaming: ['🎮', '🕹️', '🎯', '🏆', '⚡'],
+              outdoor: ['🌲', '🏔️', '🌊', '☀️', '🦅']
             };
             
-            // Try exact match first, then lowercase match
-            const exactMatch = iconMap[iconName];
-            if (exactMatch) return exactMatch;
+            // Analyze category name and purpose for context
+            const categoryText = `${categoryName} ${categoryPurpose || ''}`.toLowerCase();
             
-            const lowerMatch = iconMap[iconName.toLowerCase()];
-            if (lowerMatch) return lowerMatch;
+            // Find matching emoji groups based on keywords
+            let candidateEmojis: string[] = [];
             
-            // If no match and it looks like a text name, return a generic emoji
-            if (iconName && typeof iconName === 'string' && iconName.length > 2) {
-              console.warn('⚠️ No emoji mapping for icon:', iconName, '- using default folder emoji');
-              return '📁';
+            for (const [keyword, emojis] of Object.entries(contextualEmojiMap)) {
+              if (categoryText.includes(keyword)) {
+                candidateEmojis.push(...emojis);
+              }
             }
             
-            return iconName || '📁';
+            // If no contextual matches, use general mapping
+            if (candidateEmojis.length === 0) {
+              const generalMap: Record<string, string> = {
+                'graduation-cap': '🎓', 'briefcase': '💼', 'dumbbell': '💪',
+                'brain': '🧠', 'heart': '❤️', 'user': '👤', 'book': '📚',
+                'home': '🏠', 'target': '🎯', 'dollar-sign': '💰',
+                'calendar': '📅', 'computer': '💻', 'music': '🎵'
+              };
+              
+              const categoryNameLower = categoryName.toLowerCase();
+              for (const [key, emoji] of Object.entries(generalMap)) {
+                if (categoryNameLower.includes(key) || categoryText.includes(key)) {
+                  candidateEmojis.push(emoji);
+                }
+              }
+            }
+            
+            // Select first unique emoji from candidates
+            for (const emoji of candidateEmojis) {
+              if (!usedEmojis.has(emoji)) {
+                usedEmojis.add(emoji);
+                console.log('✨ Selected contextual emoji:', emoji, 'for category:', categoryName);
+                return emoji;
+              }
+            }
+            
+            // Fallback to unique emojis if no contextual match
+            const fallbackEmojis = ['📁', '📂', '🗂️', '📋', '📊', '📈', '⭐', '💫', '🌟', '✨', '🔹', '🔸', '🟢', '🟡', '🟠', '🔴'];
+            for (const emoji of fallbackEmojis) {
+              if (!usedEmojis.has(emoji)) {
+                usedEmojis.add(emoji);
+                console.log('📁 Using fallback emoji:', emoji, 'for category:', categoryName);
+                return emoji;
+              }
+            }
+            
+            // Ultimate fallback
+            return '📋';
           };
           
           // Convert AI color names to hex colors for consistent theming
@@ -490,7 +603,7 @@ return comprehensiveDashboard;`
           const newCategory = {
             id: newCategoryId,
             name: category.name,
-            icon: convertIconToEmoji(category.icon),
+            icon: selectSmartEmoji(category.name, category.purpose, usedEmojis),
             color: convertColorToHex(category.color),
             priority: category.priority || 0,
             createdAt: new Date().toISOString(),
@@ -795,6 +908,13 @@ GOAL CREATION RULES:
 5. Make timelines realistic (1-3 months for specific tasks, 3-6 months for major goals)
 6. Include both process goals (habits) and outcome goals (results)
 
+PRIORITY SYSTEM (use logical values):
+- priority: 5 = Critical/Urgent goals that require immediate attention
+- priority: 4 = High importance goals that are key to success
+- priority: 3 = Medium importance goals that support progress
+- priority: 2 = Low importance goals that are nice to have
+- priority: 1 = Optional goals for future consideration
+
 Return ONLY pure JSON (no markdown, no function calls):
 {
   "goals": [
@@ -870,6 +990,13 @@ TODO CREATION RULES:
 4. If minimal context: Create foundational/setup todos for the category
 5. Make them specific and actionable (not vague like "improve X")
 6. Focus on quick wins that build momentum
+
+PRIORITY SYSTEM (use logical values):
+- priority: 5 = Critical/Urgent tasks that must be done immediately
+- priority: 4 = High importance tasks that are key to progress
+- priority: 3 = Medium importance tasks that support goals
+- priority: 2 = Low importance tasks that are nice to complete
+- priority: 1 = Optional tasks for when time permits
 
 Examples of GOOD todos for file-only context:
 - "Set up project tracking board in Notion"
@@ -991,97 +1118,91 @@ Return ONLY pure JSON (no markdown, no function calls):
     try {
       console.log('🤖 Using Gemini Agent Mode for comprehensive dashboard creation...');
       
-      // Enhanced agent prompt that handles ALL onboarding scenarios intelligently
-      const agentPrompt = `You are a life management AI agent creating a comprehensive, personalized dashboard. Analyze ALL available user context and create a cohesive life management system.
-
-USER CONTEXT:
-${fullContext}
-
-CRITICAL CONTEXT WEIGHTING - READ CAREFULLY:
-1. **PRIMARY CONTEXT (90% WEIGHT)**: Detailed 5-question conversation/voice memo responses - THIS IS THE MOST IMPORTANT SOURCE
-2. **SECONDARY CONTEXT (90% WEIGHT)**: User-uploaded files and documents - EXTRACT SPECIFIC DETAILS FROM THESE
-3. **MINIMAL CONTEXT (10% WEIGHT)**: Initial 4 basic questions - USE ONLY AS BACKGROUND, DO NOT LET THIS OVERRIDE PRIMARY CONTEXT
-
-CONTEXT ANALYSIS INSTRUCTIONS:
-1. **Prioritize conversation responses**: The detailed 5-question conversation contains the user's actual thoughts, goals, and priorities - base 90% of personalization on this
-2. **Extract from files**: User uploaded files contain real context about their work, projects, and interests - mine these for specific details
-3. **Use initial questions minimally**: The basic role/source questions provide light background only - do not let "Student" or "Business Owner" override their detailed conversation responses
-4. **Assess true richness**: Rich = detailed conversation + files, Moderate = good conversation OR good files, Minimal = only basic info
-5. **Follow user priorities**: If their detailed responses mention specific goals, projects, or interests, these should drive the dashboard creation
-
-PERSONALIZATION REQUIREMENTS:
-1. **Categories (4-6)**: Create SPECIFIC categories based on their actual life areas
-   - Rich context: Use exact project names, company names, specific interests
-   - Moderate context: Combine mentioned areas with logical workflow categories  
-   - Minimal context: Build around whatever IS mentioned, avoid pure generic categories
-   - **ICONS**: Use ACTUAL EMOJI CHARACTERS that match the app's component system:
-     * Goals: 🎯 (bow and arrow target - REQUIRED for all goal-related items)
-     * Routines: ⏰ (clock for time-based activities)
-     * Todos: ✅ (checkmark for tasks)
-     * Notes: 📝 (notepad for knowledge)
-     * Events: 📅 (calendar for scheduling)
-     * Categories: Use specific emojis like 💼 (work), 🎓 (academics), 💪 (fitness), 📚 (learning), 🏠 (personal), etc.
-     * NEVER use text names like "briefcase" or generic icons
-   
-2. **Goals (2-3 per category)**: Actionable objectives with realistic timelines
-   - Reference specific projects, tools, or interests they mentioned
-   - Mix process goals (habits) with outcome goals (results)
-   - Timelines: 1-3 months for tasks, 3-6 months for major goals
-   
-3. **Routines (1-2 per category)**: Daily/weekly habits that support their goals
-   - MUST include specific time in HH:MM format (e.g., "08:00", "14:30", "20:00")
-   - MUST include duration in minutes (15-120 minutes typical)
-   - Consider their mentioned schedule preferences or existing tools
-   - Align with connected integrations (e.g., calendar integration = scheduling routines)
-   - Choose realistic times: morning for fitness/planning, evening for reflection/review
-   
-4. **Todos (2-3 per category)**: Immediate actions for THIS WEEK
-   - Create specific next steps based on their mentioned projects/goals
-   - If tools mentioned: setup/optimization tasks for those tools
-   - Focus on quick wins that build momentum
-   
-5. **Notes (1-2 per category)**: Valuable reference content
-   - Templates, best practices, or resource lists relevant to their situation
-   - If specific tools mentioned: optimization guides for those tools
-   - Strategic insights based on their mentioned interests/projects
-   
-6. **Events (1-2 per category)**: Relevant calendar items
-   - Planning sessions, milestone reviews, or deadline reminders
-   - Consider connected calendar integrations for scheduling preferences
-   - Set dates 1-7 days out for immediate relevance
-
-QUALITY STANDARDS:
-- **Specificity over generic**: Always prefer "ColdOutbound.io Growth Strategy" over "Business Development"
-- **Context consistency**: Ensure all items relate back to something they actually mentioned
-- **Actionable content**: Every item should be immediately useful and implementable
-- **Workflow integration**: Consider their connected apps and tools in recommendations
-
-Return ONLY pure JSON in this exact format:
-{
-  "categories": [
-    {"id": "specific-id", "name": "Specific Category Name", "purpose": "Clear purpose", "priority": 9, "icon": "💼", "color": "#3B82F6"}
-  ],
-  "goals": [
-    {"id": "goal-id", "title": "Specific goal title", "category": "category-id", "timeline": "realistic timeframe", "priority": 4}
-  ],
-  "routines": [
-    {"id": "routine-id", "title": "Daily/weekly routine", "frequency": "daily|weekly", "time": "08:00", "duration": 30, "category": "category-id"}
-  ],
-  "todos": [
-    {"id": "todo-id", "title": "Immediate action", "category": "category-id", "priority": 3}
-  ],
-  "notes": [
-    {"id": "note-id", "title": "Reference note title", "category": "category-id", "content": "Valuable content"}
-  ],
-  "events": [
-    {"id": "event-id", "title": "Event title", "category": "category-id", "date": "ISO date string"}
-  ],
-  "workStyle": "Inferred work style from context",
-  "personalInsights": ["insight1", "insight2", "insight3"]
-}`;
-
-      // PROPER FUNCTION CALLING: Use actual function calls instead of JSON return
-      console.log('🤖 Using proper function calling for dashboard creation...');
+      // Initialize function calls tracking to show user what's happening
+      const setupFunctionCalls = [
+        {
+          id: 'analyze-context',
+          name: 'analyzeUserContext',
+          description: 'Analyzing your conversation responses and uploaded files',
+          status: 'executing' as const,
+          code: `analyzeUserContext({\n  conversationData: user.responses,\n  uploadedFiles: user.documents,\n  primaryWeight: 0.9,\n  secondaryWeight: 0.1\n})`
+        },
+        {
+          id: 'create-categories',
+          name: 'createPersonalizedCategories',
+          description: 'Creating life categories based on your specific interests',
+          status: 'pending' as const,
+          code: `createPersonalizedCategories({\n  userInterests: context.interests,\n  currentProjects: context.projects,\n  goals: context.goals,\n  workStyle: context.workStyle\n})`
+        },
+        {
+          id: 'generate-goals',
+          name: 'generateActionableGoals',
+          description: 'Setting up goals tailored to your timeline and priorities',
+          status: 'pending' as const,
+          code: `generateActionableGoals({\n  categories: createdCategories,\n  userTimeline: context.timeline,\n  specificProjects: context.projects\n})`
+        },
+        {
+          id: 'create-routines',
+          name: 'createDailyRoutines',
+          description: 'Building daily and weekly routines that fit your schedule',
+          status: 'pending' as const,
+          code: `createDailyRoutines({\n  categories: createdCategories,\n  preferredTimes: context.schedule,\n  workingHours: context.workingHours\n})`
+        },
+        {
+          id: 'generate-todos',
+          name: 'generateImmediateTodos',
+          description: 'Creating immediate action items for this week',
+          status: 'pending' as const,
+          code: `generateImmediateTodos({\n  categories: createdCategories,\n  currentProjects: context.projects,\n  quickWins: context.quickWins\n})`
+        },
+        {
+          id: 'setup-resources',
+          name: 'setupResourcesAndNotes',
+          description: 'Adding helpful resources and reference materials',
+          status: 'pending' as const,
+          code: `setupResourcesAndNotes({\n  categories: createdCategories,\n  userTools: context.tools,\n  bestPractices: context.bestPractices\n})`
+        }
+      ];
+      
+      // Set initial function calls
+      setFunctionCalls(setupFunctionCalls);
+      setSelectedFunction(setupFunctionCalls[0]);
+      
+      // Simulate function execution progression
+      let currentFunctionIndex = 0;
+      
+      const progressFunction = async (index: number) => {
+        if (index >= setupFunctionCalls.length) return;
+        
+        // Update current function to executing
+        setFunctionCalls(prev => 
+          prev.map((func, i) => 
+            i === index ? { ...func, status: 'executing' } : func
+          )
+        );
+        
+        // Wait a bit to show execution
+        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
+        
+        // Mark as completed and move to next
+        setFunctionCalls(prev => 
+          prev.map((func, i) => 
+            i === index ? { ...func, status: 'completed', result: i === 0 ? 'Context analyzed' : `${func.name} completed` } : 
+            i === index + 1 ? { ...func, status: 'executing' } : func
+          )
+        );
+        
+        // Auto-select next function
+        if (index + 1 < setupFunctionCalls.length) {
+          setSelectedFunction(setupFunctionCalls[index + 1]);
+        }
+        
+        // Continue to next function
+        setTimeout(() => progressFunction(index + 1), 500);
+      };
+      
+      // Start the progression
+      progressFunction(0);
       
       // Update the prompt for function calling instead of JSON return
       const functionCallingPrompt = `You are a life management AI agent creating a comprehensive, personalized dashboard. You MUST use the available functions to actually create categories and items, not just return JSON.

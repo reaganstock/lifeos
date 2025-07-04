@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { CheckCircle, ArrowRight, Send, MessageSquare } from 'lucide-react';
+import { useAuthContext } from '../AuthProvider';
+import { setUserData } from '../../utils/userStorage';
 
 const ONBOARDING_QUESTIONS = [
   {
@@ -39,6 +41,7 @@ interface Message {
 
 export default function OnboardingConversation() {
   const navigate = useNavigate();
+  const { user } = useAuthContext();
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentAnswer, setCurrentAnswer] = useState('');
@@ -123,7 +126,7 @@ export default function OnboardingConversation() {
   };
 
   const handleProceedToBuild = () => {
-    // Save conversation data
+    // Save conversation data using user-specific storage
     const conversationData = {
       messages,
       answers: ONBOARDING_QUESTIONS.map((q, index) => ({
@@ -134,9 +137,17 @@ export default function OnboardingConversation() {
       type: 'conversation'
     };
     
-    localStorage.setItem('lifely_onboarding_conversation', JSON.stringify(conversationData));
-    localStorage.setItem('lifely_onboarding_type', 'conversation');
-    localStorage.setItem('lifely_onboarding_progress', '/onboarding/documents');
+    // Use user-specific storage to prevent data contamination
+    setUserData(user?.id || null, 'lifely_onboarding_conversation', conversationData);
+    setUserData(user?.id || null, 'lifely_onboarding_type', 'conversation');
+    setUserData(user?.id || null, 'lifely_onboarding_progress', '/onboarding/documents');
+    
+    console.log('🔍 CONVERSATION SAVED:', {
+      userId: user?.id,
+      answersCount: conversationData.answers.filter(a => a.answer.trim()).length,
+      totalLength: conversationData.answers.map(a => a.answer).join(' ').length
+    });
+    
     navigate('/onboarding/documents');
   };
 

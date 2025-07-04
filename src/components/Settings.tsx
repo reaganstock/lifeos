@@ -5,6 +5,7 @@ import { useAuthContext } from './AuthProvider';
 import IntegrationManager from './IntegrationManager';
 import { Item } from '../types';
 import { ImportResult } from '../services/integrations/types';
+import { getUserData, setUserData } from '../utils/userStorage';
 
 interface SettingsProps {
   items: Item[];
@@ -73,14 +74,10 @@ const Settings: React.FC<SettingsProps> = ({ items, setItems, categories = [] })
   // Load user context from localStorage
   useEffect(() => {
     if (user?.id) {
-      const savedContext = localStorage.getItem(`lifely_user_context_${user.id}`);
-      if (savedContext) {
-        try {
-          const parsed = JSON.parse(savedContext);
-          setUserContext(parsed);
-        } catch (error) {
-          console.error('Error parsing user context:', error);
-        }
+      const savedContext = getUserData(user.id, 'lifely_user_context', null);
+      if (savedContext && typeof savedContext === 'object') {
+        setUserContext(savedContext);
+        console.log('🧠 Loaded existing user context');
       } else {
         // Try to build initial context from onboarding data
         generateInitialUserContext();
@@ -92,50 +89,81 @@ const Settings: React.FC<SettingsProps> = ({ items, setItems, categories = [] })
   const generateInitialUserContext = () => {
     if (!user?.id) return;
     
-    // Get onboarding data
-    const onboardingData = localStorage.getItem(`lifely_onboarding_data_${user.id}`);
-    const conversationData = localStorage.getItem(`lifely_onboarding_conversation_${user.id}`);
-    const dashboardData = localStorage.getItem(`lifely_dashboard_data_${user.id}`);
+    // Use user-specific storage utilities
+    const onboardingData = getUserData(user.id, 'lifely_onboarding_data', null);
+    const conversationData = getUserData(user.id, 'lifely_onboarding_conversation', null);
+    const dashboardData = getUserData(user.id, 'lifely_extracted_data', null);
+    const categoriesData = getUserData(user.id, 'lifeStructureCategories', []);
     
     let initialContext = { ...userContext };
     
+    console.log('🧠 Generating initial user context from onboarding data');
+    
     // Extract from onboarding
-    if (onboardingData) {
-      try {
-        const data = JSON.parse(onboardingData);
-        if (data.role) initialContext.workStyle = `${data.role} focused`;
-        if (data.goals) initialContext.goals = Array.isArray(data.goals) ? data.goals : [data.goals];
-      } catch (e) {}
+    if (onboardingData && typeof onboardingData === 'object') {
+      if (onboardingData.role) {
+        initialContext.workStyle = `${onboardingData.role} focused`;
+        console.log('📝 Extracted work style from onboarding:', initialContext.workStyle);
+      }
+      if (onboardingData.goals) {
+        initialContext.goals = Array.isArray(onboardingData.goals) ? onboardingData.goals : [onboardingData.goals];
+      }
     }
     
-    // Extract from conversation
-    if (conversationData) {
-      try {
-        const data = JSON.parse(conversationData);
-        if (data.answers) {
-          const answers = data.answers.map((a: any) => a.answer).join(' ');
-          if (answers.length > 10) {
-            initialContext.summary = answers.substring(0, 200) + '...';
+    // Extract from conversation (PRIMARY SOURCE)
+    if (conversationData && typeof conversationData === 'object' && conversationData.answers) {
+      const answers = conversationData.answers.map((a: any) => a.answer).filter(Boolean).join(' ');
+      if (answers.length > 10) {
+        initialContext.summary = `From onboarding: ${answers.substring(0, 300)}${answers.length > 300 ? '...' : ''}`;
+        console.log('💬 Extracted conversation summary:', initialContext.summary.substring(0, 100));
+      }
+      
+      // Extract priorities from conversation answers
+      const priorityKeywords = ['important', 'priority', 'focus', 'goal', 'working on', 'need to'];
+      const conversationText = answers.toLowerCase();
+      priorityKeywords.forEach(keyword => {
+        if (conversationText.includes(keyword)) {
+          // Extract context around the keyword for better understanding
+          const sentences = answers.split(/[.!?]+/).filter(s => s.toLowerCase().includes(keyword));
+          if (sentences.length > 0) {
+            initialContext.personalInsights.push(`Focus area: ${sentences[0].trim()}`);
           }
         }
-      } catch (e) {}
+      });
     }
     
     // Extract from dashboard data
-    if (dashboardData) {
-      try {
-        const data = JSON.parse(dashboardData);
-        if (data.workStyle) initialContext.workStyle = data.workStyle;
-        if (data.priorities) initialContext.priorities = data.priorities;
-        if (data.interests) initialContext.interests = data.interests;
-        if (data.personalInsights) initialContext.personalInsights = data.personalInsights;
-      } catch (e) {}
+    if (dashboardData && typeof dashboardData === 'object') {
+      if (dashboardData.workStyle) initialContext.workStyle = dashboardData.workStyle;
+      if (dashboardData.priorities && Array.isArray(dashboardData.priorities)) {
+        initialContext.priorities = dashboardData.priorities;
+      }
+      if (dashboardData.interests && Array.isArray(dashboardData.interests)) {
+        initialContext.interests = dashboardData.interests;
+      }
+      if (dashboardData.personalInsights && Array.isArray(dashboardData.personalInsights)) {
+        initialContext.personalInsights = [...initialContext.personalInsights, ...dashboardData.personalInsights];
+      }
     }
     
     // Extract from categories
-    if (categories.length > 0) {
-      initialContext.priorities = categories.map(c => c.name);
+    if (categoriesData.length > 0) {
+      initialContext.priorities = categoriesData.map((c: any) => c.name);
+      console.log('📊 Extracted priorities from categories:', initialContext.priorities);
     }
+    
+    // Set reasonable defaults if still empty
+    if (!initialContext.summary && !initialContext.workStyle && initialContext.priorities.length === 0) {
+      initialContext.summary = 'Complete your onboarding to populate AI context automatically';
+      initialContext.workStyle = 'Focused and organized';
+    }
+    
+    console.log('✅ Generated initial context:', {
+      summary: initialContext.summary?.substring(0, 50),
+      workStyle: initialContext.workStyle,
+      prioritiesCount: initialContext.priorities.length,
+      insightsCount: initialContext.personalInsights.length
+    });
     
     setUserContext(initialContext);
   };
@@ -152,9 +180,10 @@ const Settings: React.FC<SettingsProps> = ({ items, setItems, categories = [] })
   const saveUserContext = () => {
     if (!user?.id) return;
     
-    localStorage.setItem(`lifely_user_context_${user.id}`, JSON.stringify(userContext));
+    setUserData(user.id, 'lifely_user_context', userContext);
     console.log('💾 User context saved:', userContext);
-    alert('User context saved successfully!');
+    setShowUserContext(false);
+    alert('User context saved successfully! This will help the AI provide more personalized assistance.');
   };
 
   const handleSignOut = async () => {

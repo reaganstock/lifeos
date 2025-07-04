@@ -113,21 +113,30 @@ function AppContent() {
         return;
       }
       
-      // Only check Supabase if localStorage doesn't have completion flag
+      // ENHANCED: Also check if user has dashboard data (indicates completed onboarding)
+      const localCategories = getUserData(user.id, 'lifeStructureCategories', []);
+      const localItems = getUserData(user.id, 'lifeStructureItems', []);
+      
+      if (localCategories.length > 0 || localItems.length > 0) {
+        console.log('✅ Found dashboard data - user has completed onboarding:', user.email);
+        console.log('📊 Dashboard stats:', { 
+          categories: localCategories.length, 
+          items: localItems.length 
+        });
+        
+        // Auto-mark as completed since they have data
+        setUserData(user.id, 'lifely_onboarding_completed', true);
+        setIsOnboardingCompleted(true);
+        setOnboardingProgress('/dashboard');
+        return;
+      }
+      
+      // Only check Supabase if localStorage doesn't have completion flag or data
       // Wait for data to initialize before checking Supabase
       if (!dataInitialized) {
         console.log('⏳ Waiting for data initialization...');
         setIsOnboardingCompleted(false);
         setOnboardingProgress('/onboarding');
-        return;
-      }
-      
-      // Check if user has local categories data (faster than Supabase)
-      const localCategories = getUserData(user.id, 'lifeStructureCategories', []);
-      if (localCategories.length > 0) {
-        console.log('✅ Found local categories, user has completed onboarding:', user.email);
-        setUserData(user.id, 'lifely_onboarding_completed', true);
-        setIsOnboardingCompleted(true);
         return;
       }
       

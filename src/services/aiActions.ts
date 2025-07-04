@@ -3490,8 +3490,9 @@ ${userContext}
   }
 
   private generatePriority(): 'low' | 'medium' | 'high' {
-    const priorities: ('low' | 'medium' | 'high')[] = ['low', 'medium', 'high'];
-    return priorities[Math.floor(Math.random() * priorities.length)];
+    // Use logical priority assignment based on context instead of random
+    // For AI-generated items, use medium as default to indicate user should review and adjust
+    return 'medium';
   }
 
   private generateDueDate(dateRange?: { start: Date; end: Date }): Date | undefined {
