@@ -43,7 +43,7 @@ function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
   const {
-    categories: supabaseCategories,
+    categories: _supabaseCategories,
     loading: _dataLoading,
     error: dataError,
     initialized: dataInitialized,
@@ -105,21 +105,47 @@ function AppContent() {
       
       try {
         console.log('🔍 Checking onboarding status in Supabase for user:', user.email);
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('has_completed_onboarding')
-          .eq('id', user.id)
-          .single();
+        
+        // Check both profile status AND if user has categories (for existing users)
+        const [profileResult, categoriesResult] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('has_completed_onboarding')
+            .eq('id', user.id)
+            .single(),
+          supabase
+            .from('categories')
+            .select('id')
+            .eq('user_id', user.id)
+            .limit(1)
+        ]);
           
-        if (error) {
-          console.warn('⚠️ Could not check onboarding status in Supabase:', error);
-          return;
+        if (profileResult.error && profileResult.error.code !== 'PGRST116') {
+          console.warn('⚠️ Could not check profile onboarding status:', profileResult.error);
         }
         
-        if ((data as any)?.has_completed_onboarding) {
-          console.log('✅ User has completed onboarding according to Supabase, syncing to localStorage');
+        if (categoriesResult.error) {
+          console.warn('⚠️ Could not check categories:', categoriesResult.error);
+        }
+        
+        // User has completed onboarding if:
+        // 1. Profile explicitly says so, OR
+        // 2. User has categories (existing user logging back in)
+        const hasProfileCompleted = profileResult.data && 'has_completed_onboarding' in profileResult.data 
+          ? profileResult.data.has_completed_onboarding 
+          : false;
+        const hasCategories = categoriesResult.data && categoriesResult.data.length > 0;
+        
+        if (hasProfileCompleted || hasCategories) {
+          console.log('✅ User has completed onboarding:', {
+            profileCompleted: hasProfileCompleted,
+            hasCategories: hasCategories,
+            email: user.email
+          });
           setUserData(user.id, 'lifely_onboarding_completed', true);
           setIsOnboardingCompleted(true);
+        } else {
+          console.log('📝 New user - needs onboarding:', user.email);
         }
       } catch (error) {
         console.warn('⚠️ Exception checking onboarding status in Supabase:', error);
@@ -127,7 +153,7 @@ function AppContent() {
     };
     
     checkOnboardingStatusInSupabase();
-  }, [user?.id, dataInitialized]);
+  }, [user?.id, user?.email, dataInitialized]);
   
   // Removed showAuthModal - now using AuthScreen directly
   const [showMigrationModal, setShowMigrationModal] = useState(false);
@@ -191,7 +217,7 @@ function AppContent() {
       setLocalItems([]);
       setLocalCategories([]);
     }
-  }, [user?.id]);
+  }, [user?.id, user?.email]);
 
   // OAuth callback handling
   useEffect(() => {
@@ -826,7 +852,7 @@ function AppContent() {
           <AIAssistant
             isOpen={showAIAssistant}
             onClose={() => setShowAIAssistant(false)}
-            categories={supabaseCategories}
+            categories={categories} // Use hybrid categories instead of just Supabase
             items={items}
             onAddItem={handleAddItem}
             onRefreshItems={user ? refreshData : () => {}}
@@ -836,13 +862,106 @@ function AppContent() {
             isCollapsed={isAiSidebarCollapsed}
             onResize={setAiSidebarWidth}
             onToggleCollapse={() => setIsAiSidebarCollapsed(!isAiSidebarCollapsed)}
-            // Pass Supabase operations for authenticated users
+            // Pass hybrid operations that work with localStorage-first → Supabase sync
             supabaseCallbacks={user ? {
-              createItem,
-              updateItem,
-              deleteItem,
-              bulkCreateItems,
-              createCategory,
+              createItem: async (item: any) => {
+                // Create in localStorage first for instant UX
+                const newItem = {
+                  ...item,
+                  id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString()
+                };
+                setItems(prev => [newItem, ...prev]);
+                
+                // Try Supabase sync, but don't fail if it's not available
+                try {
+                  const supabaseResult = await createItem(item);
+                  if (supabaseResult) {
+                    // Update localStorage with Supabase ID
+                    setItems(prev => prev.map(i => i.id === newItem.id ? { ...i, id: supabaseResult.id } : i));
+                  }
+                  return supabaseResult || newItem;
+                } catch (error) {
+                  console.warn('⚠️ Supabase createItem failed, using localStorage-only:', error);
+                  return newItem;
+                }
+              },
+              updateItem: async (id: string, updates: any) => {
+                // Update localStorage first
+                setItems(prev => prev.map(item => 
+                  item.id === id ? { ...item, ...updates, updatedAt: new Date().toISOString() } : item
+                ));
+                
+                // Try Supabase sync
+                try {
+                  return await updateItem(id, updates);
+                } catch (error) {
+                  console.warn('⚠️ Supabase updateItem failed, using localStorage-only:', error);
+                  return true;
+                }
+              },
+              deleteItem: async (id: string) => {
+                // Remove from localStorage first
+                setItems(prev => prev.filter(item => item.id !== id));
+                
+                // Try Supabase sync
+                try {
+                  return await deleteItem(id);
+                } catch (error) {
+                  console.warn('⚠️ Supabase deleteItem failed, using localStorage-only:', error);
+                  return true;
+                }
+              },
+              bulkCreateItems: async (items: any[]) => {
+                // Create in localStorage first
+                const newItems = items.map(item => ({
+                  ...item,
+                  id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString()
+                }));
+                setItems(prev => [...newItems, ...prev]);
+                
+                // Try Supabase sync
+                try {
+                  const supabaseResult = await bulkCreateItems(items);
+                  if (supabaseResult && supabaseResult.length > 0) {
+                    // Update localStorage with Supabase IDs
+                    setItems(prev => prev.map((item, index) => {
+                      const correspondingSupabaseItem = supabaseResult[index];
+                      return correspondingSupabaseItem ? { ...item, id: correspondingSupabaseItem.id } : item;
+                    }));
+                  }
+                  return supabaseResult || newItems;
+                } catch (error) {
+                  console.warn('⚠️ Supabase bulkCreateItems failed, using localStorage-only:', error);
+                  return newItems;
+                }
+              },
+              createCategory: async (category: any) => {
+                // Create in localStorage first
+                const newCategory = {
+                  ...category,
+                  id: `cat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString()
+                };
+                setCategories(prev => [...prev, newCategory]);
+                
+                // Try Supabase sync
+                try {
+                  const supabaseResult = await createCategory(category);
+                  if (supabaseResult) {
+                    // Update localStorage with Supabase ID
+                    setCategories(prev => prev.map(c => c.id === newCategory.id ? { ...c, id: supabaseResult.id } : c));
+                  }
+                  return supabaseResult || newCategory;
+                } catch (error) {
+                  console.warn('⚠️ Supabase createCategory failed, using localStorage-only:', error);
+                  return newCategory;
+                }
+              },
               refreshData
             } : undefined}
           />

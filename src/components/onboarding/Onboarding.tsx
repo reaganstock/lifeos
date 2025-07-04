@@ -233,17 +233,17 @@ export default function Onboarding() {
     {
       title: "What best describes you?",
       subtitle: "Help us understand your lifestyle so we can personalize your experience",
-      progress: 25
+      progress: 0
     },
     {
       title: "How did you hear about Lifely?",
       subtitle: "We're curious how you discovered us in the wild",
-      progress: 50
+      progress: 33
     },
     {
       title: "What are your main goals?",
       subtitle: "Select all that apply - this helps us set up your dashboard perfectly",
-      progress: 75
+      progress: 66
     },
     {
       title: "Choose your setup method",
