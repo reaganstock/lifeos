@@ -320,7 +320,13 @@ return comprehensiveDashboard;`
           
           // Convert AI icon names to actual emojis for consistent display
           const convertIconToEmoji = (iconName: string) => {
+            // If it's already an emoji, return it
+            if (iconName && /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/u.test(iconName)) {
+              return iconName;
+            }
+            
             const iconMap: Record<string, string> = {
+              // Common categories
               'graduation-cap': '🎓',
               'briefcase': '💼',
               'dumbbell': '💪',
@@ -334,9 +340,46 @@ return comprehensiveDashboard;`
               'dollar-sign': '💰',
               'calendar': '📅',
               'computer': '💻',
-              'music': '🎵'
+              'music': '🎵',
+              'work': '💼',
+              'career': '💼',
+              'business': '💼',
+              'health': '💚',
+              'wellness': '💚',
+              'gym': '💪',
+              'exercise': '💪',
+              'learning': '📚',
+              'education': '🎓',
+              'study': '📚',
+              'personal': '👤',
+              'growth': '🌱',
+              'development': '🌱',
+              'finance': '💰',
+              'money': '💰',
+              'family': '👨‍👩‍👧‍👦',
+              'relationship': '❤️',
+              'social': '👥',
+              'hobby': '🎨',
+              'creative': '🎨',
+              'travel': '✈️',
+              'project': '📋',
+              'productivity': '⚡'
             };
-            return iconMap[iconName] || iconName || '📁';
+            
+            // Try exact match first, then lowercase match
+            const exactMatch = iconMap[iconName];
+            if (exactMatch) return exactMatch;
+            
+            const lowerMatch = iconMap[iconName.toLowerCase()];
+            if (lowerMatch) return lowerMatch;
+            
+            // If no match and it looks like a text name, return a generic emoji
+            if (iconName && typeof iconName === 'string' && iconName.length > 2) {
+              console.warn('⚠️ No emoji mapping for icon:', iconName, '- using default folder emoji');
+              return '📁';
+            }
+            
+            return iconName || '📁';
           };
           
           // Convert AI color names to hex colors for consistent theming
@@ -872,6 +915,7 @@ PERSONALIZATION REQUIREMENTS:
    - Rich context: Use exact project names, company names, specific interests
    - Moderate context: Combine mentioned areas with logical workflow categories  
    - Minimal context: Build around whatever IS mentioned, avoid pure generic categories
+   - **ICONS**: Use ACTUAL EMOJI CHARACTERS (💼, 🎓, 💪, 📚, 🏠, 🎯) NOT text names like "briefcase"
    
 2. **Goals (2-3 per category)**: Actionable objectives with realistic timelines
    - Reference specific projects, tools, or interests they mentioned
@@ -906,7 +950,7 @@ QUALITY STANDARDS:
 Return ONLY pure JSON in this exact format:
 {
   "categories": [
-    {"id": "specific-id", "name": "Specific Category Name", "purpose": "Clear purpose", "priority": 9, "icon": "icon-name", "color": "color"}
+    {"id": "specific-id", "name": "Specific Category Name", "purpose": "Clear purpose", "priority": 9, "icon": "💼", "color": "#3B82F6"}
   ],
   "goals": [
     {"id": "goal-id", "title": "Specific goal title", "category": "category-id", "timeline": "realistic timeframe", "priority": 4}

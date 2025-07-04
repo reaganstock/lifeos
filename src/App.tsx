@@ -419,6 +419,15 @@ function AppContent() {
   const items = localItems;
   const categories = localCategories;
   
+  // Debug categories state
+  console.log('🔍 DEBUG - App.tsx categories state:', {
+    categoriesCount: categories.length,
+    localCategoriesCount: localCategories.length,
+    categoriesPreview: categories.slice(0, 2).map(c => ({ id: c.id, name: c.name, icon: c.icon })),
+    userId: user?.id,
+    isOnboardingCompleted
+  });
+  
   // Create a setItems function that prioritizes localStorage (no automatic Supabase sync)
   const setItems = (updater: React.SetStateAction<Item[]>) => {
     console.log('💾 setItems called - using localStorage for instant UX');
@@ -654,33 +663,41 @@ function AppContent() {
         setIsOnboardingCompleted(completed);
         
         // CRITICAL: Reload categories and items from localStorage after onboarding
-        const userCategories = getUserData(user.id, 'lifeStructureCategories', []);
-        const userItems = getUserData(user.id, 'lifeStructureItems', []);
-        
-        console.log('🔄 Reloading categories after onboarding:', userCategories.length);
-        console.log('🔄 Reloading items after onboarding:', userItems.length);
-        
-        // Format and set categories
-        const formattedCategories = userCategories.map((category: any) => ({
-          ...category,
-          createdAt: category.createdAt ? new Date(category.createdAt) : new Date(),
-          updatedAt: category.updatedAt ? new Date(category.updatedAt) : new Date()
-        }));
-        setLocalCategories(formattedCategories);
-        
-        // Format and set items
-        const formattedItems = userItems.map((item: any) => ({
-          ...item,
-          createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
-          updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
-          dueDate: item.dueDate ? new Date(item.dueDate) : undefined,
-          dateTime: item.dateTime ? new Date(item.dateTime) : undefined,
-          metadata: {
-            ...item.metadata,
-            eventDate: item.metadata?.eventDate ? new Date(item.metadata.eventDate) : undefined
-          }
-        }));
-        setLocalItems(formattedItems);
+        // Add a small delay to ensure localStorage is fully written
+        setTimeout(() => {
+          const userCategories = getUserData(user.id, 'lifeStructureCategories', []);
+          const userItems = getUserData(user.id, 'lifeStructureItems', []);
+          
+          console.log('🔄 Reloading categories after onboarding:', userCategories.length, userCategories);
+          console.log('🔄 Reloading items after onboarding:', userItems.length);
+          
+          // Format and set categories
+          const formattedCategories = userCategories.map((category: any) => ({
+            ...category,
+            createdAt: category.createdAt ? new Date(category.createdAt) : new Date(),
+            updatedAt: category.updatedAt ? new Date(category.updatedAt) : new Date()
+          }));
+          
+          console.log('✅ Setting categories state:', formattedCategories.length, formattedCategories);
+          setLocalCategories(formattedCategories);
+          
+          // Format and set items
+          const formattedItems = userItems.map((item: any) => ({
+            ...item,
+            createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
+            updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
+            dueDate: item.dueDate ? new Date(item.dueDate) : undefined,
+            dateTime: item.dateTime ? new Date(item.dateTime) : undefined,
+            metadata: {
+              ...item.metadata,
+              eventDate: item.metadata?.eventDate ? new Date(item.metadata.eventDate) : undefined
+            }
+          }));
+          setLocalItems(formattedItems);
+          
+          // Force a re-render by updating a dummy state
+          setIsOnboardingCompleted(true);
+        }, 500);
         
         // Force refresh data to get new categories/items from Supabase too
         if (refreshData) {
