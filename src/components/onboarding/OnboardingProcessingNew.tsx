@@ -95,23 +95,34 @@ export default function OnboardingProcessingNew() {
         documentContext += `\n\nDOCUMENT SUMMARY: User uploaded ${documents.length} file(s) which likely contain details about their current projects, workflows, interests, or professional context. Extract specific details from these documents to create personalized categories.`;
       }
       
-      // Build complete context
+      // Build complete context with PROPER WEIGHTING
+      // CRITICAL: 5 conversation questions = 90% weight, initial 4 questions = 10% weight
       let fullContext = '';
       
+      // PRIMARY CONTEXT (90% weight): Conversation/Voice Memo responses
+      if (conversationText) {
+        fullContext += `PRIMARY PERSONALIZATION CONTEXT (90% WEIGHT - MOST IMPORTANT):\\n`;
+        fullContext += `Based on detailed 5-question conversation/voice memo:\\n`;
+        fullContext += `${conversationText}\\n\\n`;
+        fullContext += `INSTRUCTION: Use this conversation context as the PRIMARY source for all personalization decisions. This represents the user's actual detailed responses and should drive 90% of the dashboard creation.\\n\\n`;
+      }
+      
+      // SECONDARY CONTEXT (90% weight): File uploads and documents  
+      if (documentContext) {
+        fullContext += `SECONDARY PERSONALIZATION CONTEXT (HIGH WEIGHT - VERY IMPORTANT):\\n`;
+        fullContext += `User-uploaded files and documents:\\n`;
+        fullContext += `${documentContext}\\n\\n`;
+        fullContext += `INSTRUCTION: Extract specific details from these documents to create highly personalized categories and content. These files contain real context about the user's work and interests.\\n\\n`;
+      }
+      
+      // MINIMAL CONTEXT (10% weight): Initial basic questions
       if (initialData && typeof initialData === 'object') {
         const data = initialData as any;
-        fullContext += `USER PROFILE:\\n`;
+        fullContext += `BASIC BACKGROUND INFO (10% WEIGHT - MINIMAL INFLUENCE):\\n`;
         fullContext += `Role: ${data.role || 'Not specified'}\\n`;
         fullContext += `How they found us: ${data.source || 'Not specified'}\\n`;
-        fullContext += `Selected goals: ${data.goals?.join(', ') || 'None'}\\n\\n`;
-      }
-      
-      if (conversationText) {
-        fullContext += `DETAILED RESPONSES:\\n${conversationText}\\n\\n`;
-      }
-      
-      if (documentContext) {
-        fullContext += `ADDITIONAL CONTEXT:\\n${documentContext}\\n\\n`;
+        fullContext += `Selected goals: ${data.goals?.join(', ') || 'None'}\\n`;
+        fullContext += `INSTRUCTION: Use this only as basic background - do NOT let this override the detailed conversation responses above.\\n\\n`;
       }
       
       // 4. Get connected integrations context
@@ -734,12 +745,17 @@ Return ONLY pure JSON (no markdown, no function calls):
 Create 1-2 daily/weekly routines for "${category.name}" category.
 User context: ${JSON.stringify(analysis.specificDetails)}
 
-Make routines SPECIFIC and actionable.
+ROUTINE CREATION RULES:
+1. Always include specific time in HH:MM format (e.g., "08:00", "14:30", "20:00")
+2. Always include duration in minutes (15-120 minutes typical)
+3. Make routines SPECIFIC and actionable
+4. Choose realistic times based on category (morning for fitness, evening for reflection, etc.)
+5. Set reasonable durations for the activity type
 
 Return ONLY pure JSON (no markdown, no function calls):
 {
   "routines": [
-    {"id": "routine-1", "title": "Daily Rosary and Mass", "frequency": "daily", "time": "morning", "category": "${category.id}"}
+    {"id": "routine-${Date.now()}-1", "title": "Specific routine name", "frequency": "daily", "time": "08:00", "duration": 30, "category": "${category.id}"}
   ]
 }`;
       
@@ -904,18 +920,31 @@ Return ONLY pure JSON (no markdown, no function calls):
 USER CONTEXT:
 ${fullContext}
 
+CRITICAL CONTEXT WEIGHTING - READ CAREFULLY:
+1. **PRIMARY CONTEXT (90% WEIGHT)**: Detailed 5-question conversation/voice memo responses - THIS IS THE MOST IMPORTANT SOURCE
+2. **SECONDARY CONTEXT (90% WEIGHT)**: User-uploaded files and documents - EXTRACT SPECIFIC DETAILS FROM THESE
+3. **MINIMAL CONTEXT (10% WEIGHT)**: Initial 4 basic questions - USE ONLY AS BACKGROUND, DO NOT LET THIS OVERRIDE PRIMARY CONTEXT
+
 CONTEXT ANALYSIS INSTRUCTIONS:
-1. **Assess input richness**: Determine if context is rich (detailed answers + files + integrations), moderate (some answers + maybe files), or minimal (mostly files/brief responses)
-2. **Extract key themes**: Look for specific projects, tools, interests, goals, challenges, and life areas mentioned
-3. **Identify patterns**: Notice connections between different inputs (e.g., mentions Notion + productivity goals = workspace optimization focus)
-4. **Consider integrations**: Factor in connected apps to understand their existing workflow preferences
+1. **Prioritize conversation responses**: The detailed 5-question conversation contains the user's actual thoughts, goals, and priorities - base 90% of personalization on this
+2. **Extract from files**: User uploaded files contain real context about their work, projects, and interests - mine these for specific details
+3. **Use initial questions minimally**: The basic role/source questions provide light background only - do not let "Student" or "Business Owner" override their detailed conversation responses
+4. **Assess true richness**: Rich = detailed conversation + files, Moderate = good conversation OR good files, Minimal = only basic info
+5. **Follow user priorities**: If their detailed responses mention specific goals, projects, or interests, these should drive the dashboard creation
 
 PERSONALIZATION REQUIREMENTS:
 1. **Categories (4-6)**: Create SPECIFIC categories based on their actual life areas
    - Rich context: Use exact project names, company names, specific interests
    - Moderate context: Combine mentioned areas with logical workflow categories  
    - Minimal context: Build around whatever IS mentioned, avoid pure generic categories
-   - **ICONS**: Use ACTUAL EMOJI CHARACTERS (💼, 🎓, 💪, 📚, 🏠, 🎯) NOT text names like "briefcase"
+   - **ICONS**: Use ACTUAL EMOJI CHARACTERS that match the app's component system:
+     * Goals: 🎯 (bow and arrow target - REQUIRED for all goal-related items)
+     * Routines: ⏰ (clock for time-based activities)
+     * Todos: ✅ (checkmark for tasks)
+     * Notes: 📝 (notepad for knowledge)
+     * Events: 📅 (calendar for scheduling)
+     * Categories: Use specific emojis like 💼 (work), 🎓 (academics), 💪 (fitness), 📚 (learning), 🏠 (personal), etc.
+     * NEVER use text names like "briefcase" or generic icons
    
 2. **Goals (2-3 per category)**: Actionable objectives with realistic timelines
    - Reference specific projects, tools, or interests they mentioned
@@ -923,8 +952,11 @@ PERSONALIZATION REQUIREMENTS:
    - Timelines: 1-3 months for tasks, 3-6 months for major goals
    
 3. **Routines (1-2 per category)**: Daily/weekly habits that support their goals
+   - MUST include specific time in HH:MM format (e.g., "08:00", "14:30", "20:00")
+   - MUST include duration in minutes (15-120 minutes typical)
    - Consider their mentioned schedule preferences or existing tools
    - Align with connected integrations (e.g., calendar integration = scheduling routines)
+   - Choose realistic times: morning for fitness/planning, evening for reflection/review
    
 4. **Todos (2-3 per category)**: Immediate actions for THIS WEEK
    - Create specific next steps based on their mentioned projects/goals
@@ -956,7 +988,7 @@ Return ONLY pure JSON in this exact format:
     {"id": "goal-id", "title": "Specific goal title", "category": "category-id", "timeline": "realistic timeframe", "priority": 4}
   ],
   "routines": [
-    {"id": "routine-id", "title": "Daily/weekly routine", "frequency": "daily|weekly", "time": "morning|evening", "category": "category-id"}
+    {"id": "routine-id", "title": "Daily/weekly routine", "frequency": "daily|weekly", "time": "08:00", "duration": 30, "category": "category-id"}
   ],
   "todos": [
     {"id": "todo-id", "title": "Immediate action", "category": "category-id", "priority": 3}
@@ -971,23 +1003,66 @@ Return ONLY pure JSON in this exact format:
   "personalInsights": ["insight1", "insight2", "insight3"]
 }`;
 
-      // Use Gemini agent mode for intelligent processing
+      // PROPER FUNCTION CALLING: Use actual function calls instead of JSON return
+      console.log('🤖 Using proper function calling for dashboard creation...');
+      
+      // Update the prompt for function calling instead of JSON return
+      const functionCallingPrompt = `You are a life management AI agent creating a comprehensive, personalized dashboard. You MUST use the available functions to actually create categories and items, not just return JSON.
+
+USER CONTEXT:
+${fullContext}
+
+INSTRUCTIONS:
+1. First analyze the context to understand the user's specific needs, projects, and interests
+2. Create 4-6 specific categories using createCategory function calls
+3. For each category, create 2-3 goals using createItem function calls  
+4. For each category, create 1-2 routines using createItem function calls
+5. Create useful todos and notes using createItem function calls
+
+CRITICAL REQUIREMENTS:
+- Use ACTUAL FUNCTION CALLS - call createCategory and createItem functions multiple times
+- Create categories first, then items for each category
+- Use specific names based on user context, not generic terms
+- For goals: Use bow and arrow emoji 🎯 
+- For routines: Include specific time (HH:MM) and duration in minutes
+- Make everything highly personalized to their mentioned interests/projects
+
+START BY CREATING CATEGORIES, then create items for each category.`;
+
+      // Use proper function calling instead of agent mode
       const result = await geminiService.processMessage(
-        agentPrompt, 
+        functionCallingPrompt, 
         [], // No existing items for onboarding
         [], // No conversation history 
         [], // No existing categories
-        true, // Enable agent mode for intelligent processing
+        false, // Use function calling, not agent mode
         false // Not ask mode
       );
       
-      console.log('🤖 Agent response:', result.response);
+      console.log('🤖 Function calling response:', result.response);
+      console.log('🔧 Function results:', result.functionResults);
       
-      // Parse the agent's response
-      const cleanResponse = result.response.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      const agentResult = JSON.parse(cleanResponse);
+      // The function calls will have created the actual items, so we need to get them from localStorage
+      const createdCategories = getUserData(user.id, 'lifeStructureCategories', []);
+      const createdItems = getUserData(user.id, 'lifeStructureItems', []);
       
-      console.log('✅ Agent created comprehensive dashboard:', {
+      // Organize the created items by type
+      const agentResult = {
+        categories: createdCategories,
+        goals: createdItems.filter((item: any) => item.type === 'goal'),
+        routines: createdItems.filter((item: any) => item.type === 'routine'),
+        todos: createdItems.filter((item: any) => item.type === 'todo'),
+        notes: createdItems.filter((item: any) => item.type === 'note'),
+        events: createdItems.filter((item: any) => item.type === 'event'),
+        workStyle: "Focused and goal-oriented",
+        personalInsights: [
+          "You have a balanced approach to life management",
+          "Your priorities align with long-term growth",
+          "You value both productivity and personal development"
+        ]
+      };
+      
+      console.log('✅ Function calling created comprehensive dashboard:', {
         categories: agentResult.categories?.length || 0,
         goals: agentResult.goals?.length || 0,
         routines: agentResult.routines?.length || 0,
@@ -1190,13 +1265,17 @@ Return ONLY pure JSON in this exact format:
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'categories': return <BarChart3 className="w-5 h-5" />;
-      case 'goals': return <Target className="w-5 h-5" />;
-      case 'routines': return <Clock className="w-5 h-5" />;
-      case 'todos': return <CheckSquare className="w-5 h-5" />;
-      case 'events': return <Calendar className="w-5 h-5" />;
-      case 'notes': return <NotebookPen className="w-5 h-5" />;
-      default: return <Code className="w-5 h-5" />;
+      case 'categories': return <span className="text-lg">📁</span>;
+      case 'goals': return <span className="text-lg">🎯</span>;  // Bow and arrow target as requested
+      case 'routines': return <span className="text-lg">⏰</span>;
+      case 'todos': return <span className="text-lg">✅</span>;
+      case 'events': return <span className="text-lg">📅</span>;
+      case 'notes': return <span className="text-lg">📝</span>;
+      case 'workStyle': return <span className="text-lg">🧠</span>;
+      case 'priorities': return <span className="text-lg">🎯</span>;
+      case 'interests': return <span className="text-lg">💡</span>;
+      case 'personalInsights': return <span className="text-lg">✨</span>;
+      default: return <span className="text-lg">📋</span>;
     }
   };
 

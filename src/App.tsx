@@ -86,35 +86,52 @@ function AppContent() {
   const isOnboardingFlow = location.pathname.startsWith('/onboarding') || location.pathname.startsWith('/auth');
   
   // Check onboarding completion status (user-specific) - hybrid localStorage + Supabase
-  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState(() => 
-    getUserData(user?.id || null, 'lifely_onboarding_completed', false)
-  );
-  const [onboardingProgress, setOnboardingProgress] = useState(() => 
-    getUserData(user?.id || null, 'lifely_onboarding_progress', '/onboarding')
-  );
+  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState(false);
+  const [onboardingProgress, setOnboardingProgress] = useState('/onboarding');
   
-  // SIMPLIFIED: Check onboarding completion - prioritize localStorage, fallback to categories check
+  // CRITICAL FIX: Onboarding completion detection that properly persists across refreshes
   useEffect(() => {
     const checkOnboardingStatus = async () => {
-      if (!user?.id) return;
+      if (!user?.id) {
+        console.log('⏳ No user ID yet, waiting...');
+        setIsOnboardingCompleted(false);
+        return;
+      }
       
       console.log('🔍 Checking onboarding status for user:', user.email);
       
-      // First check localStorage (fastest, most reliable)
+      // ALWAYS check localStorage first - this is the source of truth
       const localCompleted = getUserData(user.id, 'lifely_onboarding_completed', false);
+      const localProgress = getUserData(user.id, 'lifely_onboarding_progress', '/onboarding');
+      
+      console.log('📊 Local storage check:', { localCompleted, localProgress });
+      
       if (localCompleted) {
-        console.log('✅ User completed onboarding (localStorage):', user.email);
+        console.log('✅ User completed onboarding (localStorage confirmed):', user.email);
+        setIsOnboardingCompleted(true);
+        setOnboardingProgress(localProgress);
+        return;
+      }
+      
+      // Only check Supabase if localStorage doesn't have completion flag
+      // Wait for data to initialize before checking Supabase
+      if (!dataInitialized) {
+        console.log('⏳ Waiting for data initialization...');
+        setIsOnboardingCompleted(false);
+        setOnboardingProgress('/onboarding');
+        return;
+      }
+      
+      // Check if user has local categories data (faster than Supabase)
+      const localCategories = getUserData(user.id, 'lifeStructureCategories', []);
+      if (localCategories.length > 0) {
+        console.log('✅ Found local categories, user has completed onboarding:', user.email);
+        setUserData(user.id, 'lifely_onboarding_completed', true);
         setIsOnboardingCompleted(true);
         return;
       }
       
-      // Wait for data to initialize before checking Supabase
-      if (!dataInitialized) {
-        console.log('⏳ Waiting for data initialization...');
-        return;
-      }
-      
-      // Check if user has categories (indicates previous use)
+      // Fallback: Check Supabase categories
       try {
         const { data: categories, error } = await supabase
           .from('categories')
@@ -123,7 +140,7 @@ function AppContent() {
           .limit(1);
           
         if (!error && categories && categories.length > 0) {
-          console.log('✅ Existing user with categories - skip onboarding:', user.email);
+          console.log('✅ Existing user with Supabase categories - skip onboarding:', user.email);
           setUserData(user.id, 'lifely_onboarding_completed', true);
           setIsOnboardingCompleted(true);
         } else {
@@ -133,13 +150,31 @@ function AppContent() {
           setIsOnboardingCompleted(false);
         }
       } catch (error) {
-        console.warn('⚠️ Error checking categories, assuming new user:', error);
+        console.warn('⚠️ Error checking Supabase categories, using localStorage state:', error);
         setIsOnboardingCompleted(false);
       }
     };
     
     checkOnboardingStatus();
   }, [user?.id, user?.email, dataInitialized]);
+  
+  // Listen for onboarding completion events
+  useEffect(() => {
+    const handleOnboardingComplete = () => {
+      if (user?.id) {
+        console.log('🎉 Onboarding complete event received for user:', user.email);
+        setIsOnboardingCompleted(true);
+        // Force a small delay to ensure data is saved
+        setTimeout(() => {
+          const verified = getUserData(user.id, 'lifely_onboarding_completed', false);
+          console.log('✅ Verified onboarding completion in localStorage:', verified);
+        }, 100);
+      }
+    };
+    
+    window.addEventListener('onboardingComplete', handleOnboardingComplete);
+    return () => window.removeEventListener('onboardingComplete', handleOnboardingComplete);
+  }, [user?.id, user?.email]);
   
   // Removed showAuthModal - now using AuthScreen directly
   const [showMigrationModal, setShowMigrationModal] = useState(false);
