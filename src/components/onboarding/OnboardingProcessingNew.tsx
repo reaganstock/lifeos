@@ -1497,17 +1497,79 @@ CRITICAL REQUIREMENTS:
 - For routines: Include specific time (08:00, 14:30, etc.) and duration in minutes
 - Make everything highly personalized to their mentioned interests/projects
 
-EXAMPLE PATTERN (showing broad, non-duplicate categories with priorities):
+QUALITY STANDARDS - AVOID GENERIC CONTENT:
+
+GOALS - Must be specific and actionable:
+❌ BAD: "🎯 Improve social and personal care systems"
+❌ BAD: "🎯 Masters social and personal care workflow"
+❌ BAD: "🎯 Improve entrepreneurship and tech systems"
+✅ GOOD: "🎯 Complete mobile app MVP with user authentication by February 15th"
+✅ GOOD: "🎯 Attend 3 Catholic young adult events this month"
+✅ GOOD: "🎯 Deadlift 225lbs for 5 reps by March 30th"
+- Include specific deliverables, dates, and measurable outcomes
+- Reference user's actual mentioned projects, interests, or challenges
+
+ROUTINES - Must include detailed steps and varied durations:
+❌ BAD: "Morning planning session" (15 minutes, no details)
+❌ BAD: "Weekly goal review" (15 minutes, vague)
+✅ GOOD: "Morning Prayer & Planning (25 min): 1. Rosary (15 min), 2. Daily planning (10 min)"
+✅ GOOD: "Gym Workout (60 min): 1. Warm-up (10 min), 2. Compound lifts (35 min), 3. Cool-down (15 min)"
+✅ GOOD: "Evening Reflection (20 min): 1. Journal writing (10 min), 2. Tomorrow's priorities (10 min)"
+- Vary durations: 15-90 minutes based on activity type
+- Include numbered step-by-step instructions
+- Specify optimal times that match user's schedule
+
+NOTES - Must contain useful, actionable content:
+❌ BAD: "Key principles and best practices for managing entrepreneurship and innovation"
+❌ BAD: "Best practices for managing entrepreneurship note"
+✅ GOOD: "Mobile App Development Checklist:\n1. User research & wireframes\n2. Backend API setup\n3. Frontend implementation\n4. Testing protocols\n5. App store submission process"
+✅ GOOD: "Prayer Resources:\n- Daily Mass readings app\n- Rosary meditation guides\n- Local Catholic events calendar\n- Spiritual direction contacts"
+✅ GOOD: "Gym Workout Templates:\n- Push Day: Bench, Shoulder Press, Triceps\n- Pull Day: Deadlift, Rows, Biceps\n- Legs: Squats, Lunges, Calves"
+- Provide templates, checklists, or resource lists
+- Include specific tools, contacts, or references mentioned by user
+
+TODOS - Must have specific dates and concrete actions:
+❌ BAD: "Review project status" (no date)
+❌ BAD: "Work on app development" (vague)
+✅ GOOD: "Complete user authentication module for fitness app (Due: Jan 28th)"
+✅ GOOD: "Research Catholic young adult groups in DC area (Due: This Friday)"
+✅ GOOD: "Plan next week's workout split and meal prep (Due: Sunday)"
+- Every todo needs a specific due date within the next 1-4 weeks
+- Use actionable verbs: Complete, Research, Plan, Review, Submit, Contact
+- Reference user's actual mentioned projects and goals
+
+EXAMPLE PATTERN (showing broad, non-duplicate categories with quality items):
 createCategory({name: "Faith & Spirituality", icon: "🙏", color: "#8B5CF6", priority: 0})
 createCategory({name: "Health & Fitness", icon: "💪", color: "#10B981", priority: 1})
 createCategory({name: "Professional Development", icon: "💻", color: "#3B82F6", priority: 2})
 createCategory({name: "Learning & Growth", icon: "📚", color: "#F59E0B", priority: 3})
 
-createItem({title: "🎯 Deepen prayer life through daily rosary", type: "goal", category: "faith-spirituality"})
-createItem({title: "Morning prayer routine", type: "routine", category: "faith-spirituality", time: "07:00", duration: 15})
-createItem({title: "🎯 Achieve 10 pull-ups consistently", type: "goal", category: "health-fitness"})
+// QUALITY GOALS with specific dates and deliverables:
+createItem({title: "🎯 Attend weekly Mass and find local Catholic young adult group by January 31st", type: "goal", category: "faith-spirituality"})
+createItem({title: "🎯 Deadlift bodyweight (180lbs) for 3 reps by March 15th", type: "goal", category: "health-fitness"})
+createItem({title: "🎯 Complete React Native course and build first mobile app MVP by February 28th", type: "goal", category: "professional-development"})
 
-YOU MUST CREATE BOTH CATEGORIES AND ITEMS - DO NOT STOP AFTER CATEGORIES.`;
+// QUALITY ROUTINES with detailed steps and varied durations:
+createItem({title: "Morning Prayer & Planning", description: "Start day with faith and focus", routineSteps: "1. Rosary meditation (15 min)\n2. Scripture reading (10 min)\n3. Daily priority planning (10 min)", type: "routine", category: "faith-spirituality", time: "07:00", duration: 35})
+createItem({title: "Gym Strength Training", description: "Build physical strength and discipline", routineSteps: "1. Dynamic warm-up (10 min)\n2. Compound lifts: deadlift, squat, bench (40 min)\n3. Accessory work (15 min)\n4. Cool-down stretching (10 min)", type: "routine", category: "health-fitness", time: "18:00", duration: 75})
+
+// QUALITY TODOS with specific dates:
+createItem({title: "Research local Catholic young adult groups and events (Due: This Saturday)", type: "todo", category: "faith-spirituality"})
+createItem({title: "Complete Week 1 of React Native course modules 1-3 (Due: January 25th)", type: "todo", category: "professional-development"})
+
+// QUALITY NOTES with actionable content:
+createItem({title: "Catholic Resources & Contacts", description: "Essential faith resources for spiritual growth", text: "DAILY RESOURCES:\n- Hallow app for prayer\n- USCCB daily Mass readings\n- Formed.org for Catholic content\n\nLOCAL CONNECTIONS:\n- St. Patrick's Cathedral young adult ministry\n- Knights of Columbus council #1234\n- Catholic Professionals Network\n\nSPIRITUAL READING:\n- Thomas à Kempis 'Imitation of Christ'\n- Bishop Barron resources\n- Catholic podcasts: Word on Fire, Catholic Stuff You Should Know", type: "note", category: "faith-spirituality"})
+
+YOU MUST CREATE BOTH CATEGORIES AND ITEMS - DO NOT STOP AFTER CATEGORIES.
+
+FINAL REMINDER - NO GENERIC CONTENT:
+- Do NOT create generic goals like "improve systems" or "enhance workflows"
+- Do NOT create empty routines without detailed steps
+- Do NOT create notes with just "best practices" or "key principles"
+- DO create specific, actionable, personalized content based on what the user actually mentioned
+- Every item must pass the test: "Is this useful and specific to this person's life?"
+
+BEGIN FUNCTION CALLING NOW.`;
 
       // CRITICAL: Use function calling mode with comprehensive error handling
       console.log('🚀 Sending function calling prompt to AI agent...');
