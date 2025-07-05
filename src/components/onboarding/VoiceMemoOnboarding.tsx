@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mic, Play, Pause, RotateCcw, ArrowRight, CheckCircle } from 'lucide-react';
+import { useAuthContext } from '../AuthProvider';
+import { setUserData } from '../../utils/userStorage';
 
 const ONBOARDING_QUESTIONS = [
   {
@@ -32,6 +34,7 @@ const ONBOARDING_QUESTIONS = [
 
 export default function VoiceMemoOnboarding() {
   const navigate = useNavigate();
+  const { user } = useAuthContext();
   const [isRecording, setIsRecording] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
@@ -190,6 +193,11 @@ export default function VoiceMemoOnboarding() {
   };
 
   const continueToDocuments = async () => {
+    if (!user?.id) {
+      console.error('❌ No user ID found - cannot save voice memo data');
+      return;
+    }
+    
     if (audioBlob) {
       const audioData = await new Promise<string>((resolve) => {
         const reader = new FileReader();
@@ -206,11 +214,16 @@ export default function VoiceMemoOnboarding() {
         quality: 'high'
       };
       
-      localStorage.setItem('lifely_voice_memo_recording', JSON.stringify(recordingData));
+      // CRITICAL FIX: Save to user-specific localStorage instead of global
+      setUserData(user.id, 'lifely_voice_memo_recording', recordingData);
+      console.log('✅ Voice memo recording saved to user-specific storage for user:', user.email);
     }
     
-    localStorage.setItem('lifely_onboarding_type', 'voice_memo');
-    localStorage.setItem('lifely_onboarding_progress', '/onboarding/documents');
+    // CRITICAL FIX: Save onboarding type to user-specific localStorage
+    setUserData(user.id, 'lifely_onboarding_type', 'voice_memo');
+    setUserData(user.id, 'lifely_onboarding_progress', '/onboarding/documents');
+    
+    console.log('✅ Voice memo onboarding type set to "voice_memo" for user:', user.email);
     navigate('/onboarding/documents');
   };
 
