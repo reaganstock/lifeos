@@ -94,6 +94,36 @@ export default function OnboardingProcessingNew() {
       // Get ALL onboarding data (user-specific)
       const onboardingType = getUserData(user.id, 'lifely_onboarding_type', null);
       
+      // CRITICAL DEBUGGING: Debug user-specific localStorage to understand data flow
+      console.log('🔧 CRITICAL DEBUG - User onboarding data analysis:');
+      console.log('   User ID:', user.id);
+      console.log('   User email:', user.email);
+      console.log('   Detected onboarding type:', onboardingType);
+      
+      // Check all possible onboarding keys for this user
+      const userPrefix = `lifely_user_${user.id}_`;
+      const allUserKeys = Object.keys(localStorage).filter(key => key.startsWith(userPrefix));
+      console.log('   All user-specific localStorage keys:', allUserKeys);
+      
+      // Specifically check for onboarding type in different formats
+      const directTypeCheck = localStorage.getItem(`${userPrefix}lifely_onboarding_type`);
+      const voiceMemoCheck = localStorage.getItem(`${userPrefix}lifely_voice_memo_recording`);
+      const conversationCheck = localStorage.getItem(`${userPrefix}lifely_onboarding_conversation`);
+      
+      console.log('   Direct type check:', directTypeCheck);
+      console.log('   Voice memo data exists:', !!voiceMemoCheck);
+      console.log('   Conversation data exists:', !!conversationCheck);
+      
+      if (voiceMemoCheck) {
+        try {
+          const voiceData = JSON.parse(voiceMemoCheck);
+          console.log('   Voice memo duration:', voiceData?.duration);
+          console.log('   Voice memo has transcription:', !!voiceData?.transcription);
+        } catch (e) {
+          console.log('   Voice memo data parse error:', e);
+        }
+      }
+      
       // 1. Get initial onboarding data (role, source, goals)
       const initialData = getUserData(user.id, 'lifely_onboarding_data', null);
       
@@ -296,6 +326,11 @@ ${contextQuality === 'rich' ? 'Create highly specific, detailed personalization 
         console.log(conversationText);
       } else {
         console.error('❌ NO CONVERSATION TEXT FOUND - This is why AI creates generic categories!');
+        console.error('🔧 DEBUGGING: onboarding type =', onboardingType);
+        console.error('🔧 DEBUGGING: user id =', user.id);
+        console.error('🔧 DEBUGGING: voice memo data exists =', !!voiceMemoCheck);
+        console.error('🔧 DEBUGGING: conversation data exists =', !!conversationCheck);
+        console.error('🔧 DEBUGGING: This means the voice memo recording was not saved properly or the onboarding type was not set to "voice_memo"');
       }
       
       if (!fullContext.trim()) {
