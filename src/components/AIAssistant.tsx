@@ -14,7 +14,6 @@ import { openaiRealtimeService } from '../services/openaiRealtimeService';
 import { geminiService } from '../services/geminiService';
 import ContextAwareInput, { ContextAwareInputRef } from './ContextAwareInput';
 import FunctionCallUI from './FunctionCallUI';
-import { useAuthContext } from './AuthProvider';
 
 // Modern conversational detection - simple but effective
 const isConversationalMessage = (message: string): boolean => {
@@ -29,15 +28,7 @@ const isConversationalMessage = (message: string): boolean => {
     /^(no\s+)?(i\s+)?(don't|didn't|won't|wouldn't)/,
     /^nevermind$/,
     /^forget\s+(it|that)$/,
-    /^(ok|okay)\s*$/,
-    // Personal statements that should be conversational, not actionable
-    /^(i'm|i am)\s+(moving|going|traveling|visiting|starting|finishing|completed|got|had|graduated)/,
-    /^(i've|i have)\s+(been|just|recently)/,
-    /^(i\s+)?(just|recently)\s+(moved|started|finished|completed|got|had)/,
-    /^(my|our)\s+(family|life|situation|work|job|relationship)/,
-    // Questions that should get conversational responses
-    /^(can you help me)\s+(i'm|i am|with)/,
-    /^(what|how|why|when|where)\s+/
+    /^(ok|okay)\s*$/
   ];
   
   return conversationalPatterns.some(pattern => pattern.test(lower));
@@ -191,36 +182,6 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   supabaseCallbacks
 }) => {
   
-  // Auth context for user access
-  const { user } = useAuthContext();
-  
-  // User context state
-  const [userContext, setUserContext] = useState<string>('');
-  
-  // Load user context from localStorage
-  useEffect(() => {
-    if (user?.id) {
-      const savedContext = localStorage.getItem(`lifely_user_context_${user.id}`);
-      if (savedContext) {
-        try {
-          const parsed = JSON.parse(savedContext);
-          // Convert the user context object to a formatted string for the AI
-          const contextString = `Personal Summary: ${parsed.summary || 'Not provided'}
-Work Style: ${parsed.workStyle || 'Not provided'}
-Working Hours: ${parsed.workingHours || 'Not provided'}
-Current Priorities: ${parsed.priorities?.join(', ') || 'Not provided'}
-Interests: ${parsed.interests?.join(', ') || 'Not provided'}
-Goals: ${parsed.goals?.join(', ') || 'Not provided'}
-Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
-          setUserContext(contextString);
-        } catch (error) {
-          console.error('Error parsing user context:', error);
-          setUserContext('');
-        }
-      }
-    }
-  }, [user?.id]);
-  
   // Configure AI services with Supabase callbacks for authenticated users
   // Memoize supabase callbacks configuration to prevent constant re-renders
   const hasSupabaseCallbacks = !!supabaseCallbacks;
@@ -247,7 +208,7 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [isAgenticMode, setIsAgenticMode] = useState(false);
-  const [isAskMode, setIsAskMode] = useState(false);
+  const [isAskMode, setIsAskMode] = useState(true); // Default to Ask mode
   
   // Function calling states  
   const [isProcessingFunction, setIsProcessingFunction] = useState(false);
@@ -255,8 +216,6 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
   
   // AI processing states
   const [isAIThinking, setIsAIThinking] = useState(false);
-  const [thinkingContent, setThinkingContent] = useState<string>('');
-  const [thinkingStartTime, setThinkingStartTime] = useState<number | null>(null);
   const [isCallingFunction, setIsCallingFunction] = useState(false);
   const [currentFunctionName, setCurrentFunctionName] = useState<string | null>(null);
   const [showModeDropdown, setShowModeDropdown] = useState(false);
@@ -279,18 +238,10 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
   
   // Simplified function call execution using ChatService
   const handleExecuteFunction = async (messageId: string, functionCall: any) => {
-    console.log('🚀 EXECUTE FUNCTION CALLED:', { messageId, functionCall });
     try {
       setIsCallingFunction(true);
       setIsAIThinking(true); // Keep AI thinking state during function execution
       setCurrentFunctionName(functionCall.name);
-      
-      console.log('🔧 CALLING executeFunctionWithContext with:', {
-        name: functionCall.name,
-        args: functionCall.args,
-        itemsCount: items?.length || 0,
-        categoriesCount: categories?.length || 0
-      });
       
       const result = await geminiService.executeFunctionWithContext(
         functionCall.name,
@@ -298,8 +249,6 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
         items,
         categories
       );
-      
-      console.log('✅ FUNCTION EXECUTION RESULT:', result);
 
       // Generate AI feedback
       let aiFeedback = '';
@@ -399,13 +348,10 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
         }
       }
     } catch (error) {
-      console.error('❌ FUNCTION EXECUTION ERROR:', error);
-      console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
-      console.error('❌ Function details:', { messageId, functionCall });
-      
+      console.error('Function execution error:', error);
       chatService.updateFunctionCall(messageId, {
         status: 'failed',
-        aiFeedback: `An unexpected error occurred while executing the function: ${error instanceof Error ? error.message : 'Unknown error'}`
+        aiFeedback: 'An unexpected error occurred while executing the function.'
       });
     } finally {
       setIsCallingFunction(false);
@@ -417,6 +363,7 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
   // Switch to Ask mode and stop any processing
   const stopAgenticMode = () => {
     setIsAgenticMode(false);
+    setIsAskMode(true); // Default back to Ask mode
     setIsAIThinking(false);
     setIsCallingFunction(false);
     setCurrentFunctionName(null);
@@ -433,22 +380,18 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
   const needsFunctionCalling = (transcript: string): boolean => {
     const lowerTranscript = transcript.toLowerCase();
     
-    // Conversational phrases that should NOT trigger functions (expanded list)
+    // Action verbs that suggest function calling
+    const actionVerbs = [
+      'create', 'add', 'make', 'schedule', 'book', 'set', 'update', 'change', 'edit', 'modify',
+      'delete', 'remove', 'cancel', 'move', 'reschedule', 'mark', 'complete', 'finish',
+      'find', 'search', 'show', 'list', 'get', 'copy', 'generate', 'bulk'
+    ];
+    
+    // Conversational phrases that should NOT trigger functions
     const conversationalPhrases = [
       'how are you', 'what do you think', 'can you explain', 'tell me about',
       'what is', 'how does', 'why', 'thank you', 'thanks', 'okay', 'ok',
-      'yes', 'no', 'maybe', 'i think', 'i feel', 'hello', 'hi', 'hey',
-      'i\'m going', 'i\'m moving', 'i\'m traveling', 'i\'m visiting', 'i\'m planning',
-      'i went', 'i did', 'i saw', 'i had', 'i was', 'i am', 'i will be',
-      'just wanted to', 'wanted to tell you', 'thought you should know',
-      'by the way', 'speaking of', 'oh and', 'also', 'anyway'
-    ];
-    
-    // Life updates/personal statements that are conversational
-    const personalStatements = [
-      'moving to', 'going to', 'traveling to', 'visiting', 'started',
-      'finished', 'completed', 'got married', 'had a baby', 'graduated',
-      'got a job', 'quit my job', 'bought a house', 'sold my car'
+      'yes', 'no', 'maybe', 'i think', 'i feel', 'hello', 'hi', 'hey'
     ];
     
     // Check for conversational phrases first
@@ -456,98 +399,8 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
       return false;
     }
     
-    // Check for personal life statements
-    if (personalStatements.some(statement => lowerTranscript.includes(statement))) {
-      return false;
-    }
-    
-    // Specific function-calling patterns that clearly need actions
-    const functionPatterns = [
-      /create\s+(a\s+)?(todo|goal|note|event|routine|category)/,
-      /add\s+(a\s+)?(todo|goal|note|event|routine|category)/,
-      /schedule\s+(a\s+)?(meeting|appointment|event|call)/,
-      /set\s+(a\s+)?(reminder|goal|routine)/,
-      /delete\s+(this|that|my)/,
-      /remove\s+(this|that|my)/,
-      /cancel\s+(my|the)/,
-      /reschedule\s+(my|the)/,
-      /move\s+(my|the|this)\s+(meeting|event|appointment)/,
-      /update\s+(my|the|this)/,
-      /mark\s+(as\s+)?(complete|done)/,
-      /show\s+(me\s+)?(my|all)/,
-      /list\s+(my|all)/,
-      /find\s+(my|all)/
-    ];
-    
-    // Only trigger function calling for specific actionable patterns
-    return functionPatterns.some(pattern => pattern.test(lowerTranscript));
-  };
-
-  // Thinking display component like Cursor
-  const ThinkingDisplay = () => {
-    const [elapsed, setElapsed] = useState(0);
-    const [isExpanded, setIsExpanded] = useState(false);
-    
-    useEffect(() => {
-      if (!isAIThinking || !thinkingStartTime) return;
-      
-      const interval = setInterval(() => {
-        setElapsed(Math.floor((Date.now() - thinkingStartTime) / 1000));
-      }, 1000);
-      
-      return () => clearInterval(interval);
-    }, [isAIThinking, thinkingStartTime]);
-    
-    if (!isAIThinking) return null;
-    
-    return (
-      <div className="mb-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
-        {/* Header - always visible */}
-        <div className="p-4 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-            <span className="text-gray-700 dark:text-gray-300 font-medium">
-              Generating...
-            </span>
-          </div>
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={() => {
-                setIsAIThinking(false);
-                setThinkingContent('');
-                chatService.setProcessing(false);
-              }}
-              className="px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-md text-gray-700 dark:text-gray-300 transition-colors"
-            >
-              Stop ⌘⇧⌫
-            </button>
-          </div>
-        </div>
-        
-        {/* Thinking content - expandable */}
-        {thinkingContent && (
-          <div className="border-t border-gray-200 dark:border-gray-700">
-            <button
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="w-full p-4 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center space-x-2"
-            >
-              <ChevronRight className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-              <span className="text-gray-600 dark:text-gray-400 text-sm">
-                Thought for {elapsed} second{elapsed !== 1 ? 's' : ''}
-              </span>
-            </button>
-            
-            {isExpanded && (
-              <div className="px-4 pb-4">
-                <div className="bg-white dark:bg-gray-900 rounded-lg p-4 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap border border-gray-200 dark:border-gray-600">
-                  {thinkingContent}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    );
+    // Check for action verbs - simplified to just check for the verb
+    return actionVerbs.some(verb => lowerTranscript.includes(verb));
   };
 
   
@@ -599,7 +452,7 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
       console.log('🎯 Action message detected, processing with function calling:', transcript);
       
       // Process message through Gemini service with function calling
-      const result = await geminiService.processMessage(transcript, items, [], categories, isAgenticMode, isAskMode, userContext);
+      const result = await geminiService.processMessage(transcript, items, []);
       
       console.log('✅ Function calling result:', result);
       
@@ -1653,8 +1506,6 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
       
       chatService.setProcessing(true);
       setIsAIThinking(true);
-      setThinkingStartTime(Date.now());
-      setThinkingContent(''); // Clear previous thinking content
       
       try {
         await chatService.addMessage('user', messageToSend);
@@ -1665,16 +1516,8 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
           undefined,
           [],
           [],
-          false, // Force non-agentic mode for safety
-          true, // Always use Ask mode for conversational responses
-          userContext
+          false // Force non-agentic mode for safety
         );
-        
-        // Capture thinking content for conversational messages too
-        if (conversationalResponse.thinkingContent) {
-          console.log('🧠 Setting conversational thinking content:', conversationalResponse.thinkingContent);
-          setThinkingContent(conversationalResponse.thinkingContent);
-        }
         
         await chatService.addMessage('assistant', conversationalResponse.message || "Hi there! How can I help you today?");
       } catch (error) {
@@ -1683,8 +1526,6 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
       } finally {
         chatService.setProcessing(false);
         setIsAIThinking(false);
-        setThinkingStartTime(null);
-        setThinkingContent(''); // Clear thinking content when conversational processing completes
       }
       return;
     }
@@ -1767,8 +1608,6 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
     
     chatService.setProcessing(true);
     setIsAIThinking(true);
-    setThinkingStartTime(Date.now());
-    setThinkingContent(''); // Clear previous thinking content
     
     try {
       // Emergency session check - ensure we have an active session
@@ -1825,18 +1664,10 @@ User message: ${messageWithContext}`;
           categories.find(cat => cat.id === currentView)?.id,
           items,
           categories,
-          isAgenticMode && !isAskMode,
-          isAskMode,
-          userContext
+          isAgenticMode
         );
 
         console.log('🔧 Fullscreen note mode - got response:', response);
-        
-        // Capture thinking content for fullscreen note mode
-        if (response.thinkingContent) {
-          console.log('🧠 Setting fullscreen note thinking content:', response.thinkingContent);
-          setThinkingContent(response.thinkingContent);
-        }
         console.log('🔧 Response success:', response.success);
         console.log('🔧 Response message:', response.message);
 
@@ -1928,8 +1759,8 @@ User message: ${messageWithContext}`;
           agenticMode: isAgenticMode
         });
 
-        // Check if this looks like a function call command (only for non-Ask modes)
-        const needsFunction = !isAskMode && needsFunctionCalling(processMessage);
+        // Check if this looks like a function call command
+        const needsFunction = needsFunctionCalling(processMessage);
         if (needsFunction) {
           setIsAIThinking(false);
           setIsCallingFunction(true);
@@ -1941,18 +1772,10 @@ User message: ${messageWithContext}`;
           currentCategoryId,
           items,
           categories,
-          isAgenticMode && !isAskMode, // Disable function calling for Ask mode
-          isAskMode,
-          userContext
+          isAgenticMode
         );
 
         console.log('📥 AIAssistant: Received response from chatService:', response);
-        
-        // Capture thinking content if available
-        if (response.thinkingContent) {
-          console.log('🧠 Setting thinking content:', response.thinkingContent);
-          setThinkingContent(response.thinkingContent);
-        }
 
         // Check if function was called based on response
         if (response.functionResults && response.functionResults.length > 0) {
@@ -2104,8 +1927,6 @@ User message: ${messageWithContext}`;
       setIsAIThinking(false);
       setIsCallingFunction(false);
       setCurrentFunctionName(null);
-      setThinkingStartTime(null);
-      setThinkingContent(''); // Clear thinking content when processing completes
       
       // Always refresh UI after AI processing completes - immediate for better UX
       onRefreshItems();
@@ -2158,9 +1979,7 @@ User message: ${messageWithContext}`;
           currentCategoryId,
           items,
           categories,
-          false, // Voice mode is always Ask mode, not Agent mode
-          true,  // isAskMode = true for voice mode
-          userContext
+          false // Voice mode is always Ask mode, not Agent mode
         );
 
         // Handle item creation
@@ -2302,8 +2121,8 @@ User message: ${messageWithContext}`;
       style={{
         width: isCollapsed ? '60px' : `${sidebarWidth || 420}px`,
         background: isDarkMode 
-          ? 'linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 58, 138, 0.95) 100%)'
-          : 'linear-gradient(135deg, rgba(248, 250, 252, 0.98) 0%, rgba(255, 255, 255, 0.99) 20%, rgba(239, 246, 255, 0.98) 100%)',
+          ? 'linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%)'
+          : 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%)',
         backdropFilter: 'blur(20px)',
         border: `1px solid ${themeColors.border}`,
         borderRight: 'none'
@@ -2330,7 +2149,7 @@ User message: ${messageWithContext}`;
           >
             <div className="flex items-center space-x-3 relative z-10">
               <div className="relative">
-                <div className="p-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 shadow-lg">
+                <div className="p-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 shadow-lg">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffffff" className="w-6 h-6">
                     <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
                   </svg>
@@ -2409,8 +2228,8 @@ User message: ${messageWithContext}`;
           >
             <div className="flex items-center justify-between relative z-10">
               <div className="flex items-center space-x-2">
-                <Zap className="w-4 h-4 text-blue-500" />
-                <span>Current: <span className="font-semibold text-blue-600">
+                <Zap className="w-4 h-4 text-indigo-500" />
+                <span>Current: <span className="font-semibold text-indigo-600">
                   {(() => {
                     // Find category name from ID, or use view name directly
                     const category = categories.find(cat => cat.id === currentView);
@@ -2434,8 +2253,8 @@ User message: ${messageWithContext}`;
                 {/* Agentic Mode Indicator */}
                 {isAgenticMode && (
                   <div className="flex items-center space-x-1">
-                    <div className="w-1 h-1 bg-blue-500 rounded-full animate-pulse"></div>
-                    <span className="text-xs font-medium text-blue-600 bg-blue-100/50 px-2 py-0.5 rounded-full">
+                    <div className="w-1 h-1 bg-purple-500 rounded-full animate-pulse"></div>
+                    <span className="text-xs font-medium text-purple-600 bg-purple-100/50 px-2 py-0.5 rounded-full">
                       ∞ Agent
                     </span>
                   </div>
@@ -2484,7 +2303,7 @@ User message: ${messageWithContext}`;
                       key={session.id}
                       className={`p-2 rounded-lg text-xs cursor-pointer transition-all transform hover:scale-[1.02] ${
                         session.id === currentSession?.id 
-                          ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md' 
+                          ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md' 
                           : isDarkMode 
                             ? 'bg-gray-700/50 text-gray-200 hover:bg-gray-600/50'
                             : 'bg-white/50 text-gray-600 hover:bg-gray-50/80 shadow-sm'
@@ -2532,9 +2351,9 @@ User message: ${messageWithContext}`;
               {/* Ambient Background Effects */}
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 {/* Floating orbs */}
-                <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-gradient-to-r from-blue-400/10 to-blue-500/10 rounded-full blur-3xl animate-pulse"></div>
-                <div className="absolute bottom-1/3 right-1/4 w-24 h-24 bg-gradient-to-r from-blue-500/10 to-blue-400/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
-                <div className="absolute top-1/2 right-1/3 w-16 h-16 bg-gradient-to-r from-blue-300/10 to-blue-400/10 rounded-full blur-2xl animate-pulse" style={{animationDelay: '4s'}}></div>
+                <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-gradient-to-r from-purple-400/10 to-indigo-400/10 rounded-full blur-3xl animate-pulse"></div>
+                <div className="absolute bottom-1/3 right-1/4 w-24 h-24 bg-gradient-to-r from-indigo-400/10 to-purple-400/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
+                <div className="absolute top-1/2 right-1/3 w-16 h-16 bg-gradient-to-r from-purple-300/10 to-pink-300/10 rounded-full blur-2xl animate-pulse" style={{animationDelay: '4s'}}></div>
               </div>
               
               {/* Model Selection */}
@@ -2591,8 +2410,8 @@ User message: ${messageWithContext}`;
                             className={`w-full p-4 rounded-xl transition-all duration-200 text-left hover:scale-[1.02] ${
                               selectedVoiceModel.id === model.id 
                                 ? isDarkMode 
-                                  ? 'bg-blue-900/40 border border-blue-500/30' 
-                                  : 'bg-blue-50/60 border border-blue-200/50'
+                                  ? 'bg-purple-900/40 border border-purple-500/30' 
+                                  : 'bg-purple-50/60 border border-purple-200/50'
                                 : isDarkMode 
                                   ? 'hover:bg-gray-800/60' 
                                   : 'hover:bg-gray-50/60'
@@ -2625,8 +2444,8 @@ User message: ${messageWithContext}`;
                             className={`w-full p-4 rounded-xl transition-all duration-200 text-left hover:scale-[1.02] ${
                               selectedVoiceModel.id === model.id 
                                 ? isDarkMode 
-                                  ? 'bg-blue-900/40 border border-blue-500/30' 
-                                  : 'bg-blue-50/60 border border-blue-200/50'
+                                  ? 'bg-purple-900/40 border border-purple-500/30' 
+                                  : 'bg-purple-50/60 border border-purple-200/50'
                                 : isDarkMode 
                                   ? 'hover:bg-gray-800/60' 
                                   : 'hover:bg-gray-50/60'
@@ -2702,8 +2521,8 @@ User message: ${messageWithContext}`;
                                   className={`p-3 rounded-lg transition-all duration-200 text-left hover:scale-[1.02] ${
                                     selectedOpenAIVoice.id === voice.id 
                                       ? isDarkMode 
-                                        ? 'bg-blue-900/40 border border-blue-500/30' 
-                                        : 'bg-blue-50/60 border border-blue-200/50'
+                                        ? 'bg-purple-900/40 border border-purple-500/30' 
+                                        : 'bg-purple-50/60 border border-purple-200/50'
                                       : isDarkMode 
                                         ? 'hover:bg-gray-800/60' 
                                         : 'hover:bg-gray-50/60'
@@ -2719,7 +2538,7 @@ User message: ${messageWithContext}`;
                                       </div>
                                     </div>
                                     {selectedOpenAIVoice.id === voice.id && (
-                                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse ml-2 flex-shrink-0"></div>
+                                      <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse ml-2 flex-shrink-0"></div>
                                     )}
                                   </div>
                                 </button>
@@ -2747,8 +2566,8 @@ User message: ${messageWithContext}`;
                                   className={`p-3 rounded-lg transition-all duration-200 text-left hover:scale-[1.02] ${
                                     selectedGeminiVoice.id === voice.id 
                                       ? isDarkMode 
-                                        ? 'bg-blue-900/40 border border-blue-500/30' 
-                                        : 'bg-blue-50/60 border border-blue-200/50'
+                                        ? 'bg-purple-900/40 border border-purple-500/30' 
+                                        : 'bg-purple-50/60 border border-purple-200/50'
                                       : isDarkMode 
                                         ? 'hover:bg-gray-800/60' 
                                         : 'hover:bg-gray-50/60'
@@ -2764,7 +2583,7 @@ User message: ${messageWithContext}`;
                                       </div>
                                     </div>
                                     {selectedGeminiVoice.id === voice.id && (
-                                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse ml-2 flex-shrink-0"></div>
+                                      <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse ml-2 flex-shrink-0"></div>
                                     )}
                                   </div>
                                 </button>
@@ -3005,11 +2824,9 @@ User message: ${messageWithContext}`;
               <div className="flex items-center justify-center h-full relative z-10">
                 <div className="text-center">
                   <div className="relative mb-6">
-                    <div className="w-16 h-16 mx-auto bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl flex items-center justify-center shadow-lg">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" className="w-8 h-8">
-                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-                      </svg>
-                    </div>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#9CA3AF" className="w-16 h-16 mx-auto">
+                      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                    </svg>
                   </div>
                   <h3 className={`text-xl font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
                     Lifely AI Assistant
@@ -3018,9 +2835,9 @@ User message: ${messageWithContext}`;
                     Ready to help you organize and optimize your life!
                   </p>
                   <div className="mt-4 flex justify-center space-x-2">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                    <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
-                    <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                    <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
+                    <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                    <div className="w-2 h-2 bg-pink-500 rounded-full"></div>
                   </div>
                 </div>
               </div>
@@ -3038,22 +2855,17 @@ User message: ${messageWithContext}`;
                     onExecuteFunction={handleExecuteFunction}
                     isDarkMode={isDarkMode}
                     isAgenticMode={isAgenticMode}
-                    isAskMode={isAskMode}
                     categories={categories}
                     items={items}
                     currentView={currentView}
                     setIsAIThinking={setIsAIThinking}
-                    userContext={userContext}
                   />
                 ))}
-                
-                {/* Thinking Display Component */}
-                <ThinkingDisplay />
                 
                 {isProcessing && (
                   <div className="flex justify-start relative z-10">
                     <div className="flex items-start space-x-3">
-                      <div className="p-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 shadow-lg">
+                      <div className="p-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 shadow-lg">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ffffff" className="w-5 h-5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
                       </div>
                       <div 
@@ -3180,8 +2992,8 @@ User message: ${messageWithContext}`;
                   rows={1}
                   className={`w-full px-5 py-4 pr-24 rounded-2xl border-2 transition-all duration-300 focus:ring-4 text-sm backdrop-blur-xl resize-none ${
                     isDarkMode 
-                      ? 'bg-gray-900/60 border-gray-700/50 text-white placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500/30 hover:bg-gray-900/70'
-                      : 'bg-white/60 border-gray-200/50 text-gray-800 placeholder-gray-500 focus:border-blue-500 focus:ring-blue-500/30 hover:bg-white/70'
+                      ? 'bg-gray-900/60 border-gray-700/50 text-white placeholder-gray-400 focus:border-purple-500 focus:ring-purple-500/30 hover:bg-gray-900/70'
+                      : 'bg-white/60 border-gray-200/50 text-gray-800 placeholder-gray-500 focus:border-purple-500 focus:ring-purple-500/30 hover:bg-white/70'
                   }`}
                   style={{
                     minHeight: '56px',
@@ -3346,14 +3158,14 @@ User message: ${messageWithContext}`;
                 <button
                   onClick={handleSendMessage}
                   disabled={!inputMessage.trim() || isProcessing}
-                  className="w-14 h-14 bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-2xl hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 transition-all duration-300 transform hover:scale-110 active:scale-95 disabled:hover:scale-100 shadow-xl flex items-center justify-center relative overflow-hidden group"
+                  className="w-14 h-14 bg-gradient-to-br from-indigo-500 via-purple-600 to-purple-700 text-white rounded-2xl hover:from-indigo-600 hover:via-purple-700 hover:to-purple-800 disabled:opacity-50 transition-all duration-300 transform hover:scale-110 active:scale-95 disabled:hover:scale-100 shadow-xl flex items-center justify-center relative overflow-hidden group"
                   style={{
-                    boxShadow: '0 12px 40px rgba(59, 130, 246, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
+                    boxShadow: '0 12px 40px rgba(99, 102, 241, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
                   }}
                   title="Send Message"
                 >
                   {/* Background glow effect */}
-                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-blue-400/20 to-blue-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-indigo-400/20 to-purple-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                   
                   <Send className="w-6 h-6 relative z-10 transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform duration-200" />
                 </button>
@@ -3380,15 +3192,13 @@ User message: ${messageWithContext}`;
                       isDarkMode ? 'hover:bg-gray-700 text-white border border-gray-600' : 'hover:bg-gray-100 text-gray-700 border border-gray-300'
                     }`}
                   >
-                    <span>{isAskMode ? '💬' : isAgenticMode ? '∞' : '🔄'}</span>
-                    <span>
-                      {isAskMode ? 'Ask' : isAgenticMode ? 'Agent (Pre-Beta)' : 'Adaptive'}
-                    </span>
+                    <span>∞</span>
+                    <span>{isAgenticMode ? 'Agent' : isAskMode ? 'Ask' : 'Adaptive'}</span>
                     <ChevronDown className="w-3 h-3" />
                   </button>
                   
                   {showModeDropdown && (
-                    <div className={`absolute bottom-full left-0 mb-1 w-40 rounded-lg border shadow-lg z-50 ${
+                    <div className={`absolute bottom-full left-0 mb-1 w-32 rounded-lg border shadow-lg z-50 ${
                       isDarkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
                     }`}>
                       <button
@@ -3436,7 +3246,7 @@ User message: ${messageWithContext}`;
                         }`}
                       >
                         <span>∞</span>
-                        <span>Agent (Pre-Beta)</span>
+                        <span>Agent</span>
                         {isAgenticMode && <span className="ml-auto">✓</span>}
                       </button>
                     </div>
@@ -3453,7 +3263,7 @@ User message: ${messageWithContext}`;
                   </div>
                 )}
                 {isVoiceMode && (
-                  <div className="flex items-center space-x-2 mt-1 text-blue-600">
+                  <div className="flex items-center space-x-2 mt-1 text-purple-600">
                     <div className="w-3 h-3 bg-purple-600 rounded-full animate-pulse"></div>
                     <span>Voice chat active</span>
                   </div>
@@ -3489,13 +3299,11 @@ const MessageBubble: React.FC<{
   onExecuteFunction?: (messageId: string, functionCall: any) => void;
   isDarkMode: boolean;
   isAgenticMode?: boolean;
-  isAskMode?: boolean;
   categories?: any[];
   items?: any[];
   currentView?: string;
   setIsAIThinking?: (thinking: boolean) => void;
-  userContext?: string;
-}> = ({ message, onEdit, onStartEdit, onCancelEdit, onNavigateVersion, onExecuteFunction, isDarkMode, isAgenticMode = false, isAskMode = false, categories = [], items = [], currentView = '', setIsAIThinking, userContext = '' }) => {
+}> = ({ message, onEdit, onStartEdit, onCancelEdit, onNavigateVersion, onExecuteFunction, isDarkMode, isAgenticMode = false, categories = [], items = [], currentView = '', setIsAIThinking }) => {
   const currentVersion = message.versions[message.currentVersionIndex];
   const [editContent, setEditContent] = useState(currentVersion.content);
   const versionInfo = chatService.getVersionInfo(message.id);
@@ -3560,9 +3368,6 @@ const MessageBubble: React.FC<{
                 if (isAgenticMode) {
                   console.log('🔄 SMART REJECTION: User rejected function, seeking alternative approach...');
                   
-                  // Capture userContext for the setTimeout closure
-                  const currentUserContext = userContext;
-                  
                   // Add a small delay then continue with alternative approach
                   setTimeout(async () => {
                     try {
@@ -3584,14 +3389,12 @@ const MessageBubble: React.FC<{
                         currentCategoryId,
                         items,
                         categories,
-                        isAgenticMode && !isAskMode, // Keep agentic mode active
-                        isAskMode,
-                        currentUserContext
+                        true // Keep agentic mode active
                       );
                       
                       // Handle the alternative response
                       if (response.pendingFunctionCall) {
-                        await chatService.addFunctionCallMessage({
+                        const functionCallMessage = await chatService.addFunctionCallMessage({
                           name: response.pendingFunctionCall.name,
                           args: response.pendingFunctionCall.args,
                           status: 'pending'
@@ -3639,7 +3442,7 @@ const MessageBubble: React.FC<{
                 </div>
                 <div className={`flex items-center justify-between mt-3 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                   <span className="flex items-center space-x-1">
-                    <div className="w-1 h-1 bg-blue-500 rounded-full"></div>
+                    <div className="w-1 h-1 bg-indigo-500 rounded-full"></div>
                     <span>{currentVersion.timestamp.toLocaleTimeString()}</span>
                   </span>
                 </div>
@@ -3659,7 +3462,7 @@ const MessageBubble: React.FC<{
         <div 
           className={`p-2 rounded-xl shadow-lg ${
             isUser 
-              ? 'bg-gradient-to-br from-blue-500 to-blue-600' 
+              ? 'bg-gradient-to-br from-indigo-500 to-purple-600' 
               : 'bg-gradient-to-br from-gray-600 to-gray-700'
           }`}
         >
@@ -3677,12 +3480,12 @@ const MessageBubble: React.FC<{
           style={{
             backgroundColor: isUser 
               ? isDarkMode 
-                ? 'rgba(59, 130, 246, 0.2)' 
-                : 'rgba(59, 130, 246, 0.1)'
+                ? 'rgba(99, 102, 241, 0.2)' 
+                : 'rgba(99, 102, 241, 0.1)'
               : isDarkMode 
                 ? 'rgba(55, 65, 81, 0.8)' 
                 : 'rgba(255, 255, 255, 0.8)',
-            borderColor: isDarkMode ? 'rgba(59, 130, 246, 0.3)' : 'rgba(59, 130, 246, 0.2)'
+            borderColor: isDarkMode ? 'rgba(99, 102, 241, 0.3)' : 'rgba(99, 102, 241, 0.2)'
           }}
         >
           {message.isEditing ? (
