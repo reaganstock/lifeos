@@ -5833,5 +5833,50 @@ export const geminiService = new GeminiService();
 (window as any).testGeminiFunctions = () => geminiService.testAllFunctions();
 (window as any).debugGemini = {
   testFunctionCalling: () => geminiService.testFunctionCalling(),
-  testAllFunctions: () => geminiService.testAllFunctions()
+  testAllFunctions: () => geminiService.testAllFunctions(),
+  
+  // Emergency function executors to bypass broken UI
+  createNotes: async () => {
+    console.log('🚨 EMERGENCY: Creating 10 notes directly...');
+    try {
+      const result = await geminiService.executeFunction('bulkCreateItems', {
+        itemsJson: JSON.stringify([
+          {title: "Note 1", text: "Emergency created note 1", type: "note", categoryId: "self-regulation"},
+          {title: "Note 2", text: "Emergency created note 2", type: "note", categoryId: "self-regulation"},
+          {title: "Note 3", text: "Emergency created note 3", type: "note", categoryId: "self-regulation"},
+          {title: "Note 4", text: "Emergency created note 4", type: "note", categoryId: "self-regulation"},
+          {title: "Note 5", text: "Emergency created note 5", type: "note", categoryId: "self-regulation"},
+          {title: "Note 6", text: "Emergency created note 6", type: "note", categoryId: "self-regulation"},
+          {title: "Note 7", text: "Emergency created note 7", type: "note", categoryId: "self-regulation"},
+          {title: "Note 8", text: "Emergency created note 8", type: "note", categoryId: "self-regulation"},
+          {title: "Note 9", text: "Emergency created note 9", type: "note", categoryId: "self-regulation"},
+          {title: "Note 10", text: "Emergency created note 10", type: "note", categoryId: "self-regulation"}
+        ])
+      });
+      console.log('✅ EMERGENCY NOTES CREATED:', result);
+      // Refresh the UI
+      window.dispatchEvent(new CustomEvent('itemsModified'));
+      return result;
+    } catch (error) {
+      console.error('❌ EMERGENCY NOTE CREATION FAILED:', error);
+      return error;
+    }
+  },
+  
+  deleteAllNotes: async () => {
+    console.log('🚨 EMERGENCY: Deleting all notes directly...');
+    try {
+      const result = await geminiService.executeFunction('bulkDeleteItems', {
+        deleteAll: false,
+        itemType: 'note'
+      });
+      console.log('✅ EMERGENCY NOTES DELETED:', result);
+      // Refresh the UI
+      window.dispatchEvent(new CustomEvent('itemsModified'));
+      return result;
+    } catch (error) {
+      console.error('❌ EMERGENCY NOTE DELETION FAILED:', error);
+      return error;
+    }
+  }
 }; 
