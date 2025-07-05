@@ -101,48 +101,53 @@ const Settings: React.FC<SettingsProps> = ({ items, setItems, categories = [] })
     
     // Extract from onboarding
     if (onboardingData && typeof onboardingData === 'object') {
-      if (onboardingData.role) {
-        initialContext.workStyle = `${onboardingData.role} focused`;
+      const data = onboardingData as any; // Type assertion for dynamic data
+      if (data.role) {
+        initialContext.workStyle = `${data.role} focused`;
         console.log('📝 Extracted work style from onboarding:', initialContext.workStyle);
       }
-      if (onboardingData.goals) {
-        initialContext.goals = Array.isArray(onboardingData.goals) ? onboardingData.goals : [onboardingData.goals];
+      if (data.goals) {
+        initialContext.goals = Array.isArray(data.goals) ? data.goals : [data.goals];
       }
     }
     
     // Extract from conversation (PRIMARY SOURCE)
-    if (conversationData && typeof conversationData === 'object' && conversationData.answers) {
-      const answers = conversationData.answers.map((a: any) => a.answer).filter(Boolean).join(' ');
-      if (answers.length > 10) {
-        initialContext.summary = `From onboarding: ${answers.substring(0, 300)}${answers.length > 300 ? '...' : ''}`;
-        console.log('💬 Extracted conversation summary:', initialContext.summary.substring(0, 100));
-      }
-      
-      // Extract priorities from conversation answers
-      const priorityKeywords = ['important', 'priority', 'focus', 'goal', 'working on', 'need to'];
-      const conversationText = answers.toLowerCase();
-      priorityKeywords.forEach(keyword => {
-        if (conversationText.includes(keyword)) {
-          // Extract context around the keyword for better understanding
-          const sentences = answers.split(/[.!?]+/).filter(s => s.toLowerCase().includes(keyword));
-          if (sentences.length > 0) {
-            initialContext.personalInsights.push(`Focus area: ${sentences[0].trim()}`);
-          }
+    if (conversationData && typeof conversationData === 'object') {
+      const data = conversationData as any; // Type assertion for dynamic data
+      if (data.answers) {
+        const answers = data.answers.map((a: any) => a.answer).filter(Boolean).join(' ');
+        if (answers.length > 10) {
+          initialContext.summary = `From onboarding: ${answers.substring(0, 300)}${answers.length > 300 ? '...' : ''}`;
+          console.log('💬 Extracted conversation summary:', initialContext.summary.substring(0, 100));
         }
-      });
+        
+        // Extract priorities from conversation answers
+        const priorityKeywords = ['important', 'priority', 'focus', 'goal', 'working on', 'need to'];
+        const conversationText = answers.toLowerCase();
+        priorityKeywords.forEach(keyword => {
+          if (conversationText.includes(keyword)) {
+            // Extract context around the keyword for better understanding
+            const sentences = answers.split(/[.!?]+/).filter((s: string) => s.toLowerCase().includes(keyword));
+            if (sentences.length > 0) {
+              initialContext.personalInsights.push(`Focus area: ${sentences[0].trim()}`);
+            }
+          }
+        });
+      }
     }
     
     // Extract from dashboard data
     if (dashboardData && typeof dashboardData === 'object') {
-      if (dashboardData.workStyle) initialContext.workStyle = dashboardData.workStyle;
-      if (dashboardData.priorities && Array.isArray(dashboardData.priorities)) {
-        initialContext.priorities = dashboardData.priorities;
+      const data = dashboardData as any; // Type assertion for dynamic data
+      if (data.workStyle) initialContext.workStyle = data.workStyle;
+      if (data.priorities && Array.isArray(data.priorities)) {
+        initialContext.priorities = data.priorities;
       }
-      if (dashboardData.interests && Array.isArray(dashboardData.interests)) {
-        initialContext.interests = dashboardData.interests;
+      if (data.interests && Array.isArray(data.interests)) {
+        initialContext.interests = data.interests;
       }
-      if (dashboardData.personalInsights && Array.isArray(dashboardData.personalInsights)) {
-        initialContext.personalInsights = [...initialContext.personalInsights, ...dashboardData.personalInsights];
+      if (data.personalInsights && Array.isArray(data.personalInsights)) {
+        initialContext.personalInsights = [...initialContext.personalInsights, ...data.personalInsights];
       }
     }
     

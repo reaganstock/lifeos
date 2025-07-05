@@ -1116,6 +1116,10 @@ Return ONLY pure JSON (no markdown, no function calls):
   // Main orchestration function using Gemini Agent Mode
   const createCategories = async (fullContext: string) => {
     try {
+      if (!user?.id) {
+        throw new Error('No authenticated user found for dashboard creation');
+      }
+      
       console.log('🤖 Using Gemini Agent Mode for comprehensive dashboard creation...');
       
       // Initialize function calls tracking to show user what's happening
