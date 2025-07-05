@@ -87,6 +87,7 @@ function AppContent() {
   
   // Check onboarding completion status (user-specific) - hybrid localStorage + Supabase
   const [isOnboardingCompleted, setIsOnboardingCompleted] = useState(false);
+  const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(true); // CRITICAL: Prevent redirect until check completes
   const [onboardingProgress, setOnboardingProgress] = useState('/onboarding');
   
   // CRITICAL FIX: Onboarding completion detection that properly persists across refreshes
@@ -95,6 +96,7 @@ function AppContent() {
       if (!user?.id) {
         console.log('⏳ No user ID yet, waiting...');
         setIsOnboardingCompleted(false);
+        setIsCheckingOnboarding(true); // Keep checking until user ID is available
         return;
       }
       
@@ -109,6 +111,7 @@ function AppContent() {
       if (localCompleted) {
         console.log('✅ User completed onboarding (localStorage confirmed):', user.email);
         setIsOnboardingCompleted(true);
+        setIsCheckingOnboarding(false); // CRITICAL: Stop checking, user is completed
         setOnboardingProgress(localProgress);
         return;
       }
@@ -127,6 +130,7 @@ function AppContent() {
         // Auto-mark as completed since they have data
         setUserData(user.id, 'lifely_onboarding_completed', true);
         setIsOnboardingCompleted(true);
+        setIsCheckingOnboarding(false); // CRITICAL: Stop checking, user has data
         setOnboardingProgress('/dashboard');
         return;
       }
@@ -136,6 +140,7 @@ function AppContent() {
       if (!dataInitialized) {
         console.log('⏳ Waiting for data initialization...');
         setIsOnboardingCompleted(false);
+        setIsCheckingOnboarding(true); // Keep checking until data is initialized
         setOnboardingProgress('/onboarding');
         return;
       }
@@ -152,15 +157,18 @@ function AppContent() {
           console.log('✅ Existing user with Supabase categories - skip onboarding:', user.email);
           setUserData(user.id, 'lifely_onboarding_completed', true);
           setIsOnboardingCompleted(true);
+          setIsCheckingOnboarding(false); // CRITICAL: Stop checking, user has Supabase data
         } else {
           console.log('📝 New user - needs onboarding:', user.email);
           setUserData(user.id, 'lifely_onboarding_progress', '/onboarding');
           setOnboardingProgress('/onboarding');
           setIsOnboardingCompleted(false);
+          setIsCheckingOnboarding(false); // CRITICAL: Stop checking, decision made
         }
       } catch (error) {
         console.warn('⚠️ Error checking Supabase categories, using localStorage state:', error);
         setIsOnboardingCompleted(false);
+        setIsCheckingOnboarding(false); // CRITICAL: Stop checking even on error
       }
     };
     
@@ -173,6 +181,7 @@ function AppContent() {
       if (user?.id) {
         console.log('🎉 Onboarding complete event received for user:', user.email);
         setIsOnboardingCompleted(true);
+        setIsCheckingOnboarding(false); // CRITICAL: Stop checking when onboarding completes
         // Force a small delay to ensure data is saved
         setTimeout(() => {
           const verified = getUserData(user.id, 'lifely_onboarding_completed', false);
@@ -857,7 +866,17 @@ function AppContent() {
             <Route path="/onboarding/complete" element={<OnboardingComplete />} />
             
             {/* Main App Routes - Only accessible after onboarding completion */}
-            {isOnboardingCompleted ? (
+            {isCheckingOnboarding ? (
+              // Show loading spinner while checking onboarding status to prevent premature redirects
+              <Route path="*" element={
+                <div className="min-h-screen bg-gradient-to-br from-lifeos-50 via-lifeos-100 to-lifeos-200 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="w-16 h-16 border-4 border-lifeos-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-lifeos-gray-600">Loading your dashboard...</p>
+                  </div>
+                </div>
+              } />
+            ) : isOnboardingCompleted ? (
               <>
                 <Route path="/" element={<Dashboard onNavigateToCategory={handleNavigateToCategory} items={items} categories={categories} />} />
                 <Route path="/dashboard" element={<Dashboard onNavigateToCategory={handleNavigateToCategory} items={items} categories={categories} />} />
