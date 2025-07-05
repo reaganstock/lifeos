@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { useAuthContext } from '../AuthProvider';
 import { supabase } from '../../lib/supabase';
 import { Tables } from '../../types/supabase';
+import { getUserData } from '../../utils/userStorage';
 
 export function AuthCallback() {
   const { user, loading, initialized } = useAuthContext();
@@ -22,53 +23,56 @@ export function AuthCallback() {
       }
 
       try {
-        // Check if this is a new user by looking at their profile creation time
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('created_at, has_completed_onboarding')
-          .eq('id', user.id)
-          .single();
-
-        if (error) {
-          console.error('Error fetching profile:', error);
-          // If profile doesn't exist, treat as new user
-          console.log('👤 No profile found - treating as new user');
-          const isDevelopment = process.env.NODE_ENV === 'development';
-          if (isDevelopment) {
-            window.location.href = '/onboarding';
-          } else {
-            window.location.href = 'https://app.lifely.dev/onboarding';
-          }
-          return;
-        }
-
-        // Check if user has completed onboarding - handle potential missing column gracefully
-        const profileData = profile as any;
-        const hasCompletedOnboarding = profileData?.has_completed_onboarding;
-        if (hasCompletedOnboarding !== true) {
-          console.log('🆕 User needs onboarding');
-          const isDevelopment = process.env.NODE_ENV === 'development';
-          if (isDevelopment) {
-            window.location.href = '/onboarding';
-          } else {
-            window.location.href = 'https://app.lifely.dev/onboarding';
-          }
-          return;
-        }
-
-        // Existing user who has completed onboarding - go to dashboard
-        console.log('✅ Returning user - redirecting to dashboard');
-        const isDevelopment = process.env.NODE_ENV === 'development';
-        if (isDevelopment) {
+        console.log('🔍 Checking onboarding completion for user:', user.email);
+        
+        // CRITICAL FIX: Use same localStorage-first logic as App.tsx for consistency
+        
+        // Step 1: Check localStorage first (primary source of truth)
+        const localCompleted = getUserData(user.id, 'lifely_onboarding_completed', false);
+        console.log('📊 Local completion status:', localCompleted);
+        
+        if (localCompleted) {
+          console.log('✅ User completed onboarding (localStorage confirmed) - redirect to dashboard');
           window.location.href = '/dashboard';
-        } else {
-          window.location.href = 'https://app.lifely.dev/dashboard';
+          return;
         }
+        
+        // Step 2: Check if user has dashboard data (indicates completed onboarding)
+        const localCategories = getUserData(user.id, 'lifeStructureCategories', []);
+        const localItems = getUserData(user.id, 'lifeStructureItems', []);
+        console.log('📊 Dashboard data check:', { 
+          categories: localCategories.length, 
+          items: localItems.length 
+        });
+        
+        if (localCategories.length > 0 || localItems.length > 0) {
+          console.log('✅ User has dashboard data - redirect to dashboard');
+          window.location.href = '/dashboard';
+          return;
+        }
+        
+        // Step 3: Fallback to Supabase categories check
+        const { data: categories, error: categoriesError } = await supabase
+          .from('categories')
+          .select('id')
+          .eq('user_id', user.id)
+          .limit(1);
+          
+        if (!categoriesError && categories && categories.length > 0) {
+          console.log('✅ User has Supabase categories - redirect to dashboard');
+          window.location.href = '/dashboard';
+          return;
+        }
+        
+        // If we reach here, user needs onboarding
+        console.log('🆕 New user needs onboarding - redirect to onboarding');
+        window.location.href = '/onboarding';
 
       } catch (error) {
         console.error('Error in auth callback:', error);
-        // Fallback to dashboard for existing users
-        window.location.href = '/dashboard';
+        // Conservative fallback - if there's an error, assume new user needs onboarding
+        console.log('❌ Error during auth callback, defaulting to onboarding for safety');
+        window.location.href = '/onboarding';
       }
     };
 
