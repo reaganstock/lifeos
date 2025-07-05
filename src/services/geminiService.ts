@@ -3037,9 +3037,30 @@ Please specify your preference or say "create anyway" to override.`,
   private getCurrentItems(): Item[] {
     console.log('🔍 GEMINI SERVICE: getCurrentItems() called');
     
-    // ALWAYS read from localStorage first to get the most current data
-    // This ensures AI functions see items that were just created
-    console.log('📱 GEMINI SERVICE: Reading from localStorage for most current data');
+    // CRITICAL FIX: Use user-specific storage first
+    if (window && (window as any).userStorageUtils && (window as any).currentUser?.id) {
+      const { getUserData } = (window as any).userStorageUtils;
+      const userId = (window as any).currentUser.id;
+      console.log('📱 GEMINI SERVICE: Reading from user-specific storage');
+      
+      try {
+        const userItems = getUserData(userId, 'lifeStructureItems', []);
+        const items = userItems.map((item: any) => ({
+          ...item,
+          createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
+          updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
+          dueDate: item.dueDate ? new Date(item.dueDate) : undefined,
+          dateTime: item.dateTime ? new Date(item.dateTime) : undefined
+        }));
+        console.log('📊 GEMINI SERVICE: Using user-specific items:', items.length);
+        return items;
+      } catch (error) {
+        console.error('❌ Error loading items from user-specific storage:', error);
+      }
+    }
+    
+    // Fallback to global localStorage for backward compatibility
+    console.log('📱 GEMINI SERVICE: Falling back to global localStorage');
     try {
       const savedItems = localStorage.getItem('lifeStructureItems');
       if (!savedItems) {
@@ -3055,8 +3076,7 @@ Please specify your preference or say "create anyway" to override.`,
         dueDate: item.dueDate ? new Date(item.dueDate) : undefined,
         dateTime: item.dateTime ? new Date(item.dateTime) : undefined
       }));
-      console.log('📊 GEMINI SERVICE: Using localStorage items:', items.length);
-      console.log('📋 Sample localStorage items:', items.slice(0, 3).map((item: Item) => `"${item.title}" (${item.type})`));
+      console.log('📊 GEMINI SERVICE: Using global localStorage items:', items.length);
       return items;
     } catch (error) {
       console.error('❌ Error loading items from localStorage:', error);
@@ -5680,6 +5700,14 @@ Please specify "delete this one" or "delete all" to proceed.`,
   // Helper methods for category storage in localStorage
   private getStoredCategories(): any[] {
     try {
+      // CRITICAL FIX: Use user-specific storage
+      if (window && (window as any).userStorageUtils && (window as any).currentUser?.id) {
+        const { getUserData } = (window as any).userStorageUtils;
+        const userId = (window as any).currentUser.id;
+        return getUserData(userId, 'lifeStructureCategories', []);
+      }
+      
+      // Fallback to global storage if user utilities not available
       const stored = localStorage.getItem('lifeStructureCategories');
       return stored ? JSON.parse(stored) : [];
     } catch (error) {
