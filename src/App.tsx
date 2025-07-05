@@ -43,8 +43,8 @@ function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
   const {
-    categories: _supabaseCategories,
-    loading: _dataLoading,
+    categories: supabaseCategories,
+    loading: dataLoading,
     error: dataError,
     initialized: dataInitialized,
     createCategory,

@@ -83,141 +83,6 @@ export class GeminiService {
     console.groupEnd();
   }
 
-  // Comprehensive test of all 24 functions
-  async testAllFunctions(): Promise<void> {
-    console.group('🧪 COMPREHENSIVE TESTING OF ALL 24 FUNCTIONS');
-    
-    const testResults: { [key: string]: boolean } = {};
-    let totalTests = 0;
-    let passedTests = 0;
-    
-    try {
-      // Test 1: createItem
-      console.log('🔧 Testing createItem...');
-      totalTests++;
-      try {
-        const result = await this.executeFunction('createItem', {
-          title: 'Test Todo',
-          text: 'Test description',
-          type: 'todo',
-          categoryId: 'self-regulation',
-          priority: 'medium'
-        });
-        testResults['createItem'] = result.success;
-        if (result.success) passedTests++;
-        console.log('✅ createItem:', result.success ? 'PASS' : 'FAIL');
-      } catch (error) {
-        testResults['createItem'] = false;
-        console.log('❌ createItem: ERROR -', error);
-      }
-
-      // Test 2: bulkCreateItems (JSON parsing test)
-      console.log('🔧 Testing bulkCreateItems with JSON...');
-      totalTests++;
-      try {
-        const testJson = '[{"title": "Task 1", "text": "Description 1", "type": "todo", "categoryId": "self-regulation"}, {"title": "Task 2", "text": "Description 2", "type": "note", "categoryId": "self-regulation"}]';
-        const result = await this.executeFunction('bulkCreateItems', { itemsJson: testJson });
-        testResults['bulkCreateItems'] = result.success;
-        if (result.success) passedTests++;
-        console.log('✅ bulkCreateItems:', result.success ? 'PASS' : 'FAIL');
-      } catch (error) {
-        testResults['bulkCreateItems'] = false;
-        console.log('❌ bulkCreateItems: ERROR -', error);
-      }
-
-      // Test 3: searchItems
-      console.log('🔧 Testing searchItems...');
-      totalTests++;
-      try {
-        const result = await this.executeFunction('searchItems', { query: 'test', type: 'todo' });
-        testResults['searchItems'] = result.success;
-        if (result.success) passedTests++;
-        console.log('✅ searchItems:', result.success ? 'PASS' : 'FAIL');
-      } catch (error) {
-        testResults['searchItems'] = false;
-        console.log('❌ searchItems: ERROR -', error);
-      }
-
-      // Test 4: executeMultipleUpdates (JSON parsing test)
-      console.log('🔧 Testing executeMultipleUpdates with JSON...');
-      totalTests++;
-      try {
-        const testJson = '[{"itemId": "test123", "updates": {"completed": true}}]';
-        const result = await this.executeFunction('executeMultipleUpdates', { updatesJson: testJson });
-        testResults['executeMultipleUpdates'] = result.success !== undefined; // May fail due to missing item, but should not crash
-        if (result.success !== undefined) passedTests++;
-        console.log('✅ executeMultipleUpdates:', result.success !== undefined ? 'PASS' : 'FAIL');
-      } catch (error) {
-        testResults['executeMultipleUpdates'] = false;
-        console.log('❌ executeMultipleUpdates: ERROR -', error);
-      }
-
-      // Test 5: createRecurringEvent
-      console.log('🔧 Testing createRecurringEvent...');
-      totalTests++;
-      try {
-        const result = await this.executeFunction('createRecurringEvent', {
-          title: 'Weekly Meeting',
-          startDate: '2024-01-01',
-          recurrencePattern: 'weekly',
-          categoryId: 'self-regulation'
-        });
-        testResults['createRecurringEvent'] = result.success;
-        if (result.success) passedTests++;
-        console.log('✅ createRecurringEvent:', result.success ? 'PASS' : 'FAIL');
-      } catch (error) {
-        testResults['createRecurringEvent'] = false;
-        console.log('❌ createRecurringEvent: ERROR -', error);
-      }
-
-      // Test remaining functions with basic validation
-      const remainingFunctions = [
-        'updateItem', 'deleteItem', 'bulkUpdateItems', 'bulkDeleteItems',
-        'consolidateItems', 'removeAsterisks', 'copyRoutineFromPerson',
-        'generateFullDaySchedule', 'createCalendarFromNotes', 'bulkRescheduleEvents',
-        'createMultipleDateEvents', 'deleteRecurringEvent', 'intelligentReschedule',
-        'createItemWithConflictOverride', 'createRecurringMultipleDays',
-        'createCategory', 'updateCategory', 'deleteCategory', 'reorganizeCategories'
-      ];
-
-      for (const funcName of remainingFunctions) {
-        console.log(`🔧 Testing ${funcName}...`);
-        totalTests++;
-        try {
-          // Test with minimal valid args to check function exists and handles errors gracefully
-          const result = await this.executeFunction(funcName, {});
-          testResults[funcName] = result !== undefined; // Function exists and returns something
-          if (result !== undefined) passedTests++;
-          console.log(`✅ ${funcName}:`, result !== undefined ? 'PASS' : 'FAIL');
-        } catch (error) {
-          testResults[funcName] = false;
-          console.log(`❌ ${funcName}: ERROR -`, error);
-        }
-      }
-
-      // Summary
-      console.log('\n📊 TEST SUMMARY:');
-      console.log(`Total Functions Tested: ${totalTests}`);
-      console.log(`Functions Working: ${passedTests}`);
-      console.log(`Functions Failed: ${totalTests - passedTests}`);
-      console.log(`Success Rate: ${Math.round((passedTests / totalTests) * 100)}%`);
-      
-      if (passedTests === totalTests) {
-        console.log('🎉 ALL FUNCTIONS ARE WORKING PERFECTLY!');
-      } else {
-        console.log('⚠️ Some functions need attention:');
-        Object.entries(testResults).forEach(([func, passed]) => {
-          if (!passed) console.log(`   ❌ ${func}`);
-        });
-      }
-      
-    } catch (error) {
-      console.error('❌ Test suite error:', error);
-    }
-    
-    console.groupEnd();
-  }
-
   // Clear Supabase callbacks for unauthenticated users
   clearSupabaseCallbacks(): void {
     this.supabaseCallbacks = {};
@@ -299,9 +164,7 @@ export class GeminiService {
     items: Item[], 
     conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [],
     categories: any[] = [],
-    isAgenticMode: boolean = false,
-    isAskMode: boolean = false,
-    userContext: string = ''
+    isAgenticMode: boolean = false
   ): Promise<GeminiResponse> {
     console.log('🚀 GEMINI DIRECT API - Processing:', message);
     
@@ -1784,220 +1647,116 @@ EXAMPLES:
 
   // Execute function calls immediately like OpenRouter
   async executeFunction(name: string, args: any): Promise<any> {
-    console.log(`🚀 EXECUTING FUNCTION: ${name} with args:`, args);
-    
-    try {
-      // Validate function exists
-      if (!this.functionMap[name]) {
-        console.error(`❌ Unknown function: ${name}`);
-        return {
-          success: false,
-          function: name,
-          result: {
-            message: `❌ Function "${name}" is not implemented. Available functions: ${Object.keys(this.functionMap).join(', ')}`
-          }
-        };
-      }
-
-      // Execute the function with comprehensive error handling
-      const startTime = Date.now();
-      const result = await this.functionMap[name](args);
-      const duration = Date.now() - startTime;
-      
-      console.log(`✅ FUNCTION COMPLETED: ${name} in ${duration}ms`, result);
-      
-      // Ensure result has proper structure
-      if (!result || typeof result !== 'object') {
-        console.warn(`⚠️ Function ${name} returned invalid result:`, result);
-        return {
-          success: false,
-          function: name,
-          result: {
-            message: `Function "${name}" returned invalid result format`
-          }
-        };
-      }
-
-      // Add function name if not present
-      if (!result.function) {
-        result.function = name;
-      }
-
-      return result;
-      
-    } catch (error) {
-      console.error(`❌ FUNCTION ERROR: ${name}`, error);
-      return {
-        success: false,
-        function: name,
-        result: {
-          message: `❌ Error executing ${name}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          error: error instanceof Error ? error.stack : String(error)
-        }
-      };
+    switch (name) {
+      case 'createItem':
+        return await this.createItem(args);
+      case 'bulkCreateItems':
+        return await this.bulkCreateItems(args);
+      case 'updateItem':
+        return await this.updateItem(args);
+      case 'deleteItem':
+        return await this.deleteItem(args);
+      case 'bulkUpdateItems':
+        return await this.bulkUpdateItems(args);
+      case 'bulkDeleteItems':
+        return await this.bulkDeleteItems(args);
+      case 'searchItems':
+        return await this.searchItems(args);
+      case 'consolidateItems':
+        return await this.consolidateItems(args.searchQuery, args.itemType);
+      case 'removeAsterisks':
+        return await this.removeAsterisks(args.itemId);
+      case 'executeMultipleUpdates':
+        return await this.executeMultipleUpdates(args.updatesJson);
+      case 'copyRoutineFromPerson':
+        return await this.copyRoutineFromPerson(args);
+      case 'generateFullDaySchedule':
+        return await this.generateFullDaySchedule(args);
+      case 'createCalendarFromNotes':
+        return await this.createCalendarFromNotes(args);
+      case 'bulkRescheduleEvents':
+        return await this.bulkRescheduleEvents(args);
+      case 'createRecurringEvent':
+        return await this.createRecurringEvent(args);
+      case 'createMultipleDateEvents':
+        return await this.createMultipleDateEvents(args);
+      case 'deleteRecurringEvent':
+        return await this.deleteRecurringEvent(args);
+      case 'intelligentReschedule':
+        return await this.intelligentReschedule(args);
+      case 'createItemWithConflictOverride':
+        return await this.createItemWithConflictOverride(args);
+      case 'createRecurringMultipleDays':
+        return await this.createRecurringMultipleDays(args);
+      case 'createCategory':
+        return await this.createCategory(args);
+      case 'updateCategory':
+        return await this.updateCategory(args);
+      case 'deleteCategory':
+        return await this.deleteCategory(args);
+      case 'reorganizeCategories':
+        return await this.reorganizeCategories(args);
+      default:
+        throw new Error(`Function ${name} not implemented`);
     }
   }
 
-  // Function mapping for cleaner execution and validation
-  private functionMap: Record<string, (args: any) => Promise<any>> = {
-    'createItem': (args) => this.createItem(args),
-    'bulkCreateItems': (args) => this.bulkCreateItems(args),
-    'updateItem': (args) => this.updateItem(args),
-    'deleteItem': (args) => this.deleteItem(args),
-    'bulkUpdateItems': (args) => this.bulkUpdateItems(args),
-    'bulkDeleteItems': (args) => this.bulkDeleteItems(args),
-    'searchItems': (args) => this.searchItems(args),
-    'consolidateItems': (args) => this.consolidateItems(args.searchQuery, args.itemType),
-    'removeAsterisks': (args) => this.removeAsterisks(args.itemId),
-    'executeMultipleUpdates': (args) => this.executeMultipleUpdates(args.updatesJson),
-    'copyRoutineFromPerson': (args) => this.copyRoutineFromPerson(args),
-    'generateFullDaySchedule': (args) => this.generateFullDaySchedule(args),
-    'createCalendarFromNotes': (args) => this.createCalendarFromNotes(args),
-    'bulkRescheduleEvents': (args) => this.bulkRescheduleEvents(args),
-    'createRecurringEvent': (args) => this.createRecurringEvent(args),
-    'createMultipleDateEvents': (args) => this.createMultipleDateEvents(args),
-    'deleteRecurringEvent': (args) => this.deleteRecurringEvent(args),
-    'intelligentReschedule': (args) => this.intelligentReschedule(args),
-    'createItemWithConflictOverride': (args) => this.createItemWithConflictOverride(args),
-    'createRecurringMultipleDays': (args) => this.createRecurringMultipleDays(args),
-    'createCategory': (args) => this.createCategory(args),
-    'updateCategory': (args) => this.updateCategory(args),
-    'deleteCategory': (args) => this.deleteCategory(args),
-    'reorganizeCategories': (args) => this.reorganizeCategories(args)
-  };
-
   // Execute function calls with provided context (for OpenAI Realtime Service)
   async executeFunctionWithContext(name: string, args: any, currentItems: any[], currentCategories: any[]): Promise<any> {
-    console.log(`🌐 EXECUTING WITH CONTEXT: ${name}`, { 
-      itemsCount: currentItems?.length || 0, 
-      categoriesCount: currentCategories?.length || 0 
-    });
-    
-    // Validate inputs
-    if (!Array.isArray(currentItems)) {
-      console.warn('⚠️ currentItems is not an array, using empty array');
-      currentItems = [];
-    }
-    if (!Array.isArray(currentCategories)) {
-      console.warn('⚠️ currentCategories is not an array, using empty array');
-      currentCategories = [];
-    }
-    
     // Store the provided context temporarily
     const originalGetStoredItems = this.getStoredItems;
     const originalSaveStoredItems = this.saveStoredItems;
     
-    try {
-      // Override getStoredItems to use provided context
-      this.getStoredItems = () => {
-        console.log('📊 GEMINI SERVICE: Using provided context items:', currentItems.length);
-        return currentItems.map((item: any) => ({
-          ...item,
-          createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
-          updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
-          dueDate: item.dueDate ? new Date(item.dueDate) : undefined,
-          dateTime: item.dateTime ? new Date(item.dateTime) : undefined
+    // Override getStoredItems to use provided context
+    this.getStoredItems = () => {
+      console.log('📊 GEMINI SERVICE: Using provided context items:', currentItems.length);
+      console.log('📊 GEMINI SERVICE: Sample context items:', currentItems.slice(0, 2).map(item => ({ id: item.id, title: item.title, type: item.type })));
+      return currentItems.map((item: any) => ({
+        ...item,
+        createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
+        updatedAt: item.updatedAt ? new Date(item.updatedAt) : new Date(),
+        dueDate: item.dueDate ? new Date(item.dueDate) : undefined,
+        dateTime: item.dateTime ? new Date(item.dateTime) : undefined
+      }));
+    };
+    
+    // Override saveStoredItems to update both localStorage and provided context
+    this.saveStoredItems = (items: any[]) => {
+      try {
+        // Update localStorage
+        localStorage.setItem('lifeStructureItems', JSON.stringify(items));
+        console.log('💾 Saved', items.length, 'items to localStorage');
+        
+        // Update the provided context array
+        currentItems.length = 0;
+        currentItems.push(...items);
+        console.log('📊 Updated provided context with', items.length, 'items');
+        
+        // Dispatch custom event for real-time UI updates
+        window.dispatchEvent(new CustomEvent('itemsModified', {
+          detail: { items, timestamp: Date.now() }
         }));
-      };
-      
-      // Override saveStoredItems to update both localStorage and provided context
-      this.saveStoredItems = (items: any[]) => {
-        try {
-          // Validate items array
-          if (!Array.isArray(items)) {
-            console.error('❌ saveStoredItems received non-array:', items);
-            return;
-          }
-          
-          // Update localStorage
-          localStorage.setItem('lifeStructureItems', JSON.stringify(items));
-          console.log('💾 Saved', items.length, 'items to localStorage');
-          
-          // Update the provided context array safely
-          if (Array.isArray(currentItems)) {
-            currentItems.length = 0;
-            currentItems.push(...items);
-            console.log('📊 Updated provided context with', items.length, 'items');
-          }
-          
-          // Dispatch multiple events for comprehensive UI updates
-          const eventDetail = { items, timestamp: Date.now(), source: 'functionWithContext' };
-          
-          window.dispatchEvent(new CustomEvent('itemsModified', { detail: eventDetail }));
-          window.dispatchEvent(new CustomEvent('forceDataRefresh', { detail: eventDetail }));
-          window.dispatchEvent(new StorageEvent('storage', {
-            key: 'lifeStructureItems',
-            newValue: JSON.stringify(items),
-            storageArea: localStorage
-          }));
-          
-          console.log('📡 Dispatched all refresh events for immediate UI updates');
-        } catch (error) {
-          console.error('❌ Failed to save items in context mode:', error);
-        }
-      };
-      
+        console.log('📡 Dispatched itemsModified event for real-time updates');
+      } catch (error) {
+        console.error('❌ Failed to save items:', error);
+      }
+    };
+    
+    try {
       // Execute the function with the overridden methods
       const result = await this.executeFunction(name, args);
-      
-      console.log(`✅ CONTEXT FUNCTION COMPLETED: ${name}`, result);
       return result;
-      
-    } catch (error) {
-      console.error(`❌ CONTEXT FUNCTION ERROR: ${name}`, error);
-      return {
-        success: false,
-        function: name,
-        result: {
-          message: `❌ Error executing ${name} with context: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          error: error instanceof Error ? error.stack : String(error)
-        }
-      };
     } finally {
-      // Always restore original methods
+      // Restore original methods
       this.getStoredItems = originalGetStoredItems;
       this.saveStoredItems = originalSaveStoredItems;
-      console.log('🔄 Restored original storage methods');
     }
   }
 
   private async createItem(args: any) {
     console.log('🎯 Creating item with args:', args);
     
-    try {
-      // Validate required arguments
-      if (!args || typeof args !== 'object') {
-        return {
-          success: false,
-          function: 'createItem',
-          result: {
-            message: '❌ Invalid arguments provided to createItem'
-          }
-        };
-      }
-
-      if (!args.title || !args.type) {
-        return {
-          success: false,
-          function: 'createItem',
-          result: {
-            message: '❌ Missing required fields: title and type are required'
-          }
-        };
-      }
-
-      const validTypes = ['todo', 'event', 'note', 'voiceNote', 'routine', 'goal'];
-      if (!validTypes.includes(args.type)) {
-        return {
-          success: false,
-          function: 'createItem',
-          result: {
-            message: `❌ Invalid item type: ${args.type}. Must be one of: ${validTypes.join(', ')}`
-          }
-        };
-      }
-      
-      const items = this.getStoredItems();
+    const items = this.getStoredItems();
     
     // Enhanced conflict detection for appointments/events
     if (args.type === 'event' && args.dateTime && !args.ignoreConflicts) {
@@ -2154,27 +1913,14 @@ Please specify your preference or say "create anyway" to override.`,
     // Mark that items were modified so hybridSync can sync to Supabase automatically
     this.itemsModified = true;
 
-      return {
-        success: true,
-        function: 'createItem',
-        result: {
-          message: `✅ Created ${args.type}: "${args.title}"${isAllDayEvent ? ' (All Day)' : ''}`,
-          item: newItem,
-          items: [newItem] // Include items array for consistency
-        }
-      };
-      
-    } catch (error) {
-      console.error('❌ Error in createItem:', error);
-      return {
-        success: false,
-        function: 'createItem',
-        result: {
-          message: `❌ Failed to create ${args.type || 'item'}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          error: error instanceof Error ? error.stack : String(error)
-        }
-      };
-    }
+    return {
+      success: true,
+      function: 'createItem',
+      result: {
+        message: `✅ Created ${args.type}: "${args.title}"${isAllDayEvent ? ' (All Day)' : ''}`,
+        item: newItem
+      }
+    };
   }
 
   // Helper methods for enhanced functionality
@@ -2314,16 +2060,6 @@ Please specify your preference or say "create anyway" to override.`,
       
       // Fix common Gemini JSON malformation patterns
       cleanedJson = cleanedJson
-        // Remove escaped newlines and other common escape sequences
-        .replace(/\\n/g, ' ')
-        .replace(/\\r/g, ' ')
-        .replace(/\\t/g, ' ')
-        // Fix double backslashes
-        .replace(/\\\\/g, '\\')
-        // Fix malformed escaped quotes
-        .replace(/\\"/g, '"')
-        // Remove control characters that break JSON parsing
-        .replace(/[\u0000-\u001F\u007F-\u009F]/g, '')
         // Fix duplicate key patterns like "type": "note": "note" -> "type": "note"
         .replace(/"(\w+)":\s*"([^"]+)":\s*"[^"]*"/g, '"$1": "$2"')
         // Fix missing commas between properties
@@ -2331,10 +2067,7 @@ Please specify your preference or say "create anyway" to override.`,
         // Remove trailing commas before closing brackets/braces
         .replace(/,(\s*[}\]])/g, '$1')
         // Fix malformed array structures
-        .replace(/\]\s*\[/g, '], [')
-        // Clean up multiple spaces created by newline removal
-        .replace(/\s+/g, ' ')
-        .trim();
+        .replace(/\]\s*\[/g, '], [');
       
       console.log('🧹 Cleaned JSON:', cleanedJson);
       
@@ -3276,35 +3009,7 @@ Please specify your preference or say "create anyway" to override.`,
   // Execute multiple different update operations
   private async executeMultipleUpdates(updatesJson: string): Promise<any> {
     try {
-      // Clean malformed JSON from Gemini before parsing
-      let cleanedJson = updatesJson || '[]';
-      
-      // Fix common Gemini JSON malformation patterns
-      cleanedJson = cleanedJson
-        // Remove escaped newlines and other common escape sequences
-        .replace(/\\n/g, ' ')
-        .replace(/\\r/g, ' ')
-        .replace(/\\t/g, ' ')
-        // Fix double backslashes
-        .replace(/\\\\/g, '\\')
-        // Fix malformed escaped quotes
-        .replace(/\\"/g, '"')
-        // Remove control characters that break JSON parsing
-        .replace(/[\u0000-\u001F\u007F-\u009F]/g, '')
-        // Fix duplicate key patterns like "type": "note": "note" -> "type": "note"
-        .replace(/"(\w+)":\s*"([^"]+)":\s*"[^"]*"/g, '"$1": "$2"')
-        // Fix missing commas between properties
-        .replace(/"\s*}\s*{/g, '"}, {')
-        // Remove trailing commas before closing brackets/braces
-        .replace(/,(\s*[}\]])/g, '$1')
-        // Fix malformed array structures
-        .replace(/\]\s*\[/g, '], [')
-        // Clean up multiple spaces created by newline removal
-        .replace(/\s+/g, ' ')
-        .trim();
-      
-      console.log('🧹 Cleaned updates JSON:', cleanedJson);
-      const updates = JSON.parse(cleanedJson);
+      const updates = JSON.parse(updatesJson);
       const results = [];
       
       for (const update of updates) {
@@ -5809,9 +5514,7 @@ Please specify "delete this one" or "delete all" to proceed.`,
 
 export const geminiService = new GeminiService();
 
-// Expose test functions globally for easy testing
-(window as any).testGeminiFunctions = () => geminiService.testAllFunctions();
+// Make debug functions available globally for testing
 (window as any).debugGemini = {
-  testFunctionCalling: () => geminiService.testFunctionCalling(),
-  testAllFunctions: () => geminiService.testAllFunctions()
+  testFunctionCalling: () => geminiService.testFunctionCalling()
 }; 

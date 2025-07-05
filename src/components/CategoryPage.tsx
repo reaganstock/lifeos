@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Plus, MapPin, Clock, Calendar, Mic, MicOff, Play, Pause, Camera, Edit3, Save, X, Maximize2, Trash2, CheckCircle, CheckCircle2, FileText, RotateCcw, BowArrow, Link, ExternalLink, FolderOpen, Globe, Brain, Settings, Filter } from 'lucide-react';
 import { Item, Category } from '../types';
-import { voiceService, VoiceRecording, TranscriptionResult } from '../services/voiceService';
+import { voiceService, VoiceRecording, TranscriptionResult } from '../services/voiceService'; // eslint-disable-line @typescript-eslint/no-unused-vars
 import LocalCategoryNotes from './LocalCategoryNotes';
 import CategoryKnowledge from './CategoryKnowledge';
-import { CategoryRAGService } from '../services/categoryRAG';
+import { CategoryRAGService } from '../services/categoryRAG'; // eslint-disable-line @typescript-eslint/no-unused-vars
 
 interface CategoryPageProps {
   categoryId: string;
@@ -26,7 +26,7 @@ const CategoryPage: React.FC<CategoryPageProps> = ({ categoryId, onBack, items, 
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [fullscreenNote, setFullscreenNote] = useState<string | null>(null);
-  const [fullscreenGoal, setFullscreenGoal] = useState<string | null>(null);
+  const [fullscreenGoal, setFullscreenGoal] = useState<string | null>(null); // eslint-disable-line @typescript-eslint/no-unused-vars
   const [fullscreenRoutine, setFullscreenRoutine] = useState<string | null>(null);
   const [playingNote, setPlayingNote] = useState<string | null>(null);
   const [editText, setEditText] = useState('');

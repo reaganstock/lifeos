@@ -29,7 +29,15 @@ const isConversationalMessage = (message: string): boolean => {
     /^(no\s+)?(i\s+)?(don't|didn't|won't|wouldn't)/,
     /^nevermind$/,
     /^forget\s+(it|that)$/,
-    /^(ok|okay)\s*$/
+    /^(ok|okay)\s*$/,
+    // Personal statements that should be conversational, not actionable
+    /^(i'm|i am)\s+(moving|going|traveling|visiting|starting|finishing|completed|got|had|graduated)/,
+    /^(i've|i have)\s+(been|just|recently)/,
+    /^(i\s+)?(just|recently)\s+(moved|started|finished|completed|got|had)/,
+    /^(my|our)\s+(family|life|situation|work|job|relationship)/,
+    // Questions that should get conversational responses
+    /^(can you help me)\s+(i'm|i am|with)/,
+    /^(what|how|why|when|where)\s+/
   ];
   
   return conversationalPatterns.some(pattern => pattern.test(lower));
@@ -247,6 +255,8 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
   
   // AI processing states
   const [isAIThinking, setIsAIThinking] = useState(false);
+  const [thinkingContent, setThinkingContent] = useState<string>('');
+  const [thinkingStartTime, setThinkingStartTime] = useState<number | null>(null);
   const [isCallingFunction, setIsCallingFunction] = useState(false);
   const [currentFunctionName, setCurrentFunctionName] = useState<string | null>(null);
   const [showModeDropdown, setShowModeDropdown] = useState(false);
@@ -269,10 +279,18 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
   
   // Simplified function call execution using ChatService
   const handleExecuteFunction = async (messageId: string, functionCall: any) => {
+    console.log('🚀 EXECUTE FUNCTION CALLED:', { messageId, functionCall });
     try {
       setIsCallingFunction(true);
       setIsAIThinking(true); // Keep AI thinking state during function execution
       setCurrentFunctionName(functionCall.name);
+      
+      console.log('🔧 CALLING executeFunctionWithContext with:', {
+        name: functionCall.name,
+        args: functionCall.args,
+        itemsCount: items?.length || 0,
+        categoriesCount: categories?.length || 0
+      });
       
       const result = await geminiService.executeFunctionWithContext(
         functionCall.name,
@@ -280,6 +298,8 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
         items,
         categories
       );
+      
+      console.log('✅ FUNCTION EXECUTION RESULT:', result);
 
       // Generate AI feedback
       let aiFeedback = '';
@@ -379,10 +399,13 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
         }
       }
     } catch (error) {
-      console.error('Function execution error:', error);
+      console.error('❌ FUNCTION EXECUTION ERROR:', error);
+      console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+      console.error('❌ Function details:', { messageId, functionCall });
+      
       chatService.updateFunctionCall(messageId, {
         status: 'failed',
-        aiFeedback: 'An unexpected error occurred while executing the function.'
+        aiFeedback: `An unexpected error occurred while executing the function: ${error instanceof Error ? error.message : 'Unknown error'}`
       });
     } finally {
       setIsCallingFunction(false);
@@ -410,18 +433,22 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
   const needsFunctionCalling = (transcript: string): boolean => {
     const lowerTranscript = transcript.toLowerCase();
     
-    // Action verbs that suggest function calling
-    const actionVerbs = [
-      'create', 'add', 'make', 'schedule', 'book', 'set', 'update', 'change', 'edit', 'modify',
-      'delete', 'remove', 'cancel', 'move', 'reschedule', 'mark', 'complete', 'finish',
-      'find', 'search', 'show', 'list', 'get', 'copy', 'generate', 'bulk'
-    ];
-    
-    // Conversational phrases that should NOT trigger functions
+    // Conversational phrases that should NOT trigger functions (expanded list)
     const conversationalPhrases = [
       'how are you', 'what do you think', 'can you explain', 'tell me about',
       'what is', 'how does', 'why', 'thank you', 'thanks', 'okay', 'ok',
-      'yes', 'no', 'maybe', 'i think', 'i feel', 'hello', 'hi', 'hey'
+      'yes', 'no', 'maybe', 'i think', 'i feel', 'hello', 'hi', 'hey',
+      'i\'m going', 'i\'m moving', 'i\'m traveling', 'i\'m visiting', 'i\'m planning',
+      'i went', 'i did', 'i saw', 'i had', 'i was', 'i am', 'i will be',
+      'just wanted to', 'wanted to tell you', 'thought you should know',
+      'by the way', 'speaking of', 'oh and', 'also', 'anyway'
+    ];
+    
+    // Life updates/personal statements that are conversational
+    const personalStatements = [
+      'moving to', 'going to', 'traveling to', 'visiting', 'started',
+      'finished', 'completed', 'got married', 'had a baby', 'graduated',
+      'got a job', 'quit my job', 'bought a house', 'sold my car'
     ];
     
     // Check for conversational phrases first
@@ -429,8 +456,98 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
       return false;
     }
     
-    // Check for action verbs - simplified to just check for the verb
-    return actionVerbs.some(verb => lowerTranscript.includes(verb));
+    // Check for personal life statements
+    if (personalStatements.some(statement => lowerTranscript.includes(statement))) {
+      return false;
+    }
+    
+    // Specific function-calling patterns that clearly need actions
+    const functionPatterns = [
+      /create\s+(a\s+)?(todo|goal|note|event|routine|category)/,
+      /add\s+(a\s+)?(todo|goal|note|event|routine|category)/,
+      /schedule\s+(a\s+)?(meeting|appointment|event|call)/,
+      /set\s+(a\s+)?(reminder|goal|routine)/,
+      /delete\s+(this|that|my)/,
+      /remove\s+(this|that|my)/,
+      /cancel\s+(my|the)/,
+      /reschedule\s+(my|the)/,
+      /move\s+(my|the|this)\s+(meeting|event|appointment)/,
+      /update\s+(my|the|this)/,
+      /mark\s+(as\s+)?(complete|done)/,
+      /show\s+(me\s+)?(my|all)/,
+      /list\s+(my|all)/,
+      /find\s+(my|all)/
+    ];
+    
+    // Only trigger function calling for specific actionable patterns
+    return functionPatterns.some(pattern => pattern.test(lowerTranscript));
+  };
+
+  // Thinking display component like Cursor
+  const ThinkingDisplay = () => {
+    const [elapsed, setElapsed] = useState(0);
+    const [isExpanded, setIsExpanded] = useState(false);
+    
+    useEffect(() => {
+      if (!isAIThinking || !thinkingStartTime) return;
+      
+      const interval = setInterval(() => {
+        setElapsed(Math.floor((Date.now() - thinkingStartTime) / 1000));
+      }, 1000);
+      
+      return () => clearInterval(interval);
+    }, [isAIThinking, thinkingStartTime]);
+    
+    if (!isAIThinking) return null;
+    
+    return (
+      <div className="mb-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+        {/* Header - always visible */}
+        <div className="p-4 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-gray-700 dark:text-gray-300 font-medium">
+              Generating...
+            </span>
+          </div>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => {
+                setIsAIThinking(false);
+                setThinkingContent('');
+                chatService.setProcessing(false);
+              }}
+              className="px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-md text-gray-700 dark:text-gray-300 transition-colors"
+            >
+              Stop ⌘⇧⌫
+            </button>
+          </div>
+        </div>
+        
+        {/* Thinking content - expandable */}
+        {thinkingContent && (
+          <div className="border-t border-gray-200 dark:border-gray-700">
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="w-full p-4 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center space-x-2"
+            >
+              <ChevronRight className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+              <span className="text-gray-600 dark:text-gray-400 text-sm">
+                Thought for {elapsed} second{elapsed !== 1 ? 's' : ''}
+              </span>
+            </button>
+            
+            {isExpanded && (
+              <div className="px-4 pb-4">
+                <div className="bg-white dark:bg-gray-900 rounded-lg p-4 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap border border-gray-200 dark:border-gray-600">
+                  {thinkingContent}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
 
   
@@ -1536,6 +1653,8 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
       
       chatService.setProcessing(true);
       setIsAIThinking(true);
+      setThinkingStartTime(Date.now());
+      setThinkingContent(''); // Clear previous thinking content
       
       try {
         await chatService.addMessage('user', messageToSend);
@@ -1551,6 +1670,12 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
           userContext
         );
         
+        // Capture thinking content for conversational messages too
+        if (conversationalResponse.thinkingContent) {
+          console.log('🧠 Setting conversational thinking content:', conversationalResponse.thinkingContent);
+          setThinkingContent(conversationalResponse.thinkingContent);
+        }
+        
         await chatService.addMessage('assistant', conversationalResponse.message || "Hi there! How can I help you today?");
       } catch (error) {
         console.error('Conversational processing error:', error);
@@ -1558,6 +1683,8 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
       } finally {
         chatService.setProcessing(false);
         setIsAIThinking(false);
+        setThinkingStartTime(null);
+        setThinkingContent(''); // Clear thinking content when conversational processing completes
       }
       return;
     }
@@ -1640,6 +1767,8 @@ Preferred Tools: ${parsed.preferredTools?.join(', ') || 'Not provided'}`;
     
     chatService.setProcessing(true);
     setIsAIThinking(true);
+    setThinkingStartTime(Date.now());
+    setThinkingContent(''); // Clear previous thinking content
     
     try {
       // Emergency session check - ensure we have an active session
@@ -1702,6 +1831,12 @@ User message: ${messageWithContext}`;
         );
 
         console.log('🔧 Fullscreen note mode - got response:', response);
+        
+        // Capture thinking content for fullscreen note mode
+        if (response.thinkingContent) {
+          console.log('🧠 Setting fullscreen note thinking content:', response.thinkingContent);
+          setThinkingContent(response.thinkingContent);
+        }
         console.log('🔧 Response success:', response.success);
         console.log('🔧 Response message:', response.message);
 
@@ -1812,6 +1947,12 @@ User message: ${messageWithContext}`;
         );
 
         console.log('📥 AIAssistant: Received response from chatService:', response);
+        
+        // Capture thinking content if available
+        if (response.thinkingContent) {
+          console.log('🧠 Setting thinking content:', response.thinkingContent);
+          setThinkingContent(response.thinkingContent);
+        }
 
         // Check if function was called based on response
         if (response.functionResults && response.functionResults.length > 0) {
@@ -1963,6 +2104,8 @@ User message: ${messageWithContext}`;
       setIsAIThinking(false);
       setIsCallingFunction(false);
       setCurrentFunctionName(null);
+      setThinkingStartTime(null);
+      setThinkingContent(''); // Clear thinking content when processing completes
       
       // Always refresh UI after AI processing completes - immediate for better UX
       onRefreshItems();
@@ -2904,6 +3047,9 @@ User message: ${messageWithContext}`;
                   />
                 ))}
                 
+                {/* Thinking Display Component */}
+                <ThinkingDisplay />
+                
                 {isProcessing && (
                   <div className="flex justify-start relative z-10">
                     <div className="flex items-start space-x-3">
@@ -3445,7 +3591,7 @@ const MessageBubble: React.FC<{
                       
                       // Handle the alternative response
                       if (response.pendingFunctionCall) {
-                        const functionCallMessage = await chatService.addFunctionCallMessage({
+                        await chatService.addFunctionCallMessage({
                           name: response.pendingFunctionCall.name,
                           args: response.pendingFunctionCall.args,
                           status: 'pending'
