@@ -1740,12 +1740,16 @@ ${userContext}
               type: 'STRING',
               description: 'Hex color code for the category (e.g., "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6")'
             },
+            priority: {
+              type: 'NUMBER',
+              description: 'Display priority/order for the category (0=highest priority, 1, 2, 3... lower numbers appear first)'
+            },
             description: {
               type: 'STRING',
               description: 'Brief description of what this category encompasses'
             }
           },
-          required: ['name', 'icon', 'color']
+          required: ['name', 'icon', 'color', 'priority']
         }
       },
       {
@@ -5316,6 +5320,7 @@ Please specify "delete this one" or "delete all" to proceed.`,
         name: args.name,
         icon: args.icon,
         color: args.color,
+        priority: args.priority || 0,
         description: args.description || '',
         createdAt: new Date(),
         updatedAt: new Date()

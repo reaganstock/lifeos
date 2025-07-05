@@ -170,6 +170,134 @@ export default function OnboardingComplete() {
     }
   };
 
+  const populateAIContextFromOnboarding = async (userId: string): Promise<void> => {
+    console.log('🧠 Populating AI context from onboarding data...');
+    
+    try {
+      // Get all onboarding data
+      const onboardingData = getUserData(userId, 'lifely_onboarding_data', null);
+      const conversationData = getUserData(userId, 'lifely_onboarding_conversation', null);
+      const voiceMemoData = getUserData(userId, 'lifely_voice_memo_recording', null);
+      const dashboardData = getUserData(userId, 'lifely_extracted_data', null);
+      const categoriesData = getUserData(userId, 'lifeStructureCategories', []);
+      // Remove unused itemsData to fix TypeScript warning
+      // const itemsData = getUserData(userId, 'lifeStructureItems', []);
+      const integrationsData = getUserData(userId, 'lifely_onboarding_integrations', []);
+      
+      let aiContext = {
+        summary: '',
+        workStyle: '',
+        workingHours: '',
+        priorities: [] as string[],
+        interests: [] as string[],
+        goals: [] as string[],
+        preferredTools: [] as string[],
+        personalInsights: [] as string[]
+      };
+      
+      // Extract from voice memo transcription (PRIMARY SOURCE)
+      if (voiceMemoData && typeof voiceMemoData === 'object' && (voiceMemoData as any).transcription) {
+        console.log('🎙️ Extracting context from voice memo transcription');
+        const transcription = (voiceMemoData as any).transcription;
+        aiContext.summary = `From voice memo: ${transcription.substring(0, 400)}${transcription.length > 400 ? '...' : ''}`;
+        
+        // Extract specific mentions from transcription
+        const lowerTranscription = transcription.toLowerCase();
+        if (lowerTranscription.includes('catholic') || lowerTranscription.includes('faith')) {
+          aiContext.personalInsights.push('Strong Catholic faith and spiritual practice');
+        }
+        if (lowerTranscription.includes('gym') || lowerTranscription.includes('fitness') || lowerTranscription.includes('workout')) {
+          aiContext.personalInsights.push('Active in fitness and gym routines');
+        }
+        if (lowerTranscription.includes('app') || lowerTranscription.includes('mobile') || lowerTranscription.includes('development')) {
+          aiContext.personalInsights.push('Mobile app development and technology focused');
+        }
+        if (lowerTranscription.includes('entrepreneur') || lowerTranscription.includes('business')) {
+          aiContext.personalInsights.push('Entrepreneurial mindset and business interests');
+        }
+      }
+      
+      // Extract from conversation data (SECONDARY SOURCE)
+      if (conversationData && typeof conversationData === 'object' && (conversationData as any).answers) {
+        console.log('💬 Extracting context from conversation answers');
+        const answers = (conversationData as any).answers.map((a: any) => a.answer).filter(Boolean).join(' ');
+        if (!aiContext.summary && answers.length > 10) {
+          aiContext.summary = `From onboarding conversation: ${answers.substring(0, 400)}${answers.length > 400 ? '...' : ''}`;
+        }
+      }
+      
+      // Extract from categories (priorities)
+      if (categoriesData.length > 0) {
+        console.log('📊 Extracting priorities from categories');
+        aiContext.priorities = categoriesData
+          .sort((a: any, b: any) => (a.priority || 0) - (b.priority || 0))
+          .map((c: any) => c.name);
+      }
+      
+      // Extract from dashboard data
+      if (dashboardData && typeof dashboardData === 'object') {
+        console.log('📋 Extracting context from dashboard data');
+        if ((dashboardData as any).workStyle) aiContext.workStyle = (dashboardData as any).workStyle;
+        if ((dashboardData as any).personalInsights) {
+          aiContext.personalInsights = [...aiContext.personalInsights, ...(dashboardData as any).personalInsights];
+        }
+      }
+      
+      // Extract from onboarding basics
+      if (onboardingData && typeof onboardingData === 'object') {
+        console.log('📝 Extracting context from basic onboarding data');
+        if ((onboardingData as any).role) {
+          aiContext.workStyle = aiContext.workStyle || `${(onboardingData as any).role} focused`;
+        }
+        if ((onboardingData as any).goals) {
+          aiContext.goals = Array.isArray((onboardingData as any).goals) ? (onboardingData as any).goals : [(onboardingData as any).goals];
+        }
+      }
+      
+      // Extract from integrations
+      if (integrationsData.length > 0) {
+        console.log('🔗 Extracting tools from integrations');
+        aiContext.preferredTools = integrationsData.map((integration: string) => {
+          // Convert integration IDs to readable names
+          switch (integration) {
+            case 'google-calendar': return 'Google Calendar';
+            case 'microsoft-calendar': return 'Microsoft Calendar';
+            case 'notion': return 'Notion';
+            case 'onenote': return 'OneNote';
+            case 'todoist': return 'Todoist';
+            case 'youtube': return 'YouTube';
+            default: return integration;
+          }
+        });
+      }
+      
+      // Set reasonable defaults
+      if (!aiContext.workStyle) {
+        aiContext.workStyle = 'Focused and goal-oriented';
+      }
+      if (!aiContext.workingHours) {
+        aiContext.workingHours = '9am-5pm (flexible)';
+      }
+      if (!aiContext.summary) {
+        aiContext.summary = 'User completed onboarding with personalized life management categories and goals';
+      }
+      
+      // Save the populated context
+      setUserData(userId, 'lifely_user_context', aiContext);
+      
+      console.log('✅ AI context populated successfully:', {
+        summaryLength: aiContext.summary.length,
+        workStyle: aiContext.workStyle,
+        prioritiesCount: aiContext.priorities.length,
+        insightsCount: aiContext.personalInsights.length,
+        toolsCount: aiContext.preferredTools.length
+      });
+      
+    } catch (error) {
+      console.error('❌ Error populating AI context:', error);
+    }
+  };
+
   const createDashboard = async () => {
     setIsCreatingDashboard(true);
     
@@ -213,6 +341,9 @@ export default function OnboardingComplete() {
         console.warn('⚠️ Failed to sync onboarding completion to Supabase, but continuing with localStorage');
       }
       
+      // CRITICAL: Auto-populate AI context with onboarding data
+      await populateAIContextFromOnboarding(user.id);
+      
       // Clean up temporary onboarding data (but keep categories and items)
       clearUserOnboardingData(user.id);
       
@@ -239,8 +370,8 @@ export default function OnboardingComplete() {
   };
 
   const getIconForCategory = (iconName?: string) => {
-    // If it's already an emoji, return it
-    if (iconName && /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/u.test(iconName)) {
+    // If it's already an emoji, return it (simplified check)
+    if (iconName && iconName.length <= 4 && iconName.match(/[\uD800-\uDBFF][\uDC00-\uDFFF]|[\u2600-\u27BF]/)) {
       return iconName;
     }
     

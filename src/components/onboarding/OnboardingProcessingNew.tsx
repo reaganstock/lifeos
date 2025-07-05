@@ -1436,6 +1436,22 @@ Return ONLY pure JSON (no markdown, no function calls):
       // Start the progression
       progressFunction(0);
       
+      // CRITICAL: Clear any existing categories/items from localStorage to prevent duplicates
+      console.log('🧹 Clearing existing onboarding data to prevent duplicates...');
+      const existingCategories = getUserData(user.id, 'lifeStructureCategories', []);
+      const existingItems = getUserData(user.id, 'lifeStructureItems', []);
+      
+      console.log('📊 Before clearing:', {
+        existingCategories: existingCategories.length,
+        existingItems: existingItems.length
+      });
+      
+      // Clear existing data to start fresh
+      setUserData(user.id, 'lifeStructureCategories', []);
+      setUserData(user.id, 'lifeStructureItems', []);
+      
+      console.log('✅ Cleared existing data - starting fresh onboarding');
+      
       // Update the prompt for function calling instead of JSON return
       let functionCallingPrompt = `You are a life management AI agent creating a comprehensive, personalized dashboard. You MUST use the available functions to actually create categories and items, not just return JSON.
 
@@ -1443,20 +1459,35 @@ USER CONTEXT:
 ${fullContext}
 
 CRITICAL INSTRUCTIONS - MUST COMPLETE ALL STEPS:
-1. CREATE CATEGORIES: Create 4-6 specific categories using createCategory function calls
+1. CREATE CATEGORIES: Create EXACTLY 4-5 broad, distinct categories using createCategory function calls
 2. CREATE GOALS: For EACH category, create 2-3 goals using createItem function calls with type="goal"
 3. CREATE ROUTINES: For EACH category, create 1-2 routines using createItem function calls with type="routine"  
 4. CREATE TODOS: For EACH category, create 2-3 todos using createItem function calls with type="todo"
 5. CREATE NOTES: For EACH category, create 1 note using createItem function calls with type="note"
 
 MANDATORY FUNCTION CALLING PATTERN:
-- Step 1: Call createCategory 4-6 times
-- Step 2: Call createItem 10-15 times for goals (type="goal")
-- Step 3: Call createItem 5-8 times for routines (type="routine")
-- Step 4: Call createItem 10-15 times for todos (type="todo")
-- Step 5: Call createItem 4-6 times for notes (type="note")
+- Step 1: Call createCategory EXACTLY 4-5 times (NO MORE!)
+- Step 2: Call createItem 8-15 times for goals (type="goal")
+- Step 3: Call createItem 4-10 times for routines (type="routine")
+- Step 4: Call createItem 8-15 times for todos (type="todo")
+- Step 5: Call createItem 4-5 times for notes (type="note")
 
-TOTAL EXPECTED: 6 categories + 35-50 items minimum
+TOTAL EXPECTED: 4-5 categories + 24-45 items
+
+CRITICAL CATEGORY RULES:
+- MAXIMUM 5 categories - NO DUPLICATES OR SIMILAR CATEGORIES
+- Each category must be DISTINCT and cover different life areas
+- DO NOT create multiple categories for the same topic (e.g., don't create both "Catholicism" AND "Catholic Faith")
+- Make categories BROAD enough to encompass related activities
+- Examples of GOOD distinct categories: "Faith & Spirituality", "Health & Fitness", "Professional Development", "Social Life", "Learning & Growth"
+
+AVOID THESE MISTAKES:
+❌ Creating "Catholicism" AND "Catholic Faith" (DUPLICATES)
+❌ Creating "Gym & Fitness" AND "Health & Fitness" (DUPLICATES)  
+❌ Creating "Mobile Apps" AND "App Development" (DUPLICATES)
+✅ Create ONE broad category like "Faith & Spirituality" that covers all religious aspects
+✅ Create ONE broad category like "Health & Fitness" that covers gym, nutrition, wellness
+✅ Create ONE broad category like "Professional Development" that covers coding, business, apps
 
 CRITICAL REQUIREMENTS:
 - Use ACTUAL FUNCTION CALLS - call createCategory and createItem functions multiple times
@@ -1466,11 +1497,15 @@ CRITICAL REQUIREMENTS:
 - For routines: Include specific time (08:00, 14:30, etc.) and duration in minutes
 - Make everything highly personalized to their mentioned interests/projects
 
-EXAMPLE PATTERN:
-createCategory({name: "Gym & Calisthenics", icon: "💪", color: "#10b981"})
-createItem({title: "🎯 Achieve 10 pull-ups", type: "goal", category: "gym-calisthenics"})
-createItem({title: "Morning workout routine", type: "routine", category: "gym-calisthenics", time: "07:00", duration: 60})
-createItem({title: "Plan next workout", type: "todo", category: "gym-calisthenics"})
+EXAMPLE PATTERN (showing broad, non-duplicate categories with priorities):
+createCategory({name: "Faith & Spirituality", icon: "🙏", color: "#8B5CF6", priority: 0})
+createCategory({name: "Health & Fitness", icon: "💪", color: "#10B981", priority: 1})
+createCategory({name: "Professional Development", icon: "💻", color: "#3B82F6", priority: 2})
+createCategory({name: "Learning & Growth", icon: "📚", color: "#F59E0B", priority: 3})
+
+createItem({title: "🎯 Deepen prayer life through daily rosary", type: "goal", category: "faith-spirituality"})
+createItem({title: "Morning prayer routine", type: "routine", category: "faith-spirituality", time: "07:00", duration: 15})
+createItem({title: "🎯 Achieve 10 pull-ups consistently", type: "goal", category: "health-fitness"})
 
 YOU MUST CREATE BOTH CATEGORIES AND ITEMS - DO NOT STOP AFTER CATEGORIES.`;
 
@@ -1523,17 +1558,29 @@ YOU MUST CREATE BOTH CATEGORIES AND ITEMS - DO NOT STOP AFTER CATEGORIES.`;
 ${fullContext}
 
 MANDATORY EXECUTION SEQUENCE:
-1. First: Call createCategory function 4-6 times (one for each life area)
+1. First: Call createCategory function EXACTLY 4-5 times (NO MORE - avoid duplicates!)
 2. Second: Call createItem function 2-3 times PER CATEGORY with type="goal"
 3. Third: Call createItem function 1-2 times PER CATEGORY with type="routine"
 4. Fourth: Call createItem function 2-3 times PER CATEGORY with type="todo"
 5. Fifth: Call createItem function 1 time PER CATEGORY with type="note"
 
+CRITICAL CATEGORY RULES FOR RETRY:
+- MAXIMUM 5 categories - NO DUPLICATES OR SIMILAR CATEGORIES
+- Each category must be DISTINCT and cover different life areas
+- DO NOT create multiple categories for the same topic
+- Make categories BROAD enough to encompass related activities
+
+AVOID DUPLICATES:
+❌ Don't create "Catholicism" AND "Catholic Faith" (DUPLICATES)
+❌ Don't create "Gym & Fitness" AND "Health & Fitness" (DUPLICATES)  
+✅ Create ONE broad category like "Faith & Spirituality"
+✅ Create ONE broad category like "Health & Fitness"
+
 CRITICAL RULES:
 - DO NOT stop after creating categories
 - MUST create items for EVERY category you create
 - Use ACTUAL function calls, not JSON responses
-- If you create 5 categories, you must create 25-40 items total
+- If you create 5 categories, you must create 20-30 items total
 - Continue until you have called createItem at least 20 times
 
 RETRY ATTEMPT ${retryCount + 1}/${maxRetries} - COMPLETE ALL STEPS!`;

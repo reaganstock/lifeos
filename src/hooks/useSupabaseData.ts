@@ -238,7 +238,7 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
       if (!existingProfile) {
         console.log('📝 Profile not found, creating profile for user:', user.email)
         
-        const { error: profileError } = await supabase
+        const { data: newProfile, error: profileError } = await supabase
           .from('profiles')
           .upsert([
             {
@@ -254,19 +254,52 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
             onConflict: 'id',
             ignoreDuplicates: false
           })
+          .select()
 
         if (profileError) {
           // Check if it's a duplicate key constraint violation (expected for existing users)
           if (profileError.code === '23505' && profileError.message?.includes('profiles_email_key')) {
             console.log('✅ Profile already exists (duplicate email) - this is expected:', user.email)
-            return true
+            
+            // Wait a moment and verify the profile exists
+            await new Promise(resolve => setTimeout(resolve, 500))
+            const { data: verifyProfile } = await supabase
+              .from('profiles')
+              .select('id')
+              .eq('id', user.id)
+              .single()
+            
+            if (verifyProfile) {
+              console.log('✅ Profile verified after duplicate error:', user.email)
+              return true
+            } else {
+              console.error('❌ Profile still not found after duplicate error')
+              return false
+            }
           } else {
             console.error('❌ Error creating profile:', profileError)
             return false
           }
         }
         
-        console.log('✅ Profile created successfully for user:', user.email)
+        console.log('✅ Profile created successfully for user:', user.email, 'Data:', newProfile)
+        
+        // Wait for a moment to ensure database consistency
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        // Verify the profile was actually created
+        const { data: verifyProfile, error: verifyError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', user.id)
+          .single()
+        
+        if (verifyError || !verifyProfile) {
+          console.error('❌ Profile verification failed:', verifyError)
+          return false
+        }
+        
+        console.log('✅ Profile verified successfully:', verifyProfile.id)
       } else {
         console.log('✅ Profile already exists for user:', user.email)
       }
