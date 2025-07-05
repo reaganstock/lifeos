@@ -399,13 +399,33 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
                   });
                 }
               } else {
-                // Agent mode: Return as pending function call for visual UI
-                pendingFunctionCall = {
-                  name: functionCall.name,
-                  args: functionCall.args
-                };
-                console.log('📋 Agent mode: Returning function call as pending for visual approval');
-                break; // Only handle the first function call
+                // Agent mode: Execute function immediately for autonomous operation
+                console.log('🤖 AGENT MODE: Executing function immediately for autonomous operation');
+                try {
+                  const result = await this.executeFunction(functionCall.name, functionCall.args);
+                  
+                  // Enhanced debugging
+                  AIDebugHelper.logFunctionCall(functionCall.name, functionCall.args, result);
+                  
+                  functionResults.push({
+                    function: functionCall.name,
+                    ...result
+                  });
+                  console.log('✅ Agent mode: Function executed successfully');
+                } catch (error) {
+                  console.error('❌ Agent mode: Function execution failed:', error);
+                  console.error('❌ Error details:', error instanceof Error ? error.stack : error);
+                  
+                  const errorResult = {
+                    function: functionCall.name,
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                    success: false
+                  };
+                  
+                  AIDebugHelper.logFunctionCall(functionCall.name, functionCall.args, errorResult);
+                  
+                  functionResults.push(errorResult);
+                }
               }
             } else {
               // Ask mode: Execute immediately like before
