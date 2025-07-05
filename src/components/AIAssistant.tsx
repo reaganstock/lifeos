@@ -133,6 +133,8 @@ interface AIAssistantProps {
   onAddItem: (item: Item) => void;
   onRefreshItems: () => void;
   currentView: string;
+  // User context for user-specific localStorage
+  userId?: string | null;
   // New props for sidebar mode
   isSidebarMode?: boolean;
   sidebarWidth?: number;
@@ -165,6 +167,8 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
   onAddItem,
   onRefreshItems,
   currentView,
+  // User context for user-specific localStorage
+  userId,
   // New props for sidebar mode
   isSidebarMode,
   sidebarWidth,
@@ -201,6 +205,12 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
       openaiRealtimeService.clearSupabaseCallbacks();
     }
   }, [hasSupabaseCallbacks]); // Only depend on boolean presence, not the object
+
+  // Configure geminiService with current user for user-specific localStorage
+  useEffect(() => {
+    console.log('👤 AIAssistant: Setting current user in geminiService:', userId ? userId.substring(0, 8) + '...' : 'null');
+    geminiService.setCurrentUser(userId || null);
+  }, [userId]);
 
   const [inputMessage, setInputMessage] = useState('');
   const [showSessions, setShowSessions] = useState(false);

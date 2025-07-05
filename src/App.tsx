@@ -985,6 +985,7 @@ function AppContent() {
             onAddItem={handleAddItem}
             onRefreshItems={user ? refreshData : () => {}}
             currentView={currentView}
+            userId={user?.id}
             isSidebarMode={true}
             sidebarWidth={aiSidebarWidth}
             isCollapsed={isAiSidebarCollapsed}

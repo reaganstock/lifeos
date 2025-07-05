@@ -1,5 +1,6 @@
 import { Item } from '../types';
 import { AIDebugHelper } from '../utils/debugHelper';
+import { getUserData, setUserData } from '../utils/userStorage';
 // Removed categories import - using dynamic categories from context
 
 // Gemini API Configuration
@@ -25,6 +26,7 @@ export interface GeminiResponse {
 export class GeminiService {
   private itemsModified: boolean = false;
   private currentItems: Item[] = []; // Store current items from Supabase or localStorage
+  private currentUserId: string | null = null; // Track current user for user-specific localStorage
   private supabaseCallbacks: {
     createItem?: (item: any) => Promise<any>;
     updateItem?: (id: string, item: any) => Promise<any>;
@@ -35,6 +37,12 @@ export class GeminiService {
     updateCategory?: (id: string, category: any) => Promise<any>;
     deleteCategory?: (id: string) => Promise<any>;
   } = {};
+
+  // Set current user for user-specific localStorage
+  setCurrentUser(userId: string | null): void {
+    this.currentUserId = userId;
+    console.log('👤 GEMINI SERVICE: Current user set to:', userId ? userId.substring(0, 8) + '...' : 'null');
+  }
 
   // Set Supabase callbacks for authenticated users
   setSupabaseCallbacks(callbacks: {
@@ -3187,17 +3195,19 @@ Please specify your preference or say "create anyway" to override.`,
   private getCurrentItems(): Item[] {
     console.log('🔍 GEMINI SERVICE: getCurrentItems() called');
     
-    // ALWAYS read from localStorage first to get the most current data
-    // This ensures AI functions see items that were just created
-    console.log('📱 GEMINI SERVICE: Reading from localStorage for most current data');
+    // ALWAYS read from user-specific localStorage to get the most current data
+    // This ensures AI functions see items that were just created for the current user
+    console.log('📱 GEMINI SERVICE: Reading from user-specific localStorage for most current data');
+    console.log('👤 GEMINI SERVICE: Current user ID:', this.currentUserId ? this.currentUserId.substring(0, 8) + '...' : 'null');
+    
     try {
-      const savedItems = localStorage.getItem('lifeStructureItems');
-      if (!savedItems) {
-        console.log('❌ GEMINI SERVICE: No localStorage data found');
+      const parsedItems = getUserData(this.currentUserId, 'lifeStructureItems', [] as any[]);
+      
+      if (parsedItems.length === 0) {
+        console.log('❌ GEMINI SERVICE: No user-specific localStorage data found');
         return [];
       }
       
-      const parsedItems = JSON.parse(savedItems);
       const items = parsedItems.map((item: any) => ({
         ...item,
         createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
@@ -3205,11 +3215,11 @@ Please specify your preference or say "create anyway" to override.`,
         dueDate: item.dueDate ? new Date(item.dueDate) : undefined,
         dateTime: item.dateTime ? new Date(item.dateTime) : undefined
       }));
-      console.log('📊 GEMINI SERVICE: Using localStorage items:', items.length);
+      console.log('📊 GEMINI SERVICE: Using user-specific localStorage items:', items.length);
       console.log('📋 Sample localStorage items:', items.slice(0, 3).map((item: Item) => `"${item.title}" (${item.type})`));
       return items;
     } catch (error) {
-      console.error('❌ Error loading items from localStorage:', error);
+      console.error('❌ Error loading items from user-specific localStorage:', error);
       return [];
     }
   }
@@ -3221,8 +3231,10 @@ Please specify your preference or say "create anyway" to override.`,
 
   private saveStoredItems(items: Item[]): void {
     try {
-      localStorage.setItem('lifeStructureItems', JSON.stringify(items));
-      console.log('💾 GEMINI SERVICE: Saved', items.length, 'items to localStorage');
+      // Use user-specific localStorage key
+      setUserData(this.currentUserId, 'lifeStructureItems', items);
+      console.log('💾 GEMINI SERVICE: Saved', items.length, 'items to user-specific localStorage');
+      console.log('👤 GEMINI SERVICE: User ID:', this.currentUserId ? this.currentUserId.substring(0, 8) + '...' : 'null');
       
       // Mark that items were modified for sync service
       this.itemsModified = true;
@@ -3237,16 +3249,17 @@ Please specify your preference or say "create anyway" to override.`,
         detail: { source: 'AI_function', items: items.length }
       }));
       
-      // Dispatch storage event (simulated localStorage change)
+      // Dispatch storage event (simulated localStorage change) with user-specific key
+      const userSpecificKey = this.currentUserId ? `lifeStructureItems_user_${this.currentUserId}` : 'lifeStructureItems';
       window.dispatchEvent(new StorageEvent('storage', {
-        key: 'lifeStructureItems',
+        key: userSpecificKey,
         newValue: JSON.stringify(items),
         storageArea: localStorage
       }));
       
       console.log('📡 GEMINI SERVICE: Dispatched all refresh events for immediate UI updates');
     } catch (error) {
-      console.error('❌ GEMINI SERVICE: Failed to save items to localStorage:', error);
+      console.error('❌ GEMINI SERVICE: Failed to save items to user-specific localStorage:', error);
     }
   }
 
