@@ -2332,17 +2332,25 @@ Please specify your preference or say "create anyway" to override.`,
       // Clean malformed JSON from Gemini before parsing
       let cleanedJson = args.itemsJson || '[]';
       
+      console.log('🔍 RAW JSON before cleaning:', JSON.stringify(cleanedJson.substring(0, 100)));
+      
       // Fix common Gemini JSON malformation patterns
       cleanedJson = cleanedJson
+        // CRITICAL: Remove escaped newlines that appear at the start of JSON strings
+        .replace(/^\\n\[/, '[')
+        .replace(/^\\n\{/, '{')
         // Remove escaped newlines and other common escape sequences
         .replace(/\\n/g, ' ')
         .replace(/\\r/g, ' ')
         .replace(/\\t/g, ' ')
         // Fix double backslashes
         .replace(/\\\\/g, '\\')
-        // Fix malformed escaped quotes
+        // Fix malformed escaped quotes that are not part of JSON syntax
         .replace(/\\"/g, '"')
+        // Remove stray backslashes that appear before valid JSON
+        .replace(/^\\+/, '')
         // Remove control characters that break JSON parsing
+        // eslint-disable-next-line no-control-regex
         .replace(/[\u0000-\u001F\u007F-\u009F]/g, '')
         // Fix duplicate key patterns like "type": "note": "note" -> "type": "note"
         .replace(/"(\w+)":\s*"([^"]+)":\s*"[^"]*"/g, '"$1": "$2"')
@@ -2356,11 +2364,49 @@ Please specify your preference or say "create anyway" to override.`,
         .replace(/\s+/g, ' ')
         .trim();
       
+      // Additional validation: ensure JSON starts with [ or {
+      if (!cleanedJson.startsWith('[') && !cleanedJson.startsWith('{')) {
+        console.log('⚠️ JSON does not start with [ or {, attempting to find valid JSON...');
+        const jsonMatch = cleanedJson.match(/[\[{].*[\]}]/);
+        if (jsonMatch) {
+          cleanedJson = jsonMatch[0];
+          console.log('✅ Found valid JSON substring');
+        } else {
+          console.log('❌ No valid JSON found, using empty array');
+          cleanedJson = '[]';
+        }
+      }
+      
       console.log('🧹 Cleaned JSON:', cleanedJson);
       
-      // Parse the cleaned JSON string
-      const itemsData = JSON.parse(cleanedJson);
-      console.log('📦 Parsed items:', itemsData);
+      // Parse the cleaned JSON string with enhanced error handling
+      let itemsData;
+      try {
+        itemsData = JSON.parse(cleanedJson);
+        console.log('📦 Parsed items:', itemsData);
+      } catch (parseError) {
+        console.error('❌ JSON parsing failed even after cleaning:', parseError);
+        console.error('🔍 Failed JSON string:', cleanedJson);
+        
+        // Try one more aggressive cleaning approach
+        let lastResortJson = cleanedJson
+          .replace(/^[^[\{]*/, '') // Remove everything before first [ or {
+          .replace(/[^}\]]*$/, '') // Remove everything after last } or ]
+          .replace(/(?<!\\)"/g, '"') // Fix unescaped quotes
+          .replace(/\\+"/g, '"'); // Fix over-escaped quotes
+        
+        console.log('🔧 Attempting last resort JSON cleaning:', lastResortJson);
+        
+        try {
+          itemsData = JSON.parse(lastResortJson);
+          console.log('✅ Last resort parsing succeeded!');
+        } catch (finalError) {
+          console.error('❌ Final JSON parsing attempt failed:', finalError);
+          // Return empty array as fallback
+          itemsData = [];
+          console.log('⚠️ Using empty array as fallback');
+        }
+      }
       
       for (const itemData of itemsData) {
         const newItem: Item = {
@@ -3205,10 +3251,10 @@ Please specify your preference or say "create anyway" to override.`,
   }
 
   private generateUniqueId(): string {
-    return `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
   }
 
-  private parseDateTime(dateStr: string, timeStr?: string): string | undefined {
+  private parseDateTime(dateStr: string, timeStr?: string): string | undefined { // eslint-disable-line @typescript-eslint/no-unused-vars
     if (!dateStr) return undefined;
     
     const today = new Date();
@@ -3310,6 +3356,7 @@ Please specify your preference or say "create anyway" to override.`,
         // Fix malformed escaped quotes
         .replace(/\\"/g, '"')
         // Remove control characters that break JSON parsing
+        // eslint-disable-next-line no-control-regex
         .replace(/[\u0000-\u001F\u007F-\u009F]/g, '')
         // Fix duplicate key patterns like "type": "note": "note" -> "type": "note"
         .replace(/"(\w+)":\s*"([^"]+)":\s*"[^"]*"/g, '"$1": "$2"')
@@ -3593,7 +3640,7 @@ Please specify your preference or say "create anyway" to override.`,
     return this.buildRoutineFromCharacteristics(personType, characteristics, routineType);
   }
 
-  private buildRoutineFromCharacteristics(personType: string, characteristics: string[], routineType: string): any[] {
+  private buildRoutineFromCharacteristics(personType: string, characteristics: string[], routineType: string): any[] { // eslint-disable-line @typescript-eslint/no-unused-vars
     const routine = [];
     
     // Base wake up time based on characteristics
@@ -3974,7 +4021,7 @@ Please specify your preference or say "create anyway" to override.`,
     }
   }
 
-  private generateDaySchedule(date: string, routines: Item[], goals: Item[], workingHours: string, intensity: string): any[] {
+  private generateDaySchedule(date: string, routines: Item[], goals: Item[], workingHours: string, intensity: string): any[] { // eslint-disable-line @typescript-eslint/no-unused-vars
     const schedule = [];
     
     // Morning routine (6:00-8:00)
@@ -4150,7 +4197,7 @@ Please specify your preference or say "create anyway" to override.`,
     }
   }
 
-  private extractLearningTopics(notes: Item[], focusAreas?: string): any[] {
+  private extractLearningTopics(notes: Item[], focusAreas?: string): any[] { // eslint-disable-line @typescript-eslint/no-unused-vars
     const topics = [];
     
     for (const note of notes) {
