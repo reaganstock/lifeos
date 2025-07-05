@@ -1299,14 +1299,14 @@ START BY CREATING CATEGORIES, then create items for each category.`;
       
       let fallbackCategories = [];
       
-      // Create context-aware categories
+      // Create context-aware categories with ACTUAL EMOJIS
       if (hasBusinessContext) {
         fallbackCategories.push({ 
           id: 'business-growth', 
           name: hasNotionContext ? 'Business Operations & Planning' : 'Business Development', 
           purpose: 'Scale business activities and achieve growth goals', 
           priority: 9, 
-          icon: 'briefcase', 
+          icon: '💼', 
           color: 'blue' 
         });
       }
@@ -1316,7 +1316,7 @@ START BY CREATING CATEGORIES, then create items for each category.`;
           name: 'Development & Engineering', 
           purpose: 'Build, code, and ship software projects', 
           priority: 8, 
-          icon: 'computer', 
+          icon: '💻', 
           color: 'green' 
         });
       }
@@ -1326,7 +1326,7 @@ START BY CREATING CATEGORIES, then create items for each category.`;
           name: 'Content Creation & Strategy', 
           purpose: 'Create valuable content and grow audience', 
           priority: 7, 
-          icon: 'video', 
+          icon: '📹', 
           color: 'red' 
         });
       }
@@ -1336,7 +1336,7 @@ START BY CREATING CATEGORIES, then create items for each category.`;
           name: 'Design & Creative Work', 
           purpose: 'Create beautiful and functional designs', 
           priority: 6, 
-          icon: 'palette', 
+          icon: '🎨', 
           color: 'purple' 
         });
       }
@@ -1346,7 +1346,7 @@ START BY CREATING CATEGORIES, then create items for each category.`;
           name: 'Academic Excellence', 
           purpose: 'Excel in studies and achieve academic goals', 
           priority: 9, 
-          icon: 'graduation-cap', 
+          icon: '🎓', 
           color: 'indigo' 
         });
       }
@@ -1356,7 +1356,7 @@ START BY CREATING CATEGORIES, then create items for each category.`;
           name: 'Fitness & Health', 
           purpose: 'Maintain physical fitness and overall wellbeing', 
           priority: 8, 
-          icon: 'dumbbell', 
+          icon: '💪', 
           color: 'orange' 
         });
       }
@@ -1366,7 +1366,7 @@ START BY CREATING CATEGORIES, then create items for each category.`;
           name: 'Financial Management', 
           purpose: 'Manage finances and build wealth', 
           priority: 7, 
-          icon: 'dollar-sign', 
+          icon: '💰', 
           color: 'green' 
         });
       }
@@ -1378,7 +1378,7 @@ START BY CREATING CATEGORIES, then create items for each category.`;
           name: hasNotionContext ? 'Notion Workspace & Systems' : 'Productivity & Organization', 
           purpose: 'Optimize workflows and organize life effectively', 
           priority: 6, 
-          icon: 'settings', 
+          icon: '⚡', 
           color: 'gray' 
         });
       }
@@ -1389,17 +1389,17 @@ START BY CREATING CATEGORIES, then create items for each category.`;
         name: 'Personal Growth & Development', 
         purpose: 'Continuous learning and self-improvement', 
         priority: 5, 
-        icon: 'brain', 
+        icon: '🧠', 
         color: 'pink' 
       });
       
       // If still no specific context, use general productive categories
       if (fallbackCategories.length <= 1) {
         fallbackCategories = [
-          { id: 'goal-achievement', name: 'Goal Achievement', purpose: 'Set and accomplish meaningful goals', priority: 9, icon: 'target', color: 'blue' },
-          { id: 'skill-building', name: 'Skill Development', purpose: 'Learn new skills and grow professionally', priority: 8, icon: 'book', color: 'green' },
-          { id: 'life-organization', name: 'Life Organization', purpose: 'Create structure and systems for daily life', priority: 7, icon: 'calendar', color: 'purple' },
-          { id: 'personal-wellness', name: 'Personal Wellness', purpose: 'Maintain physical and mental wellbeing', priority: 6, icon: 'heart', color: 'pink' }
+          { id: 'goal-achievement', name: 'Goal Achievement', purpose: 'Set and accomplish meaningful goals', priority: 9, icon: '🎯', color: 'blue' },
+          { id: 'skill-building', name: 'Skill Development', purpose: 'Learn new skills and grow professionally', priority: 8, icon: '📚', color: 'green' },
+          { id: 'life-organization', name: 'Life Organization', purpose: 'Create structure and systems for daily life', priority: 7, icon: '📅', color: 'purple' },
+          { id: 'personal-wellness', name: 'Personal Wellness', purpose: 'Maintain physical and mental wellbeing', priority: 6, icon: '❤️', color: 'pink' }
         ];
       }
       

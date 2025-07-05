@@ -159,6 +159,17 @@ export default function OnboardingComplete() {
       
       // Mark complete in localStorage (for immediate UI updates)
       setUserData(user.id, 'lifely_onboarding_completed', true);
+      setUserData(user.id, 'lifely_onboarding_progress', '/dashboard');
+      
+      // DEBUGGING: Force set both formats to ensure compatibility
+      localStorage.setItem(`lifely_onboarding_completed_user_${user.id}`, 'true');
+      localStorage.setItem('lifely_onboarding_completed', 'true'); // Legacy format too
+      
+      console.log('🔧 FORCED COMPLETION FLAGS SET:', {
+        userSpecific: localStorage.getItem(`lifely_onboarding_completed_user_${user.id}`),
+        legacy: localStorage.getItem('lifely_onboarding_completed'),
+        userStorageResult: getUserData(user.id, 'lifely_onboarding_completed', false)
+      });
       
       // Mark complete in Supabase (for cross-device sync and data consistency)
       const supabaseSuccess = await markOnboardingCompleteInSupabase();
