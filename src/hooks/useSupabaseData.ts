@@ -256,8 +256,14 @@ export function useSupabaseData(): SupabaseDataState & SupabaseDataActions {
           })
 
         if (profileError) {
-          console.error('❌ Error creating profile:', profileError)
-          return false
+          // Check if it's a duplicate key constraint violation (expected for existing users)
+          if (profileError.code === '23505' && profileError.message?.includes('profiles_email_key')) {
+            console.log('✅ Profile already exists (duplicate email) - this is expected:', user.email)
+            return true
+          } else {
+            console.error('❌ Error creating profile:', profileError)
+            return false
+          }
         }
         
         console.log('✅ Profile created successfully for user:', user.email)

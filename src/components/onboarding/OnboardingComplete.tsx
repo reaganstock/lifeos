@@ -33,6 +33,16 @@ export default function OnboardingComplete() {
     const itemsData = getUserData(user.id, 'lifeStructureItems', []);
     const extractedDataRaw = getUserData(user.id, 'lifely_extracted_data', null);
     
+    // ENHANCED DEBUGGING: Log exactly what we're getting
+    console.log('🔍 ONBOARDING COMPLETE DEBUG - Raw data loaded:');
+    console.log('   User ID:', user.id);
+    console.log('   User email:', user.email);
+    console.log('   Categories data type:', typeof categoriesData, 'length:', categoriesData?.length);
+    console.log('   Categories preview:', categoriesData?.slice(0, 2));
+    console.log('   Items data type:', typeof itemsData, 'length:', itemsData?.length);
+    console.log('   Items preview:', itemsData?.slice(0, 2));
+    console.log('   Extracted data:', extractedDataRaw);
+    
     // CRITICAL FIX: Show completion screen if we have categories, even if items are missing
     // Items might be created in a separate step or sync later
     if (categoriesData.length > 0) {
@@ -100,7 +110,10 @@ export default function OnboardingComplete() {
         events: uniqueItems.filter((i: any) => i.type === 'event').length,
         notes: uniqueItems.filter((i: any) => i.type === 'note').length
       });
+      
+      console.log('🔧 CRITICAL DEBUG: About to setExtractedData with:', dashboardData);
       setExtractedData(dashboardData);
+      console.log('✅ CRITICAL DEBUG: setExtractedData called successfully');
     } else {
       console.error('❌ OnboardingComplete: No dashboard data found for user:', user.email);
       console.error('🔧 DEBUGGING: Categories data:', categoriesData);
@@ -278,7 +291,18 @@ export default function OnboardingComplete() {
     return colorMap[color || ''] || 'from-gray-500 to-gray-600';
   };
 
+  // ENHANCED DEBUGGING: Log render state
+  console.log('🖥️ ONBOARDING COMPLETE RENDER DEBUG:');
+  console.log('   extractedData exists:', !!extractedData);
+  console.log('   extractedData preview:', extractedData ? {
+    categories: extractedData.categories?.length || 0,
+    goals: extractedData.goals?.length || 0,
+    routines: extractedData.routines?.length || 0,
+    todos: extractedData.todos?.length || 0
+  } : 'null');
+
   if (!extractedData) {
+    console.log('🔄 ONBOARDING COMPLETE: Still loading data, showing spinner...');
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 dark:from-gray-900 dark:to-indigo-900 flex items-center justify-center">
         <div className="text-center">
