@@ -376,6 +376,23 @@ return comprehensiveDashboard;`
       // Execute single agent call for everything
       const categoriesResult = await createCategories(fullContext);
       
+      // CRITICAL DEBUGGING: Validate categoriesResult before using it
+      console.log('🔧 CATEGORIES RESULT VALIDATION:');
+      console.log('   categoriesResult type:', typeof categoriesResult);
+      console.log('   categoriesResult.categories type:', typeof categoriesResult?.categories);
+      console.log('   categoriesResult.categories length:', Array.isArray(categoriesResult?.categories) ? categoriesResult.categories.length : 'not array');
+      
+      if (categoriesResult?.categories && Array.isArray(categoriesResult.categories)) {
+        console.log('   Sample category validation:', categoriesResult.categories.slice(0, 2).map(cat => ({
+          id: cat?.id,
+          name: cat?.name,
+          nameExists: !!cat?.name,
+          nameType: typeof cat?.name
+        })));
+      } else {
+        console.error('❌ CRITICAL: categoriesResult.categories is invalid!', categoriesResult?.categories);
+      }
+      
       // Update function as completed
       setFunctionCalls(prev => prev.map(fc => ({ ...fc, status: 'completed', result: categoriesResult })));
 
@@ -475,14 +492,46 @@ return comprehensiveDashboard;`
         if (cat.icon) usedEmojis.add(cat.icon);
       });
       
+      // CRITICAL DEBUGGING: Validate dashboardData structure before processing
+      console.log('🔧 DASHBOARD DATA VALIDATION:');
+      console.log('   dashboardData type:', typeof dashboardData);
+      console.log('   dashboardData.categories type:', typeof dashboardData.categories);
+      console.log('   dashboardData.categories length:', Array.isArray(dashboardData.categories) ? dashboardData.categories.length : 'not array');
+      
+      if (dashboardData.categories && Array.isArray(dashboardData.categories)) {
+        console.log('   Sample categories:', dashboardData.categories.slice(0, 3).map(cat => ({
+          id: cat?.id,
+          name: cat?.name,
+          purpose: cat?.purpose,
+          hasNameProperty: cat?.hasOwnProperty('name'),
+          nameType: typeof cat?.name
+        })));
+      } else {
+        console.error('❌ CRITICAL ERROR: dashboardData.categories is not an array!', dashboardData.categories);
+        throw new Error('Dashboard categories data is invalid - expected array but got: ' + typeof dashboardData.categories);
+      }
+      
       for (const category of dashboardData.categories) {
-        // Check if category already exists (by name)
-        const existingCategory = existingCategories.find((c: any) => c.name.toLowerCase() === category.name.toLowerCase());
+        // CRITICAL DEBUGGING: Log each category before processing
+        console.log('🔧 Processing category:', {
+          id: category?.id,
+          name: category?.name,
+          nameType: typeof category?.name,
+          hasName: category?.hasOwnProperty('name'),
+          fullCategory: category
+        });
+        
+        // Check if category already exists (by name) with safe name checking
+        const existingCategory = existingCategories.find((c: any) => 
+          c?.name && category?.name && c.name.toLowerCase() === category.name.toLowerCase()
+        );
         
         if (existingCategory) {
           // Use existing category
           categoryMapping.set(category.id, (existingCategory as any).id);
-          categoryMapping.set(category.name.toLowerCase(), (existingCategory as any).id);
+          if (category?.name) {
+            categoryMapping.set(category.name.toLowerCase(), (existingCategory as any).id);
+          }
           console.log('✅ Using existing category:', category.name, 'with ID:', (existingCategory as any).id);
         } else {
           // Create new category with timestamp ID (like hybrid sync pattern)
@@ -638,6 +687,12 @@ return comprehensiveDashboard;`
           // CRITICAL FIX: Use sequential priorities (0,1,2,3...) instead of AI-generated random numbers
           const logicalPriority = existingCategories.length + newCategories.length;
           
+          // CRITICAL FIX: Validate category data before creation
+          if (!category?.name) {
+            console.warn('⚠️ Skipping category with missing name:', category);
+            continue;
+          }
+          
           const newCategory = {
             id: newCategoryId,
             name: category.name,
@@ -652,7 +707,9 @@ return comprehensiveDashboard;`
           
           newCategories.push(newCategory);
           categoryMapping.set(category.id, newCategoryId);
-          categoryMapping.set(category.name.toLowerCase(), newCategoryId);
+          if (category.name) {
+            categoryMapping.set(category.name.toLowerCase(), newCategoryId);
+          }
           console.log('✅ Created new category:', category.name, 'with ID:', newCategoryId);
         }
       }
@@ -666,15 +723,28 @@ return comprehensiveDashboard;`
       const existingItems = getUserData(user.id, 'lifeStructureItems', []);
       const newItems: any[] = [];
       
-      // Helper function to find category ID
+      // Helper function to find category ID with safe string handling
       const findCategoryId = (categoryRef: string) => {
+        if (!categoryRef || typeof categoryRef !== 'string') {
+          console.warn('⚠️ findCategoryId called with invalid categoryRef:', categoryRef);
+          return null;
+        }
+        
         return categoryMapping.get(categoryRef) || 
                categoryMapping.get(categoryRef.toLowerCase()) ||
-               allCategories.find((c: any) => c.name.toLowerCase().includes(categoryRef.toLowerCase()))?.id;
+               allCategories.find((c: any) => 
+                 c?.name && typeof c.name === 'string' && 
+                 c.name.toLowerCase().includes(categoryRef.toLowerCase())
+               )?.id;
       };
 
-      // Create todos
+      // Create todos with validation
       dashboardData.todos?.forEach(todo => {
+        if (!todo?.title || !todo?.category) {
+          console.warn('⚠️ Skipping todo with missing title or category:', todo);
+          return;
+        }
+        
         const categoryId = findCategoryId(todo.category);
         if (categoryId) {
           const itemId = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -698,8 +768,13 @@ return comprehensiveDashboard;`
         }
       });
       
-      // Create events  
+      // Create events with validation
       dashboardData.events?.forEach(event => {
+        if (!event?.title || !event?.category) {
+          console.warn('⚠️ Skipping event with missing title or category:', event);
+          return;
+        }
+        
         const categoryId = findCategoryId(event.category);
         if (categoryId) {
           const itemId = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -724,8 +799,13 @@ return comprehensiveDashboard;`
         }
       });
       
-      // Create notes
+      // Create notes with validation
       dashboardData.notes?.forEach(note => {
+        if (!note?.title || !note?.category) {
+          console.warn('⚠️ Skipping note with missing title or category:', note);
+          return;
+        }
+        
         const categoryId = findCategoryId(note.category);
         if (categoryId) {
           const itemId = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -749,8 +829,13 @@ return comprehensiveDashboard;`
         }
       });
       
-      // Create goals
+      // Create goals with validation
       dashboardData.goals?.forEach(goal => {
+        if (!goal?.title || !goal?.category) {
+          console.warn('⚠️ Skipping goal with missing title or category:', goal);
+          return;
+        }
+        
         const categoryId = findCategoryId(goal.category);
         if (categoryId) {
           const itemId = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -775,8 +860,13 @@ return comprehensiveDashboard;`
         }
       });
       
-      // Create routines
+      // Create routines with validation
       dashboardData.routines?.forEach(routine => {
+        if (!routine?.title || !routine?.category) {
+          console.warn('⚠️ Skipping routine with missing title or category:', routine);
+          return;
+        }
+        
         const categoryId = findCategoryId(routine.category);
         if (categoryId) {
           const itemId = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -1284,9 +1374,20 @@ START BY CREATING CATEGORIES, then create items for each category.`;
       console.log('🤖 Function calling response:', result.response);
       console.log('🔧 Function results:', result.functionResults);
       
-      // The function calls will have created the actual items, so we need to get them from localStorage
+      // Check if function calls actually created categories and items
       const createdCategories = getUserData(user.id, 'lifeStructureCategories', []);
       const createdItems = getUserData(user.id, 'lifeStructureItems', []);
+      
+      console.log('🔧 POST-FUNCTION-CALL CHECK:');
+      console.log('   Categories in localStorage:', createdCategories.length);
+      console.log('   Items in localStorage:', createdItems.length);
+      console.log('   Function results length:', result.functionResults?.length || 0);
+      
+      // If function calling didn't create categories, use fallback immediately
+      if (createdCategories.length === 0) {
+        console.warn('⚠️ Function calling failed to create categories, using fallback');
+        throw new Error('Function calling failed - will use fallback');
+      }
       
       // Organize the created items by type
       const agentResult = {
