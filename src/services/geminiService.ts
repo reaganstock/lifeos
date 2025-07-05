@@ -3071,8 +3071,17 @@ Please specify your preference or say "create anyway" to override.`,
 
   private saveStoredItems(items: Item[]): void {
     try {
+      // Save to global localStorage
       localStorage.setItem('lifeStructureItems', JSON.stringify(items));
       console.log('💾 GEMINI SERVICE: Saved', items.length, 'items to localStorage');
+      
+      // CRITICAL FIX: Also save to user-specific localStorage for onboarding completion
+      if (window && (window as any).userStorageUtils && (window as any).currentUser?.id) {
+        const { setUserData } = (window as any).userStorageUtils;
+        const userId = (window as any).currentUser.id;
+        setUserData(userId, 'lifeStructureItems', items);
+        console.log('💾 ALSO saved', items.length, 'items to user-specific storage for onboarding');
+      }
       
       // Mark that items were modified for sync service
       this.itemsModified = true;
@@ -5681,8 +5690,17 @@ Please specify "delete this one" or "delete all" to proceed.`,
 
   private saveStoredCategories(categories: any[]): void {
     try {
+      // Save to global localStorage
       localStorage.setItem('lifeStructureCategories', JSON.stringify(categories));
       console.log('💾 Saved', categories.length, 'categories to localStorage');
+      
+      // CRITICAL FIX: Also save to user-specific localStorage for onboarding completion
+      if (window && (window as any).userStorageUtils && (window as any).currentUser?.id) {
+        const { setUserData } = (window as any).userStorageUtils;
+        const userId = (window as any).currentUser.id;
+        setUserData(userId, 'lifeStructureCategories', categories);
+        console.log('💾 ALSO saved', categories.length, 'categories to user-specific storage for onboarding');
+      }
       
       // Dispatch custom event for real-time UI updates
       window.dispatchEvent(new CustomEvent('categoriesModified', {

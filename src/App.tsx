@@ -248,12 +248,21 @@ function AppContent() {
       setLocalCategories(formattedCategories);
       
       console.log(`📊 Loaded ${formattedItems.length} items and ${formattedCategories.length} categories for user ${user.email}`);
+      
+      // CRITICAL FIX: Expose user data utilities to window for geminiService access
+      (window as any).currentUser = user;
+      (window as any).userStorageUtils = { getUserData, setUserData };
+      console.log('🔧 Exposed user data utilities to window for geminiService');
     } else {
       // Clear data when no user
       setLocalItems([]);
       setLocalCategories([]);
       setIsOnboardingCompleted(false);
       setOnboardingProgress('/onboarding');
+      
+      // Clear window exposure when no user
+      (window as any).currentUser = null;
+      (window as any).userStorageUtils = null;
     }
   }, [user?.id, user?.email]);
 
