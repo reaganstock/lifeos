@@ -205,6 +205,9 @@ export default function OnboardingComplete() {
       
       console.log('🎉 Dashboard creation complete! Navigating to main app...');
       
+      // Force a data refresh event to ensure categories are loaded
+      window.dispatchEvent(new CustomEvent('forceDataRefresh'));
+      
       // Navigate to main app after a brief delay to show success
       setTimeout(() => {
         navigate('/dashboard');

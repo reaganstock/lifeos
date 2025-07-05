@@ -80,7 +80,7 @@ export const clearAllUserData = (userId: string | null): void => {
 // Clean up onboarding data for specific user
 export const clearUserOnboardingData = (userId: string | null): void => {
   const onboardingKeys = [
-    'lifely_onboarding_completed',
+    // 'lifely_onboarding_completed', // CRITICAL FIX: Don't clear completion status - needed for refresh persistence
     'lifely_onboarding_progress',
     'lifely_onboarding_step',
     'lifely_onboarding_data',
