@@ -1342,6 +1342,109 @@ Return ONLY pure JSON (no markdown, no function calls):
   };
 
   // Main orchestration function using Gemini Agent Mode
+  // CRITICAL: Content quality validation to prevent generic AI output
+  const validateGeneratedContent = (categories: any[], items: any[]) => {
+    const issues: string[] = [];
+    let qualityScore = 100;
+    
+    // 1. Check category count (should be 4-5, max 6)
+    if (categories.length > 6) {
+      issues.push(`Too many categories: ${categories.length} (max 6 allowed)`);
+      qualityScore -= 30;
+    }
+    
+    // 2. Detect duplicate categories
+    const categoryNames = categories.map(c => c.name?.toLowerCase() || '');
+    const duplicateKeywords = ['faith', 'spiritual', 'catholic', 'health', 'fitness', 'entrepreneur', 'business', 'academic', 'learning', 'study'];
+    
+    for (const keyword of duplicateKeywords) {
+      const matches = categoryNames.filter(name => name.includes(keyword));
+      if (matches.length > 1) {
+        issues.push(`Duplicate category detected for "${keyword}": ${matches.join(', ')}`);
+        qualityScore -= 25;
+      }
+    }
+    
+    // 3. Check for generic goals
+    const goals = items.filter(item => item.type === 'goal');
+    const genericGoalPatterns = [
+      /improve.*system/i, /master.*workflow/i, /enhance.*system/i, 
+      /optimize.*workflow/i, /develop.*system/i, /build.*workflow/i,
+      /^improve /i, /^master /i, /^enhance /i, /^optimize /i
+    ];
+    
+    for (const goal of goals) {
+      const title = goal.title || '';
+      if (genericGoalPatterns.some(pattern => pattern.test(title))) {
+        issues.push(`Generic goal detected: "${title}"`);
+        qualityScore -= 15;
+      }
+    }
+    
+    // 4. Check for empty routines
+    const routines = items.filter(item => item.type === 'routine');
+    for (const routine of routines) {
+      const steps = routine.routineSteps || routine.text || '';
+      if (!steps || steps.length < 20 || !steps.includes('1.') || steps.includes('check-in')) {
+        issues.push(`Empty or vague routine: "${routine.title}" - needs detailed steps`);
+        qualityScore -= 15;
+      }
+    }
+    
+    // 5. Check for todos without dates
+    const todos = items.filter(item => item.type === 'todo');
+    for (const todo of todos) {
+      const title = todo.title || '';
+      const hasDue = title.includes('Due:') || title.includes('by ') || title.includes('(Due') || todo.dateTime;
+      if (!hasDue) {
+        issues.push(`Todo missing date: "${title}"`);
+        qualityScore -= 10;
+      }
+    }
+    
+    // 6. Check for generic notes
+    const notes = items.filter(item => item.type === 'note');
+    const genericNotePatterns = [
+      /best practices/i, /key principles/i, /managing.*innovation/i, 
+      /principles.*managing/i, /best.*practice/i
+    ];
+    
+    for (const note of notes) {
+      const text = note.text || note.title || '';
+      if (genericNotePatterns.some(pattern => pattern.test(text)) || text.length < 50) {
+        issues.push(`Generic or empty note detected: "${note.title}"`);
+        qualityScore -= 10;
+      }
+    }
+    
+    // 7. Check for variety in routine durations
+    const routineDurations = routines.map(r => r.duration).filter(d => d);
+    const uniqueDurations = new Set(routineDurations);
+    if (routineDurations.length > 2 && uniqueDurations.size === 1) {
+      issues.push(`All routines have same duration (${routineDurations[0]} min) - needs variety`);
+      qualityScore -= 15;
+    }
+    
+    console.log('🔍 Content Quality Assessment:', {
+      categoriesCount: categories.length,
+      goalsCount: goals.length,
+      routinesCount: routines.length,
+      todosCount: todos.length,
+      notesCount: notes.length,
+      qualityScore,
+      issuesFound: issues.length
+    });
+    
+    const isValid = qualityScore >= 60 && issues.length < 5;
+    
+    return {
+      isValid,
+      qualityScore,
+      issues,
+      summary: `Quality Score: ${qualityScore}/100, Issues: ${issues.length}`
+    };
+  };
+
   const createCategories = async (fullContext: string) => {
     try {
       if (!user?.id) {
@@ -1607,8 +1710,62 @@ BEGIN FUNCTION CALLING NOW.`;
           
           // Success if we have both categories and items, or at least categories on final retry
           if (postCallCategories.length > 0 && (postCallItems.length > 0 || retryCount === maxRetries - 1)) {
-            console.log('✅ Function calling succeeded with data creation');
-            break;
+            
+            // CRITICAL: Add content quality validation to prevent generic AI output
+            const validationResult = validateGeneratedContent(postCallCategories, postCallItems);
+            
+            if (validationResult.isValid || retryCount === maxRetries - 1) {
+              if (validationResult.isValid) {
+                console.log('✅ Function calling succeeded with high-quality content');
+              } else {
+                console.warn('⚠️ Content quality issues detected but using final attempt:', validationResult.issues);
+              }
+              break;
+            } else {
+              console.warn(`❌ Content quality validation failed (attempt ${retryCount + 1}):`, validationResult.issues);
+              
+              // Clear the generated data to force regeneration
+              setUserData(user.id, 'lifeStructureCategories', []);
+              setUserData(user.id, 'lifeStructureItems', []);
+              
+              // Create enhanced retry prompt with specific validation feedback
+              const validationFeedback = validationResult.issues.join('\n- ');
+              functionCallingPrompt = `URGENT QUALITY ISSUES DETECTED - RETRY REQUIRED
+
+PREVIOUS ATTEMPT FAILED VALIDATION with ${validationResult.issues.length} critical issues:
+- ${validationFeedback}
+
+Quality Score: ${validationResult.qualityScore}/100 (minimum 60 required)
+
+YOU MUST FIX THESE SPECIFIC ISSUES:
+
+${fullContext}
+
+MANDATORY QUALITY FIXES:
+1. CREATE ONLY 4-5 CATEGORIES (not ${postCallCategories.length}) - ELIMINATE DUPLICATES
+2. NO GENERIC GOALS - every goal must be specific, measurable, with dates
+3. ALL ROUTINES need detailed step-by-step instructions (not just "check-in")
+4. ALL TODOS must include specific due dates ("Due: [date]")
+5. ALL NOTES must contain useful templates/checklists (not "best practices")
+
+CRITICAL EXECUTION SEQUENCE - FIX PREVIOUS ERRORS:
+1. First: Call createCategory function EXACTLY 4-5 times (avoid duplicates like faith/spiritual/catholic)
+2. Second: Call createItem with type="goal" - NO "improve systems" or "master workflow" goals
+3. Third: Call createItem with type="routine" - include detailed routineSteps with numbered steps
+4. Fourth: Call createItem with type="todo" - every todo needs "Due: [specific date]"
+5. Fifth: Call createItem with type="note" - provide actual useful content, not generic advice
+
+BANNED PHRASES (will cause validation failure):
+- Goals: "improve", "master", "enhance", "optimize" + "systems/workflow"
+- Routines: "check-in", "review", generic descriptions
+- Notes: "best practices", "key principles", "managing innovation"
+- Todos: missing dates, vague actions
+
+RETRY NOW WITH HIGH-QUALITY CONTENT ONLY.`;
+              
+              retryCount++;
+              continue; // Skip to next retry
+            }
           } else {
             console.warn(`⚠️ Function calling attempt ${retryCount + 1} incomplete - retrying...`);
             retryCount++;
