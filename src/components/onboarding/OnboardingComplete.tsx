@@ -33,7 +33,9 @@ export default function OnboardingComplete() {
     const itemsData = getUserData(user.id, 'lifeStructureItems', []);
     const extractedDataRaw = getUserData(user.id, 'lifely_extracted_data', null);
     
-    if (categoriesData.length > 0 && itemsData.length > 0) {
+    // CRITICAL FIX: Show completion screen if we have categories, even if items are missing
+    // Items might be created in a separate step or sync later
+    if (categoriesData.length > 0) {
       const categories = categoriesData;
       const items = itemsData;
       
@@ -53,14 +55,14 @@ export default function OnboardingComplete() {
         return acc;
       }, []);
       
-      // Remove duplicate items
-      const uniqueItems = items.reduce((acc: any[], item: any) => {
+      // Remove duplicate items (handle empty items array)
+      const uniqueItems = items && items.length > 0 ? items.reduce((acc: any[], item: any) => {
         const existing = acc.find(i => i.title === item.title && i.type === item.type);
         if (!existing) {
           acc.push(item);
         }
         return acc;
-      }, []);
+      }, []) : [];
       
       // Also get extracted insights if available
       let workStyle = "Focused and goal-oriented";

@@ -1344,22 +1344,37 @@ Return ONLY pure JSON (no markdown, no function calls):
 USER CONTEXT:
 ${fullContext}
 
-INSTRUCTIONS:
-1. First analyze the context to understand the user's specific needs, projects, and interests
-2. Create 4-6 specific categories using createCategory function calls
-3. For each category, create 2-3 goals using createItem function calls  
-4. For each category, create 1-2 routines using createItem function calls
-5. Create useful todos and notes using createItem function calls
+CRITICAL INSTRUCTIONS - MUST COMPLETE ALL STEPS:
+1. CREATE CATEGORIES: Create 4-6 specific categories using createCategory function calls
+2. CREATE GOALS: For EACH category, create 2-3 goals using createItem function calls with type="goal"
+3. CREATE ROUTINES: For EACH category, create 1-2 routines using createItem function calls with type="routine"  
+4. CREATE TODOS: For EACH category, create 2-3 todos using createItem function calls with type="todo"
+5. CREATE NOTES: For EACH category, create 1 note using createItem function calls with type="note"
+
+MANDATORY FUNCTION CALLING PATTERN:
+- Step 1: Call createCategory 4-6 times
+- Step 2: Call createItem 10-15 times for goals (type="goal")
+- Step 3: Call createItem 5-8 times for routines (type="routine")
+- Step 4: Call createItem 10-15 times for todos (type="todo")
+- Step 5: Call createItem 4-6 times for notes (type="note")
+
+TOTAL EXPECTED: 6 categories + 35-50 items minimum
 
 CRITICAL REQUIREMENTS:
 - Use ACTUAL FUNCTION CALLS - call createCategory and createItem functions multiple times
-- Create categories first, then items for each category
+- Do NOT stop after creating categories - CONTINUE with items
 - Use specific names based on user context, not generic terms
-- For goals: Use bow and arrow emoji 🎯 
-- For routines: Include specific time (HH:MM) and duration in minutes
+- For goals: Use bow and arrow emoji 🎯 in title
+- For routines: Include specific time (08:00, 14:30, etc.) and duration in minutes
 - Make everything highly personalized to their mentioned interests/projects
 
-START BY CREATING CATEGORIES, then create items for each category.`;
+EXAMPLE PATTERN:
+createCategory({name: "Gym & Calisthenics", icon: "💪", color: "#10b981"})
+createItem({title: "🎯 Achieve 10 pull-ups", type: "goal", category: "gym-calisthenics"})
+createItem({title: "Morning workout routine", type: "routine", category: "gym-calisthenics", time: "07:00", duration: 60})
+createItem({title: "Plan next workout", type: "todo", category: "gym-calisthenics"})
+
+YOU MUST CREATE BOTH CATEGORIES AND ITEMS - DO NOT STOP AFTER CATEGORIES.`;
 
       // Use proper function calling instead of agent mode
       const result = await geminiService.processMessage(
