@@ -116,9 +116,36 @@ export default function VoiceMemoOnboarding() {
       playRecordingStartSound();
       
       audioChunksRef.current = [];
-      mediaRecorderRef.current = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus'
-      });
+      
+      // CRITICAL FIX: Add MIME type fallbacks for better compatibility
+      let mimeType = 'audio/webm;codecs=opus';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        console.log('⚠️ audio/webm;codecs=opus not supported, trying fallbacks...');
+        const fallbacks = [
+          'audio/webm',
+          'audio/mp4',
+          'audio/ogg;codecs=opus',
+          'audio/wav',
+          'audio/mpeg'
+        ];
+        
+        for (const fallback of fallbacks) {
+          if (MediaRecorder.isTypeSupported(fallback)) {
+            mimeType = fallback;
+            console.log('✅ Using fallback MIME type:', mimeType);
+            break;
+          }
+        }
+        
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          console.warn('⚠️ No supported MIME types found, using default');
+          mimeType = ''; // Let MediaRecorder choose
+        }
+      }
+      
+      const options = mimeType ? { mimeType } : {};
+      mediaRecorderRef.current = new MediaRecorder(stream, options);
+      console.log('🎙️ MediaRecorder created with MIME type:', mimeType || 'default');
       
       mediaRecorderRef.current.ondataavailable = (event) => {
         if (event.data.size > 0) {

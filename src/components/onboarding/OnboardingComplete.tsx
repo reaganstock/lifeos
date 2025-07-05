@@ -101,6 +101,27 @@ export default function OnboardingComplete() {
       setExtractedData(dashboardData);
     } else {
       console.error('❌ OnboardingComplete: No dashboard data found for user:', user.email);
+      console.error('🔧 DEBUGGING: Categories data:', categoriesData);
+      console.error('🔧 DEBUGGING: Items data:', itemsData);
+      console.error('🔧 DEBUGGING: Extracted data:', extractedDataRaw);
+      
+      // CRITICAL FIX: Instead of infinite loading, try to navigate to dashboard anyway
+      // This allows users to access the app even if onboarding data is incomplete
+      console.log('🔄 No dashboard data found, but navigating to dashboard anyway to prevent infinite loading');
+      setTimeout(() => {
+        setExtractedData({
+          categories: [],
+          goals: [],
+          routines: [],
+          todos: [],
+          events: [],
+          notes: [],
+          workStyle: "Getting started with life organization",
+          priorities: [],
+          interests: [],
+          personalInsights: ["Welcome to your dashboard! You can start adding categories and items manually."]
+        });
+      }, 2000);
     }
   }, [user?.id]);
 

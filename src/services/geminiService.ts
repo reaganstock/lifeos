@@ -267,13 +267,37 @@ CONVERSATIONAL RESPONSE GUIDELINES - CRITICAL:
                   });
                 }
               } else {
-                // Agent mode: Return as pending function call for visual UI
+                // Agent mode: Execute function immediately during onboarding to allow multiple function calls
+                console.log('🔥 AGENTIC MODE: Executing function to enable multiple calls during onboarding');
+                try {
+                  const result = await this.executeFunction(functionCall.name, functionCall.args);
+                  
+                  // Enhanced debugging
+                  AIDebugHelper.logFunctionCall(functionCall.name, functionCall.args, result);
+                  
+                  functionResults.push({
+                    function: functionCall.name,
+                    ...result
+                  });
+                  console.log('✅ Agentic mode: Function executed successfully');
+                } catch (error) {
+                  console.error('❌ Agentic mode: Function execution failed:', error);
+                  console.error('❌ Error details:', error instanceof Error ? error.stack : error);
+                  
+                  const errorResult = {
+                    function: functionCall.name,
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                    success: false
+                  };
+                  
+                  functionResults.push(errorResult);
+                }
+                
+                // Store the last function call for UI display purposes
                 pendingFunctionCall = {
                   name: functionCall.name,
                   args: functionCall.args
                 };
-                console.log('📋 Agent mode: Returning function call as pending for visual approval');
-                break; // Only handle the first function call
               }
             } else {
               // Ask mode: Execute immediately like before

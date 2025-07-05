@@ -635,15 +635,20 @@ return comprehensiveDashboard;`
             return colorMap[colorName] || colorName || '#3B82F6';
           };
           
+          // CRITICAL FIX: Use sequential priorities (0,1,2,3...) instead of AI-generated random numbers
+          const logicalPriority = existingCategories.length + newCategories.length;
+          
           const newCategory = {
             id: newCategoryId,
             name: category.name,
             icon: selectSmartEmoji(category.name, category.purpose, usedEmojis),
             color: convertColorToHex(category.color),
-            priority: category.priority || 0,
+            priority: logicalPriority, // Fixed: Sequential instead of random AI priorities
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           };
+          
+          console.log('🔧 PRIORITY FIX: Category', category.name, 'assigned priority', logicalPriority, '(was', category.priority, ')');
           
           newCategories.push(newCategory);
           categoryMapping.set(category.id, newCategoryId);
